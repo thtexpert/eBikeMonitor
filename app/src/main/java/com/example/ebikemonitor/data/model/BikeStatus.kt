@@ -1,0 +1,28 @@
+package com.example.ebikemonitor.data.model
+
+data class BikeStatus(
+    val speed: Double? = null,
+    val cadence: Int? = null,
+    val humanPower: Int? = null,
+    val motorPower: Int? = null,
+    val batteryLevel: Int? = null,
+    val assistMode: Int? = null,
+    val totalDistance: Double? = null,
+    val totalBatteryUsed: Double? = null,
+    val lastUpdateTimestamp: Long = 0L
+)
+
+fun getAssistModeName(mode: Int?): String {
+    if (mode == null) return "--"
+    return when (mode) {
+        0 -> "Off"
+        1 -> "Eco"
+        2 -> "Tour"
+        3 -> "Tour+"
+        4 -> "Sport" // or eMTB
+        5 -> "Turbo"
+        6 -> "Auto"
+        // Add other modes as discovered
+        else -> "Mode $mode"
+    }
+}

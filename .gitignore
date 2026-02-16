@@ -1,0 +1,38 @@
+# Build artifacts
+/bin
+/gen
+/out
+/build
+/.gradle
+/app/build
+
+# Kotlin/IntelliJ/Android Studio specific
+/.idea
+*.iml
+*.iws
+/.navigation
+/captures
+/.externalNativeBuild
+/.cxx
+
+# Local configuration (DO NOT SHARE - contains your specific SDK paths)
+local.properties
+
+# Keystore files (Security risk - keep these private!)
+*.jks
+*.keystore
+*.p12
+*.hprof
+
+# Google Services (if using Firebase)
+# Remove the '#' below if you want to keep your API keys private
+# google-services.json
+
+# Secrets Gradle Plugin (if used)
+secrets.properties
+
+# OS specific
+.DS_Store
+Thumbs.db
+/Refining MQTT Publishing Rules.md
+local.properties
