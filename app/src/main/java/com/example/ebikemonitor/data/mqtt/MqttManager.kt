@@ -2,15 +2,15 @@ package com.example.ebikemonitor.data.mqtt
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.eclipse.paho.android.service.MqttAndroidClient
 import org.eclipse.paho.client.mqttv3.*
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 
 class MqttManager(private val context: Context) {
     
@@ -44,6 +44,9 @@ class MqttManager(private val context: Context) {
             isAutomaticReconnect = true
             isCleanSession = false
         }
+        options.setKeepAliveInterval(60);
+        // --- LWT CONFIGURATION ---
+        options.setWill("$topic/status", "offline".toByteArray(), 0, true);
 
         try {
             client?.connect(options, null, object : IMqttActionListener {
@@ -71,7 +74,7 @@ class MqttManager(private val context: Context) {
                 override fun connectionLost(cause: Throwable?) {
                      Log.d(TAG, "Connection Lost")
                      _isConnected.value = false
-                     stopKeepAlive()
+                     // stopKeepAlive()
                      _connectionError.tryEmit("MQTT Connection Lost: ${cause?.message}")
                 }
                 override fun messageArrived(topic: String?, message: MqttMessage?) {}
@@ -116,8 +119,11 @@ class MqttManager(private val context: Context) {
         }
     }
 
-    fun disconnect() {
+    fun disconnect(topic: String) {
         try {
+            if (isConnected.value) {
+                publish("$topic/status", "offline", retained = false)
+            }
             stopKeepAlive()
             client?.disconnect()
             client = null

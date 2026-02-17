@@ -30,7 +30,7 @@ class EBikeBackgroundService : Service() {
         val app = application as EBikeApplication
         serviceScope.launch {
             app.bleManager.isConnected.collect { connected ->
-                updateNotification(if (connected) "Connected to eBike" else "Disconnected")
+                updateNotification(if (connected) "Connected to eBike BLE" else "BLE disconnected")
             }
         }
     }
@@ -68,7 +68,8 @@ class EBikeBackgroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         val app = application as EBikeApplication
-        app.mqttManager.disconnect()
+        val topic = "ebikemonitor"
+        app.mqttManager.disconnect(topic)
         serviceScope.cancel() // Cancel the scope
     }
 

@@ -169,7 +169,8 @@ class MainViewModel(
 
     fun toggleMqttConnection() {
         if (isMqttConnected.value) {
-            viewModelScope.launch { mqttManager.disconnect() }
+            val topic = "ebikemonitor"
+            viewModelScope.launch { mqttManager.disconnect(topic) }
         } else {
             connectMqtt()
         }
