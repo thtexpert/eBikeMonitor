@@ -1,5 +1,6 @@
 package com.example.ebikemonitor.ui
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -58,7 +59,28 @@ fun SettingsScreen(
                      modifier = Modifier.fillMaxWidth()
                  )
              }
-             
+             // Auto launch
+             item {
+                 Text("Launch", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                 Row(verticalAlignment = Alignment.CenterVertically) {
+                     Switch(checked = autoMqtt, onCheckedChange = { viewModel.updateAutoConnectMqtt(it) })
+                     Spacer(modifier = Modifier.width(8.dp))
+                     Text("Auto-Connect MQTT")
+                 }
+
+                 Row(verticalAlignment = Alignment.CenterVertically) {
+                     Switch(checked = autoBle, onCheckedChange = { viewModel.updateAutoConnectBle(it) })
+                     Spacer(modifier = Modifier.width(8.dp))
+                     Text("Auto-Connect BLE")
+                 }
+
+                 Row(verticalAlignment = Alignment.CenterVertically) {
+                     Switch(checked = autoLaunch, onCheckedChange = { viewModel.updateAutoLaunchFlow(it) })
+                     Spacer(modifier = Modifier.width(8.dp))
+                     Text("Auto-Launch Flow App")
+                 }
+             }
+
              // Bluetooth
              item {
                  Text("Bluetooth", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
@@ -71,18 +93,6 @@ fun SettingsScreen(
                      }
                  ) {
                      Text("Select Bonded Device")
-                 }
-                 
-                 Row(verticalAlignment = Alignment.CenterVertically) {
-                     Switch(checked = autoBle, onCheckedChange = { viewModel.updateAutoConnectBle(it) })
-                     Spacer(modifier = Modifier.width(8.dp))
-                     Text("Auto-Connect BLE")
-                 }
-                 
-                 Row(verticalAlignment = Alignment.CenterVertically) {
-                     Switch(checked = autoLaunch, onCheckedChange = { viewModel.updateAutoLaunchFlow(it) })
-                     Spacer(modifier = Modifier.width(8.dp))
-                     Text("Auto-Launch Flow App")
                  }
              }
              
@@ -130,12 +140,6 @@ fun SettingsScreen(
                  
                  Button(onClick = { viewModel.updateMqttConfig(uri, user, pass) }) {
                      Text("Save MQTT Config")
-                 }
-                 
-                 Row(verticalAlignment = Alignment.CenterVertically) {
-                     Switch(checked = autoMqtt, onCheckedChange = { viewModel.updateAutoConnectMqtt(it) })
-                     Spacer(modifier = Modifier.width(8.dp))
-                     Text("Auto-Connect MQTT")
                  }
              }
         }
@@ -196,6 +200,7 @@ fun DeviceSelectionDialog(
     )
 }
 
+@SuppressLint("MissingPermission")
 @Composable
 fun DeviceItem(device: android.bluetooth.BluetoothDevice, onClick: (android.bluetooth.BluetoothDevice) -> Unit) {
     Row(

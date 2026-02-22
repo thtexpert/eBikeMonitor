@@ -15,13 +15,11 @@ data class BikeStatus(
 fun getAssistModeName(mode: Int?): String {
     if (mode == null) return "--"
     return when (mode) {
-        0 -> "Off"
-        1 -> "Eco"
-        2 -> "Tour"
-        3 -> "Tour+"
-        4 -> "Sport" // or eMTB
-        5 -> "Turbo"
-        6 -> "Auto"
+        0 -> "OFF"
+        1 -> "ECO"
+        2 -> "TOUR+"
+        3 -> "SPORT" // or eMTB
+        4 -> "TURBO"
         // Add other modes as discovered
         else -> "Mode $mode"
     }
