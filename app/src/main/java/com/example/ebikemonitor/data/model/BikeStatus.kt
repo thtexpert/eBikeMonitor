@@ -8,7 +8,7 @@ data class BikeStatus(
     val batteryLevel: Int? = null,
     val assistMode: Int? = null,
     val totalDistance: Double? = null,
-    val totalBatteryUsed: Double? = null,
+    val totalBattery: Double? = null,
     val lastUpdateTimestamp: Long = 0L
 )
 

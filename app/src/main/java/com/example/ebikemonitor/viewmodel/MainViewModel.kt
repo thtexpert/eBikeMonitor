@@ -148,6 +148,10 @@ class MainViewModel(
         status.totalDistance?.let {
             if (it > 0) mqttManager.publish("$topic/totaldistance", it.toString())
         }
+
+        status.totalBattery?.let {
+            if (it > 0) mqttManager.publish("$topic/totalbattery", it.toString())
+        }
     }
 
     fun connectMqtt() {

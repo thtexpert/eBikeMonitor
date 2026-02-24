@@ -2,8 +2,7 @@ package com.example.ebikemonitor.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -12,7 +11,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.BorderStroke
 import com.example.ebikemonitor.data.model.BikeStatus
 import com.example.ebikemonitor.data.model.getAssistModeName
 import com.example.ebikemonitor.viewmodel.MainViewModel
@@ -61,104 +59,125 @@ fun DashboardScreen(
                 }
             }
             
-            // Status Bar
+            // Action Buttons
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                StatusChip(label = "BLE", isConnected = isBleConnected)
-                StatusChip(label = "MQTT", isConnected = isMqttConnected)
+                // MQTT Button
+                val mqttColor = if (isMqttConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
+                Button(
+                    onClick = { viewModel.toggleMqttConnection() },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = mqttColor)
+                ) {
+                    Text("MQTT", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+
+                // BLE Button
+                val bleColor = if (isBleConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
+                Button(
+                    onClick = { viewModel.toggleBleConnection() },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = bleColor)
+                ) {
+                    Text("BLE", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+
+                // FLOW App Button
+                val flowContext = androidx.compose.ui.platform.LocalContext.current
+                val flowIntent = remember { flowContext.packageManager.getLaunchIntentForPackage("com.bosch.ebike.onebikeapp") }
+                val isFlowInstalled = flowIntent != null
+                
+                Button(
+                    onClick = { if (isFlowInstalled) viewModel.launchBoschApp() },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isFlowInstalled) MaterialTheme.colorScheme.primary else Color.Gray
+                    ),
+                    enabled = isFlowInstalled
+                ) {
+                    Text("FLOW", fontWeight = FontWeight.Bold, color = Color.White)
+                }
             }
             
             // MQTT Error Text
-            val mqttErrorText by viewModel.mqttErrorText.collectAsState()
-            if (!isMqttConnected && mqttErrorText.isNotEmpty()) {
-                Text(
-                    text = "MQTT Error: $mqttErrorText",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(bottom = 8.dp).fillMaxWidth(),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-            }
-            
-            // Launch App Button
-            if (isBleConnected) {
-                Button(
-                    onClick = { viewModel.launchBoschApp() },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                ) {
-                    Text("Open Bosch Flow App")
-                }
-            }
 
-            // Metrics Grid
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.weight(1f)
+            // Metrics List
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                item { MetricCard("Speed", bikeStatus.speed?.let { "%.1f".format(it) } ?: "--", "km/h") }
-                item { MetricCard("Battery", bikeStatus.batteryLevel?.toString() ?: "--", "%") }
-                item { MetricCard("Assist", getAssistModeName(bikeStatus.assistMode), "") }
-                item { MetricCard("Range", "N/A", "km") } 
-                item { MetricCard("Power (User)", bikeStatus.humanPower?.toString() ?: "--", "W") }
-                item { MetricCard("Power (Motor)", bikeStatus.motorPower?.toString() ?: "--", "W") }
-                item { MetricCard("Cadence", bikeStatus.cadence?.toString() ?: "--", "rpm") }
-                item { MetricCard("Distance", bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km") }
+                item { MetricListItem("Speed", bikeStatus.speed?.let { "%.1f".format(it) } ?: "--", "km/h", isMqttConnected && bikeStatus.speed != null) }
+                item { MetricListItem("Assist Mode", getAssistModeName(bikeStatus.assistMode), "", isMqttConnected && bikeStatus.assistMode != null) }
+                item { MetricListItem("Power Human", bikeStatus.humanPower?.toString() ?: "--", "W", isMqttConnected && bikeStatus.humanPower != null) }
+                item { MetricListItem("SoC", bikeStatus.batteryLevel?.toString() ?: "--", "%", isMqttConnected && (bikeStatus.batteryLevel ?: 0) > 0) }
+                item { MetricListItem("Total Distance", bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0) }
+                item { MetricListItem("Total Energy", bikeStatus.totalBattery?.let { "%.1f".format(it) } ?: "--", "kWh", isMqttConnected && bikeStatus.totalBattery != null) }
             }
         }
+        
+        // Version Info at Bottom
+        Text(
+            text = "v${com.example.ebikemonitor.BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        )
         
         // Snackbar Host
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp)
         )
     }
 }
 
 @Composable
-fun StatusChip(label: String, isConnected: Boolean) {
-    val color = if (isConnected) Color.Green else Color.Red
-    Surface(
-        color = color.copy(alpha = 0.2f),
-        shape = MaterialTheme.shapes.small,
-        border = BorderStroke(1.dp, color)
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            color = if(isConnected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
-        )
-    }
-}
+fun MetricListItem(title: String, value: String, unit: String, transmitted: Boolean) {
+    val valueColor = if (transmitted) MaterialTheme.colorScheme.onSurface else Color.Gray
 
-@Composable
-fun MetricCard(title: String, value: String, unit: String) {
-    Card(
-        modifier = Modifier
-            .aspectRatio(1.2f)
-            .fillMaxWidth()
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(text = title, style = MaterialTheme.typography.labelMedium)
-            Text(
-                text = value, 
-                style = MaterialTheme.typography.displayMedium,
-                fontWeight = FontWeight.Bold
-            )
+        // Left Column: Name and Unit
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (unit.isNotEmpty()) {
-                Text(text = unit, style = MaterialTheme.typography.bodySmall)
+                Text(text = "$unit", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
+        }
+        
+        // Right Column: Value and Unit
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.End,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = valueColor,
+                modifier = Modifier.alignByBaseline()
+            )
+            // if (unit.isNotEmpty()) {
+            //     Text(
+            //         text = " $unit",
+            //         style = MaterialTheme.typography.bodyLarge,
+            //         color = valueColor,
+            //         modifier = Modifier.alignByBaseline().padding(start = 2.dp)
+            //     )
+            // }
         }
     }
 }
+
+

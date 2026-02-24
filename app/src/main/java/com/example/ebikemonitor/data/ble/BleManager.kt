@@ -95,7 +95,7 @@ class BleManager(private val context: Context) {
                 0x80BC -> currentStatus = currentStatus.copy(batteryLevel = msg.value)
                 0x9809 -> currentStatus = currentStatus.copy(assistMode = msg.value)
                 0x9818 -> currentStatus = currentStatus.copy(totalDistance = msg.value / 1000.0)
-                0x809C -> currentStatus = currentStatus.copy(totalBatteryUsed = msg.value / 1000.0)
+                0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
             }
         }
         _bikeStatus.value = currentStatus.copy(lastUpdateTimestamp = System.currentTimeMillis())
