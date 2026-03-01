@@ -1,8 +1,16 @@
 package com.example.ebikemonitor.viewmodel
 
+import android.app.ActivityManager
 import android.app.Application
+import android.app.AppOpsManager
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Process
+import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
@@ -40,6 +48,13 @@ class MainViewModel(
     // State for UI display of last error
     private val _mqttErrorText = MutableStateFlow("")
     val mqttErrorText = _mqttErrorText.asStateFlow()
+    
+    // Flow App Detection
+    private val _isFlowRunning = MutableStateFlow(false)
+    val isFlowRunning = _isFlowRunning.asStateFlow()
+    
+    private val _isUsageAccessGranted = MutableStateFlow(false)
+    val isUsageAccessGranted = _isUsageAccessGranted.asStateFlow()
     
     // Combining settings for UI
     val savedBleMac = settingsRepository.bleMacAddress.stateIn(viewModelScope, SharingStarted.Lazily, null)
@@ -123,12 +138,107 @@ class MainViewModel(
             bleManager.isConnected.collect { connected ->
                 if (connected) {
                     val autoLaunch = settingsRepository.autoLaunchFlow.first()
-                    if (autoLaunch) {
+                    // Only auto-launch if NOT already running
+                    if (autoLaunch && !_isFlowRunning.value) {
                         delay(1000)
                         launchBoschApp()
                     }
                 }
             }
+        }
+
+        // Periodic Flow App Running Check
+        viewModelScope.launch {
+            while (true) {
+                checkFlowAppState()
+                delay(1000) // 1-second interval as requested
+            }
+        }
+    }
+
+    private fun checkFlowAppState() {
+        val context = getApplication<Application>()
+        val packageName = "com.bosch.ebike.onebikeapp"
+        
+        // 1. Check if permission is granted
+        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = appOps.unsafeCheckOpNoThrow(
+            AppOpsManager.OPSTR_GET_USAGE_STATS,
+            Process.myUid(),
+            context.packageName
+        )
+        val granted = mode == AppOpsManager.MODE_ALLOWED
+        _isUsageAccessGranted.value = granted
+
+        if (!granted) {
+            _isFlowRunning.value = false
+            return
+        }
+
+        // 2. Check if running using UsageStatsManager Events (more stable)
+        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val endTime = System.currentTimeMillis()
+        val startTime = endTime - 2000 // Look back 1 minute for events
+        
+        val events = usageStatsManager.queryEvents(startTime, endTime)
+        val event = UsageEvents.Event()
+        
+        var isRunning = _isFlowRunning.value // Keep previous state as fallback
+        
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (event.packageName == packageName) {
+                when (event.eventType) {
+                    UsageEvents.Event.ACTIVITY_RESUMED,
+                    UsageEvents.Event.ACTIVITY_PAUSED -> {
+                        isRunning = true
+                    }
+                    UsageEvents.Event.ACTIVITY_STOPPED -> {
+                        isRunning = false
+                    }
+                    // Foreground Service events (API 29+)
+                    19 -> isRunning = true // UsageEvents.Event.FOREGROUND_SERVICE_START
+                    20 -> isRunning = false // UsageEvents.Event.FOREGROUND_SERVICE_STOP
+                }
+            }
+        }
+        
+        // Fallback: If no events in the last minute, check aggregate stats
+        if (startTime > endTime - 60000 && !isRunning) {
+            val stats = usageStatsManager.queryAndAggregateUsageStats(endTime - 300000, endTime)
+            val flowStats = stats[packageName]
+            if (flowStats != null) {
+                isRunning = (endTime - flowStats.lastTimeUsed) < 15000 
+            }
+        }
+
+        _isFlowRunning.value = isRunning
+    }
+
+    fun openUsageAccessSettings() {
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            getApplication<Application>().startActivity(intent)
+        } catch (e: Exception) {
+            Log.e("MainViewModel", "Error opening usage access settings: ${e.message}")
+        }
+    }
+
+    fun stopBoschApp() {
+        val packageName = "com.bosch.ebike.onebikeapp"
+        try {
+            // 1. Try to kill background processes
+            val am = getApplication<Application>().getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            am.killBackgroundProcesses(packageName)
+            
+            // 2. Open App Info screen as fallback/helper for manual Force Stop
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            intent.data = Uri.parse("package:$packageName")
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            getApplication<Application>().startActivity(intent)
+        } catch (e: Exception) {
+            Log.e("MainViewModel", "Error stopping Bosch app: ${e.message}")
         }
     }
     

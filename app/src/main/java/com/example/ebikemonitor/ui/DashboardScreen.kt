@@ -88,19 +88,65 @@ fun DashboardScreen(
 
                 // FLOW App Button
                 val flowContext = androidx.compose.ui.platform.LocalContext.current
+                val isFlowRunning by viewModel.isFlowRunning.collectAsState()
+                val isUsageAccessGranted by viewModel.isUsageAccessGranted.collectAsState()
                 val flowIntent = remember { flowContext.packageManager.getLaunchIntentForPackage("com.bosch.ebike.onebikeapp") }
                 val isFlowInstalled = flowIntent != null
                 
                 Button(
-                    onClick = { if (isFlowInstalled) viewModel.launchBoschApp() },
+                    onClick = { 
+                        if (isFlowInstalled) {
+                            if (isFlowRunning) viewModel.stopBoschApp() else viewModel.launchBoschApp()
+                        }
+                    },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isFlowInstalled) MaterialTheme.colorScheme.primary else Color.Gray
+                        containerColor = when {
+                            !isFlowInstalled -> Color.Gray
+                            isFlowRunning -> Color(0xFF4CAF50) // Green for Running
+                            else -> MaterialTheme.colorScheme.primary
+                        }
                     ),
                     enabled = isFlowInstalled
                 ) {
-                    Text("FLOW", fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(
+                        text = "FLOW", 
+                        fontWeight = FontWeight.Bold, 
+                        color = Color.White
+                    )
                 }
+            }
+
+            // Flow Permission/Status Area
+            val isFlowRunning by viewModel.isFlowRunning.collectAsState()
+            val isUsageAccessGranted by viewModel.isUsageAccessGranted.collectAsState()
+            
+            if (!isUsageAccessGranted) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Grant \"Usage Access\" for Flow indicator ", 
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    TextButton(
+                        onClick = { viewModel.openUsageAccessSettings() },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("FIX", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else if (isFlowRunning) {
+//                Text(
+//                    "Bosch Flow App is running in background",
+//                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+//                    style = MaterialTheme.typography.bodySmall,
+//                    color = Color(0xFF4CAF50),
+//                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+//                )
             }
             
             // MQTT Error Text
