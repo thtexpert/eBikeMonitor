@@ -116,7 +116,7 @@ fun DashboardScreen(
                 item { MetricListItem("Power Human", bikeStatus.humanPower?.toString() ?: "--", "W", isMqttConnected && bikeStatus.humanPower != null) }
                 item { MetricListItem("SoC", bikeStatus.batteryLevel?.toString() ?: "--", "%", isMqttConnected && (bikeStatus.batteryLevel ?: 0) > 0) }
                 item { MetricListItem("Total Distance", bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0) }
-                item { MetricListItem("Total Energy", bikeStatus.totalBattery?.let { "%.1f".format(it) } ?: "--", "kWh", isMqttConnected && bikeStatus.totalBattery != null) }
+                item { MetricListItem("Total Energy", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", isMqttConnected && bikeStatus.totalBattery != null) }
             }
         }
         
