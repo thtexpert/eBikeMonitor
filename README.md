@@ -1,5 +1,5 @@
 # eBikeMonitor
-
+![eBike Monitor Icon](images/IconVersion2.png)
 
 ## TODO list
 
