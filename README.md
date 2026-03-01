@@ -1,5 +1,6 @@
 # eBikeMonitor
-![eBike Monitor Icon](images/IconVersion2.png)
+
+<img src="images/IconVersion2.png" width="160">
 
 ## TODO list
 
@@ -55,3 +56,4 @@
 ### debug
 - disable temporary the MQTT send of total distance, total energie and SoC. Keep assist mode
 - 
+
