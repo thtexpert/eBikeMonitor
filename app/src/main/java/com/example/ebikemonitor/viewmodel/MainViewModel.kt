@@ -124,11 +124,12 @@ class MainViewModel(
                      status.speed?.let { mqttManager.publish("$topic/speed", it.toString()) }
                      
                      status.batteryLevel?.let { 
-                         if (it > 0) mqttManager.publish("$topic/stateofcharge", it.toString()) 
+                         if (it > 0) mqttManager.publish("$topic/stateofcharge", it.toString(), retained = true) 
                      }
                      
                      status.assistMode?.let { mqttManager.publish("$topic/assistmode", getAssistModeName(it)) }
                      status.humanPower?.let { mqttManager.publish("$topic/power", it.toString()) }
+                     status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
                  }
              }
         }
@@ -250,18 +251,20 @@ class MainViewModel(
         status.humanPower?.let { mqttManager.publish("$topic/power", it.toString()) }
         
         status.batteryLevel?.let {
-            if (it > 0) mqttManager.publish("$topic/stateofcharge", it.toString())
+            if (it > 0) mqttManager.publish("$topic/stateofcharge", it.toString(), retained = true)
         }
         
         status.assistMode?.let { mqttManager.publish("$topic/assistmode", getAssistModeName(it)) }
         
         status.totalDistance?.let {
-            if (it > 0) mqttManager.publish("$topic/totaldistance", it.toString())
+            if (it > 0) mqttManager.publish("$topic/totaldistance", it.toString(), retained = true)
         }
 
         status.totalBattery?.let {
-            if (it > 0) mqttManager.publish("$topic/totalbattery", it.toString())
+            if (it > 0) mqttManager.publish("$topic/totalbattery", it.toString(), retained = true)
         }
+        
+        status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
     }
 
     fun connectMqtt() {
@@ -322,6 +325,20 @@ class MainViewModel(
             }
         } catch (e: Exception) {
             Log.e("MainViewModel", "Error launching Bosch app: ${e.message}")
+        }
+    }
+
+    fun sendHomeAssistantDiscovery() {
+        viewModelScope.launch {
+            val name = savedEBikeName.value
+            val mac = savedBleMac.value
+            if (mac.isNullOrEmpty()) {
+                _mqttErrorText.value = "Discovery Failed: Select eBike first"
+                return@launch
+            }
+            val deviceId = mac.lowercase().replace(":", "")
+            val deviceName = if (name.isNotEmpty()) name else "My eBike"
+            mqttManager.sendHomeAssistantDiscovery(deviceId, deviceName)
         }
     }
     

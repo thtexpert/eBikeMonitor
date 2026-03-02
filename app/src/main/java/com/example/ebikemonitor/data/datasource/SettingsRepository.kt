@@ -28,7 +28,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     val bleMacAddress: Flow<String?> = context.dataStore.data.map { it[BLE_MAC_ADDRESS] }
-    val eBikeName: Flow<String> = context.dataStore.data.map { it[EBIKE_NAME] ?: "My eBike" }
+    val eBikeName: Flow<String> = context.dataStore.data.map { it[EBIKE_NAME] ?: "MyEBike" }
     val autoConnectBle: Flow<Boolean> = context.dataStore.data.map { it[AUTO_CONNECT_BLE] ?: true }
     val autoConnectMqtt: Flow<Boolean> = context.dataStore.data.map { it[AUTO_CONNECT_MQTT] ?: true }
     val autoLaunchFlow: Flow<Boolean> = context.dataStore.data.map { it[AUTO_LAUNCH_FLOW] ?: false }

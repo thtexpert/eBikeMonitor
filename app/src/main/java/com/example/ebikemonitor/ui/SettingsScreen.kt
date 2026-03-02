@@ -52,9 +52,16 @@ fun SettingsScreen(
              // General
              item {
                  Text("General", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                 
+                 var localName by remember { mutableStateOf(eBikeName) }
+                 LaunchedEffect(eBikeName) { localName = eBikeName }
+                 
                  OutlinedTextField(
-                     value = eBikeName,
-                     onValueChange = { viewModel.updateEBikeName(it) },
+                     value = localName,
+                     onValueChange = { 
+                         localName = it
+                         viewModel.updateEBikeName(it) 
+                     },
                      label = { Text("eBike Name") },
                      modifier = Modifier.fillMaxWidth()
                  )
@@ -138,9 +145,21 @@ fun SettingsScreen(
                      }
                  )
                  
-                 Button(onClick = { viewModel.updateMqttConfig(uri, user, pass) }) {
-                     Text("Save MQTT Config")
-                 }
+                  Button(onClick = { viewModel.updateMqttConfig(uri, user, pass) }) {
+                      Text("Save MQTT Config")
+                  }
+
+                  Spacer(modifier = Modifier.height(8.dp))
+
+                  Row(
+                      verticalAlignment = Alignment.CenterVertically,
+                      modifier = Modifier.fillMaxWidth()
+                  ) {
+                      Text("Discovery Config (homeassistant)", modifier = Modifier.weight(1f))
+                      OutlinedButton(onClick = { viewModel.sendHomeAssistantDiscovery() }) {
+                          Text("Send")
+                      }
+                  }
              }
         }
     }

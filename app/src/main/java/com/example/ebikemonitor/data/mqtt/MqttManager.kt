@@ -119,6 +119,47 @@ class MqttManager(private val context: Context) {
         }
     }
 
+    fun sendHomeAssistantDiscovery(deviceId: String, deviceDisplayName: String) {
+        val discoveryPrefix = "homeassistant"
+        val stateTopic = "ebikemonitor"
+        
+        val deviceJson = "{\"identifiers\":[\"ebikemonitor_$deviceId\"],\"name\":\"$deviceDisplayName\",\"manufacturer\":\"eBikeMonitor\",\"model\":\"Bosch Smart System eBike\"}"
+
+        fun publishConfig(component: String, name: String, sensorId: String, topic: String, unit: String? = null, deviceClass: String? = null, stateClass: String? = "measurement", icon: String? = null) {
+            val configTopic = "$discoveryPrefix/$component/ebikemonitor_${deviceId}_$sensorId/config"
+            
+            val fields = mutableListOf<String>()
+            fields.add("\"name\":\"$name\"")
+            fields.add("\"state_topic\":\"$stateTopic/$topic\"")
+            fields.add("\"unique_id\":\"ebikemonitor_${deviceId}_$sensorId\"")
+            unit?.let { fields.add("\"unit_of_measurement\":\"$it\"") }
+            deviceClass?.let { fields.add("\"device_class\":\"$it\"") }
+            stateClass?.let { fields.add("\"state_class\":\"$it\"") }
+            icon?.let { fields.add("\"icon\":\"$it\"") }
+            fields.add("\"device\":$deviceJson")
+            
+            val payload = "{" + fields.joinToString(",") + "}"
+            
+            Log.d("MqttManager", "Sending HA Discovery for $sensorId to $configTopic")
+            publish(configTopic, payload, retained = true)
+        }
+
+        // Standard Sensors
+        publishConfig("sensor", "Speed", "speed", "speed", "km/h", "speed")
+        publishConfig("sensor", "Battery Level", "battery", "stateofcharge", "%", "battery")
+        publishConfig("sensor", "Human Power", "power", "power", "W", "power")
+        publishConfig("sensor", "Motor Power", "motor_power", "motorpower", "W", "power")
+        publishConfig("sensor", "Assist Mode", "assist_mode", "assistmode", stateClass = null, icon = "mdi:bicycle-electric")
+        publishConfig("sensor", "Cadence", "cadence", "cadence", "rpm", icon = "mdi:bike-fast")
+        publishConfig("sensor", "total Distance", "total_dist", "totaldistance", "km", "distance", "total_increasing")
+        publishConfig("sensor", "total Energy from Battery", "total_batt", "totalbattery", "kWh", "energy", "total_increasing")
+        
+        // Connectivity/Status
+        publishConfig("sensor", "last MQTT Connect Time", "mqtt_connect", "mqttconnecttimestamp", deviceClass = "timestamp", stateClass = null)
+        publishConfig("sensor", "BLE Status", "ble_status", "blestatus", stateClass = null)
+        publishConfig("sensor", "App Status", "app_status", "status",  stateClass = null)
+    }
+
     fun disconnect(topic: String) {
         try {
             if (isConnected.value) {
