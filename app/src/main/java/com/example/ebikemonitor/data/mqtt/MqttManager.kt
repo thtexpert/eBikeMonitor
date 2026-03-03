@@ -151,8 +151,8 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "Motor Power", "motor_power", "motorpower", "W", "power")
         publishConfig("sensor", "Assist Mode", "assist_mode", "assistmode", stateClass = null, icon = "mdi:bicycle-electric")
         publishConfig("sensor", "Cadence", "cadence", "cadence", "rpm", icon = "mdi:bike-fast")
-        publishConfig("sensor", "total Distance", "total_dist", "totaldistance", "km", "distance", "total_increasing")
-        publishConfig("sensor", "total Energy from Battery", "total_batt", "totalbattery", "kWh", "energy", "total_increasing")
+        publishConfig("sensor", "total Distance", "total_dist", "totaldistance", "km", "distance", "total")
+        publishConfig("sensor", "total Energy from Battery", "total_batt", "totalbattery", "kWh", "energy", "total")
         
         // Connectivity/Status
         publishConfig("sensor", "last MQTT Connect Time", "mqtt_connect", "mqttconnecttimestamp", deviceClass = "timestamp", stateClass = null)
