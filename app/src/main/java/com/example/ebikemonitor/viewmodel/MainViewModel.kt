@@ -367,6 +367,14 @@ class MainViewModel(
     fun updateAutoLaunchFlow(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.saveAutoLaunchFlow(enabled) }
     }
+
+    override fun onCleared() {
+        // Disconnect as an extra safety measure when the UI is gone
+        // Do this BEFORE super.onCleared() so the viewModelScope is still active
+        mqttManager.disconnect("ebikemonitor")
+        bleManager.disconnect()
+        super.onCleared()
+    }
 }
 
 class MainViewModelFactory(

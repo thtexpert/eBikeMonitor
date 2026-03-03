@@ -36,8 +36,8 @@ class EBikeBackgroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Keeps the service running
-        return START_STICKY
+        // Keeps the service running, but do not restart automatically if killed
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -65,12 +65,30 @@ class EBikeBackgroundService : Service() {
             .build()
     }
     
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // This is called when the app is swiped away from the recent apps list
+        stopSelf()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         val app = application as EBikeApplication
         val topic = "ebikemonitor"
+        
+        // Stop foreground and cancel notifications
+        stopForeground(true)
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.cancel(NOTIFICATION_ID)
+        
+        // Disconnect MQTT (this is best effort, process kill follows)
         app.mqttManager.disconnect(topic)
-        serviceScope.cancel() // Cancel the scope
+        serviceScope.cancel() 
+        
+        // Ensure the process is truly terminated after a tiny delay for cleanup
+        android.util.Log.d("EBikeService", "Killing process...")
+        val pid = android.os.Process.myPid()
+        android.os.Process.killProcess(pid)
     }
 
     private fun updateNotification(text: String) {
