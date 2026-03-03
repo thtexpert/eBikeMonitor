@@ -86,9 +86,11 @@ class EBikeBackgroundService : Service() {
         serviceScope.cancel() 
         
         // Ensure the process is truly terminated after a tiny delay for cleanup
-        android.util.Log.d("EBikeService", "Killing process...")
-        val pid = android.os.Process.myPid()
-        android.os.Process.killProcess(pid)
+        // Note: Process.killProcess is very aggressive. We only use it if we really want to ensure nothing stays in memory.
+        // However, it can cause issues during configuration changes if not handled carefully in the Activity.
+        // android.util.Log.d("EBikeService", "Killing process...")
+        // val pid = android.os.Process.myPid()
+        // android.os.Process.killProcess(pid)
     }
 
     private fun updateNotification(text: String) {

@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.ebikemonitor.viewmodel.MainViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
@@ -30,24 +31,31 @@ fun SettingsScreen(
 
     var showDeviceDialog by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+    CompositionLocalProvider(
+        LocalMinimumInteractiveComponentEnforcement provides false
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp)
+        ) {
         // Header
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(onClick = onNavigateBack) { Text("Back") }
+            Button(
+                onClick = onNavigateBack,
+                modifier = Modifier.height(38.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+            ) { Text("Back") }
             Spacer(modifier = Modifier.width(16.dp))
-            Text("Settings", style = MaterialTheme.typography.headlineSmall)
+            Text("Settings", style = MaterialTheme.typography.titleMedium)
         }
         
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
              // General
              item {
@@ -57,50 +65,53 @@ fun SettingsScreen(
                  LaunchedEffect(eBikeName) { localName = eBikeName }
                  
                  OutlinedTextField(
-                     value = localName,
-                     onValueChange = { 
-                         localName = it
-                         viewModel.updateEBikeName(it) 
-                     },
-                     label = { Text("eBike Name") },
-                     modifier = Modifier.fillMaxWidth()
-                 )
+                    value = localName,
+                    onValueChange = { 
+                        localName = it
+                        viewModel.updateEBikeName(it) 
+                    },
+                    label = { Text("eBike Name", style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.fillMaxWidth().height(62.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
              }
              // Auto launch
              item {
                  Text("Launch", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                 Row(verticalAlignment = Alignment.CenterVertically) {
-                     Switch(checked = autoMqtt, onCheckedChange = { viewModel.updateAutoConnectMqtt(it) })
-                     Spacer(modifier = Modifier.width(8.dp))
-                     Text("Auto-Connect MQTT")
-                 }
+                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                    Switch(checked = autoMqtt, onCheckedChange = { viewModel.updateAutoConnectMqtt(it) })
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Auto-Connect MQTT", style = MaterialTheme.typography.bodyMedium)
+                }
 
-                 Row(verticalAlignment = Alignment.CenterVertically) {
-                     Switch(checked = autoBle, onCheckedChange = { viewModel.updateAutoConnectBle(it) })
-                     Spacer(modifier = Modifier.width(8.dp))
-                     Text("Auto-Connect BLE")
-                 }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                    Switch(checked = autoBle, onCheckedChange = { viewModel.updateAutoConnectBle(it) })
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Auto-Connect BLE", style = MaterialTheme.typography.bodyMedium)
+                }
 
-                 Row(verticalAlignment = Alignment.CenterVertically) {
-                     Switch(checked = autoLaunch, onCheckedChange = { viewModel.updateAutoLaunchFlow(it) })
-                     Spacer(modifier = Modifier.width(8.dp))
-                     Text("Auto-Launch Flow App")
-                 }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                    Switch(checked = autoLaunch, onCheckedChange = { viewModel.updateAutoLaunchFlow(it) })
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Auto-Launch Flow App", style = MaterialTheme.typography.bodyMedium)
+                }
              }
 
              // Bluetooth
              item {
                  Text("Bluetooth", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                  
-                 Text(text = "Target MAC: ${bleMac ?: "Not Set"}")
-                 Button(
-                     onClick = { 
-                         viewModel.bleManager.startScan()
-                         showDeviceDialog = true 
-                     }
-                 ) {
-                     Text("Select Bonded Device")
-                 }
+                 Text(text = "Target MAC: ${bleMac ?: "Not Set"}", style = MaterialTheme.typography.bodyMedium)
+                Button(
+                    onClick = { 
+                        viewModel.bleManager.startScan()
+                        showDeviceDialog = true 
+                    },
+                    modifier = Modifier.height(38.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                ) {
+                    Text("Select Bonded Device")
+                }
              }
              
              // MQTT
@@ -118,52 +129,70 @@ fun SettingsScreen(
                  LaunchedEffect(mqttPass) { pass = mqttPass }
                  
                  OutlinedTextField(
-                     value = uri, 
-                     onValueChange = { uri = it }, 
-                     label = { Text("Broker URI (e.g. tcp://192.168.1.1:1883)") }, 
+                    value = uri, 
+                    onValueChange = { uri = it }, 
+                    label = { Text("Broker URI", style = MaterialTheme.typography.labelSmall) }, 
+                    modifier = Modifier.fillMaxWidth().height(62.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                OutlinedTextField(
+                    value = user, 
+                    onValueChange = { user = it }, 
+                    label = { Text("User (Optional)", style = MaterialTheme.typography.labelSmall) }, 
+                    modifier = Modifier.fillMaxWidth().height(62.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                OutlinedTextField(
+                    value = pass, 
+                    onValueChange = { pass = it }, 
+                    label = { Text("Password (Optional)", style = MaterialTheme.typography.labelSmall) }, 
+                    modifier = Modifier.fillMaxWidth().height(62.dp),
+                    visualTransformation = if (passVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    trailingIcon = {
+                        val image = if (passVisible) "👁️" else "🔒" 
+                        IconButton(onClick = { passVisible = !passVisible }) {
+                            Text(image)
+                        }
+                    },
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                 Button(
+                     onClick = { viewModel.updateMqttConfig(uri, user, pass) },
+                     modifier = Modifier.height(38.dp),
+                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                 ) {
+                     Text("Save MQTT Config")
+                 }
+
+                 Spacer(modifier = Modifier.height(4.dp))
+
+                 Row(
+                     verticalAlignment = Alignment.CenterVertically,
                      modifier = Modifier.fillMaxWidth()
-                 )
-                 
-                 OutlinedTextField(
-                     value = user, 
-                     onValueChange = { user = it }, 
-                     label = { Text("User (Optional)") }, 
-                     modifier = Modifier.fillMaxWidth()
-                 )
-                 
-                 OutlinedTextField(
-                     value = pass, 
-                     onValueChange = { pass = it }, 
-                     label = { Text("Password (Optional)") }, 
-                     modifier = Modifier.fillMaxWidth(),
-                     visualTransformation = if (passVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                     trailingIcon = {
-                         val image = if (passVisible) "👁️" else "🔒" // Using text as icons for simplicity
-                         IconButton(onClick = { passVisible = !passVisible }) {
-                             Text(image)
-                         }
+                 ) {
+                     Text("Discovery (homeassistant)", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                     OutlinedButton(
+                         onClick = { viewModel.sendHomeAssistantDiscovery() },
+                         modifier = Modifier.height(38.dp),
+                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                     ) {
+                         Text("Send")
                      }
-                 )
-                 
-                  Button(onClick = { viewModel.updateMqttConfig(uri, user, pass) }) {
-                      Text("Save MQTT Config")
-                  }
-
-                  Spacer(modifier = Modifier.height(8.dp))
-
-                  Row(
-                      verticalAlignment = Alignment.CenterVertically,
-                      modifier = Modifier.fillMaxWidth()
-                  ) {
-                      Text("Discovery Config (homeassistant)", modifier = Modifier.weight(1f))
-                      OutlinedButton(onClick = { viewModel.sendHomeAssistantDiscovery() }) {
-                          Text("Send")
-                      }
-                  }
+                 }
              }
         }
     }
-    
+    }
+
     if (showDeviceDialog) {
         DeviceSelectionDialog(
            viewModel = viewModel,
@@ -202,7 +231,7 @@ fun DeviceSelectionDialog(
                     DeviceItem(device, onDeviceSelected)
                 }
                 
-                item { Spacer(modifier = Modifier.height(16.dp)) }
+                item { Spacer(modifier = Modifier.height(8.dp)) }
                 
                 item { Text("Scanned Devices", style = MaterialTheme.typography.titleSmall) }
                 if (scannedDevices.isEmpty()) {
@@ -214,7 +243,11 @@ fun DeviceSelectionDialog(
             }
         },
         confirmButton = {
-            Button(onClick = onDismiss) { Text("Cancel") }
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.height(38.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+            ) { Text("Cancel") }
         }
     )
 }
