@@ -20,6 +20,10 @@ import com.example.ebikemonitor.data.model.BikeStatus
 import com.example.ebikemonitor.data.model.getAssistModeName
 import com.example.ebikemonitor.viewmodel.MainViewModel
 import android.content.res.Configuration
+import android.bluetooth.BluetoothAdapter
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +50,14 @@ fun DashboardScreen(
             )
         }
     }
+    
+    val bluetoothEnableLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            viewModel.toggleBleConnection()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -60,7 +72,7 @@ fun DashboardScreen(
                 },
                 actions = {
                     if (isLandscape) {
-                        CompactActionButtons(viewModel, isMqttConnected, isBleConnected)
+                        CompactActionButtons(viewModel, isMqttConnected, isBleConnected, bluetoothEnableLauncher)
                     }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -82,7 +94,7 @@ fun DashboardScreen(
             if (isLandscape) {
                 LandscapeLayout(viewModel, bikeStatus, isMqttConnected, isBleConnected)
             } else {
-                PortraitLayout(viewModel, bikeStatus, isMqttConnected, isBleConnected)
+                PortraitLayout(viewModel, bikeStatus, isMqttConnected, isBleConnected, bluetoothEnableLauncher)
             }
 
             // Version Info at Bottom
@@ -107,7 +119,8 @@ fun PortraitLayout(
     viewModel: MainViewModel,
     bikeStatus: BikeStatus,
     isMqttConnected: Boolean,
-    isBleConnected: Boolean
+    isBleConnected: Boolean,
+    bluetoothEnableLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Intent, androidx.activity.result.ActivityResult>
 ) {
     Column(
         modifier = Modifier
@@ -115,7 +128,7 @@ fun PortraitLayout(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ActionButtonsRow(viewModel, isMqttConnected, isBleConnected)
+        ActionButtonsRow(viewModel, isMqttConnected, isBleConnected, bluetoothEnableLauncher)
         
         UsageAccessWarning(viewModel)
 
@@ -265,7 +278,8 @@ fun SensorRow(
 fun ActionButtonsRow(
     viewModel: MainViewModel,
     isMqttConnected: Boolean,
-    isBleConnected: Boolean
+    isBleConnected: Boolean,
+    bluetoothEnableLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Intent, androidx.activity.result.ActivityResult>
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -286,7 +300,13 @@ fun ActionButtonsRow(
         // BLE Button
         val bleColor = if (isBleConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
         Button(
-            onClick = { viewModel.toggleBleConnection() },
+            onClick = { 
+                if (!isBleConnected && !viewModel.isBluetoothEnabled()) {
+                    bluetoothEnableLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                } else {
+                    viewModel.toggleBleConnection()
+                }
+            },
             modifier = Modifier.weight(1f),
             colors = ButtonDefaults.buttonColors(containerColor = bleColor),
             shape = RoundedCornerShape(8.dp),
@@ -328,7 +348,8 @@ fun ActionButtonsRow(
 fun CompactActionButtons(
     viewModel: MainViewModel,
     isMqttConnected: Boolean,
-    isBleConnected: Boolean
+    isBleConnected: Boolean,
+    bluetoothEnableLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Intent, androidx.activity.result.ActivityResult>
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -338,7 +359,13 @@ fun CompactActionButtons(
         val bleColor = if (isBleConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
         
         StatusCapsule("MQTT", mqttColor) { viewModel.toggleMqttConnection() }
-        StatusCapsule("BLE", bleColor) { viewModel.toggleBleConnection() }
+        StatusCapsule("BLE", bleColor) { 
+            if (!isBleConnected && !viewModel.isBluetoothEnabled()) {
+                bluetoothEnableLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            } else {
+                viewModel.toggleBleConnection() 
+            }
+        }
         
         val isFlowRunning by viewModel.isFlowRunning.collectAsState()
         val flowContext = androidx.compose.ui.platform.LocalContext.current

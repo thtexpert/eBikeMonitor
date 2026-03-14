@@ -143,4 +143,8 @@ class BleManager(private val context: Context) {
     fun disconnect() {
         bluetoothGatt?.disconnect()
     }
+
+    fun isBluetoothEnabled(): Boolean {
+        return bluetoothAdapter?.isEnabled == true
+    }
 }

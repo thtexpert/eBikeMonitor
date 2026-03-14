@@ -308,6 +308,10 @@ class MainViewModel(
         }
     }
     
+    fun isBluetoothEnabled(): Boolean {
+        return bleManager.isBluetoothEnabled()
+    }
+    
     fun connectToDevice(mac: String) {
         viewModelScope.launch {
             settingsRepository.saveBleMacAddress(mac)
