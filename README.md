@@ -1,9 +1,9 @@
-# eBikeMonitor for Bosch Gen4 Smart System Data Collection
+# Bosch smart system ebike (BES3) data monitoring to MQTT
 
-<img src="images/IconVersion2.png" width="160">
+## eBikeMonitor <img src="images/IconVersion2.png" width="100">
 
 ## Description
-This Android app gets data from your eBike and pushes values via MQTT to a broker. It acts as a bridge between your Bosch Gen4 Smart System and your smart home system (e.g., Home Assistant).
+This Android app gets data from your Bosch eBike and pushes values via MQTT to a broker. It acts as a bridge between your Bosch Gen4 Smart System Ebike and your smart home system (e.g., Home Assistant).
 
 <img src="images/DashboardScreen.jpg" width="400">
 
@@ -41,6 +41,8 @@ To ensure reliable data collection, follow this precise sequence:
 - **Action Buttons**: The top row shows the status of MQTT, BLE, and the FLOW app. Green means connected/running, red/gray means disconnected/stopped. You can tap these to manually toggle connections or launch/stop the Flow app.
 - **Sensor Data Transfer Verification**: Values (Speed, Assist Mode, Power, etc.) are displayed on the dashboard. If the value text is standard color, the data has been successfully sent to your MQTT broker. If it is grayed out, it means the MQTT transfer is pending or unavailable.
 - **Charging**: To monitor the charging process, run the startup sequence above, and afterwards connect the charger to the bike. The battery must be charged while mounted in the eBike. The smartphone must maintain a BLE connection to the eBike during the entire charging process.
+Charging curve example:
+<img src="images/ChargeCurve.png" width="300">
 
 ## Home Assistant Integration
 
@@ -51,7 +53,7 @@ The eBikeMonitor app supports **MQTT Discovery** for Home Assistant, meaning you
 3. Tap the **"Send Discovery to Home Assistant"** button.
 4. Your eBike will automatically appear as a new Device in Home Assistant, with all its sensors (Speed, Battery, Assist Mode, Power, etc.) ready to use.
 
-<img src="images/HomeassistantDeviceInfo.png" width="400">
+<img src="images/HomeassistantDeviceInfo.png" width="500">
 
 ## initial BLE decoding info
 BLE decoding info is based on: https://github.com/RobbyPee/Bosch-Smart-System-Ebike-Garmin-Android
