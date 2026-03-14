@@ -87,10 +87,8 @@ fun DashboardScreen(
 
             // Version Info at Bottom
             val versionText = buildString {
-                append("v${com.example.ebikemonitor.BuildConfig.VERSION_NAME}")
-                bikeStatus.ebikeLedSoftwareVersion?.let {
-                    append(" | LED: $it")
-                }
+                append("V${com.example.ebikemonitor.BuildConfig.VERSION_NAME}")
+                bikeStatus.ebikeLedSoftwareVersion?.let { append(" | LED: $it") }
             }
             Text(
                 text = versionText,
@@ -129,7 +127,7 @@ fun PortraitLayout(
             item {
                 HomeAssistantCard(title = "Ride", icon = Icons.Default.DirectionsBike) {
                     SensorRow("Speed", bikeStatus.speed?.let { "%.1f".format(it) } ?: "--", "km/h", Icons.Default.Speed, isMqttConnected && bikeStatus.speed != null)
-                    SensorRow("Assist Mode", getAssistModeName(bikeStatus.assistMode), "", Icons.Default.SettingsAccessibility, isMqttConnected && bikeStatus.assistMode != null)
+                    SensorRow("Assist Mode", getAssistModeName(bikeStatus.assistMode, bikeStatus.assistModeNames), "", Icons.Default.SettingsAccessibility, isMqttConnected && bikeStatus.assistMode != null)
                     SensorRow("Human Power", bikeStatus.humanPower?.toString() ?: "--", "W", Icons.Default.Bolt, isMqttConnected && bikeStatus.humanPower != null)
                     SensorRow("Motor Power", bikeStatus.motorPower?.toString() ?: "--", "W", Icons.Default.ElectricBolt, isMqttConnected && bikeStatus.motorPower != null)
                 }
@@ -178,7 +176,7 @@ fun LandscapeLayout(
             item {
                 HomeAssistantCard(title = "Ride", icon = Icons.Default.DirectionsBike) {
                     SensorRow("Speed", bikeStatus.speed?.let { "%.1f".format(it) } ?: "--", "km/h", Icons.Default.Speed, isMqttConnected && bikeStatus.speed != null)
-                    SensorRow("Assist Mode", getAssistModeName(bikeStatus.assistMode), "", Icons.Default.SettingsAccessibility, isMqttConnected && bikeStatus.assistMode != null)
+                    SensorRow("Assist Mode", getAssistModeName(bikeStatus.assistMode, bikeStatus.assistModeNames), "", Icons.Default.SettingsAccessibility, isMqttConnected && bikeStatus.assistMode != null)
                     SensorRow("Human Power", bikeStatus.humanPower?.toString() ?: "--", "W", Icons.Default.Bolt, isMqttConnected && bikeStatus.humanPower != null)
                     SensorRow("Motor Power", bikeStatus.motorPower?.toString() ?: "--", "W", Icons.Default.ElectricBolt, isMqttConnected && bikeStatus.motorPower != null)
                 }

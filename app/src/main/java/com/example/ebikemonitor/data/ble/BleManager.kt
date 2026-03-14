@@ -106,6 +106,12 @@ class BleManager(private val context: Context) {
                         }
                     }
                 }
+                0x180C -> {
+                    val decodedModes = msg.decodeAssistModes()
+                    if (decodedModes.isNotEmpty()) {
+                        currentStatus = currentStatus.copy(assistModeNames = decodedModes)
+                    }
+                }
             }
         }
         _bikeStatus.value = currentStatus.copy(lastUpdateTimestamp = System.currentTimeMillis())

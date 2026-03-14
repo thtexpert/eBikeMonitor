@@ -10,18 +10,14 @@ data class BikeStatus(
     val totalDistance: Double? = null,
     val totalBattery: Double? = null,
     val ebikeLedSoftwareVersion: String? = null,
+    val assistModeNames: List<String> = emptyList(),
     val lastUpdateTimestamp: Long = 0L
 )
 
-fun getAssistModeName(mode: Int?): String {
+fun getAssistModeName(mode: Int?, modeNames: List<String> = emptyList()): String {
     if (mode == null) return "--"
-    return when (mode) {
-        0 -> "OFF"
-        1 -> "ECO"
-        2 -> "TOUR+"
-        3 -> "SPORT" // or eMTB
-        4 -> "TURBO"
-        // Add other modes as discovered
-        else -> "Mode $mode"
+    if (mode >= 0 && mode < modeNames.size) {
+        return modeNames[mode]
     }
+    return mode.toString()
 }

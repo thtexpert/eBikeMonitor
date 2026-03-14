@@ -127,7 +127,7 @@ class MainViewModel(
                          if (it > 0) mqttManager.publish("$topic/stateofcharge", it.toString(), retained = true) 
                      }
                      
-                     status.assistMode?.let { mqttManager.publish("$topic/assistmode", getAssistModeName(it)) }
+                     status.assistMode?.let { mqttManager.publish("$topic/assistmode", getAssistModeName(it, status.assistModeNames)) }
                      status.humanPower?.let { mqttManager.publish("$topic/power", it.toString()) }
                      status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
                      status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
@@ -255,7 +255,7 @@ class MainViewModel(
             if (it > 0) mqttManager.publish("$topic/stateofcharge", it.toString(), retained = true)
         }
         
-        status.assistMode?.let { mqttManager.publish("$topic/assistmode", getAssistModeName(it)) }
+        status.assistMode?.let { mqttManager.publish("$topic/assistmode", getAssistModeName(it, status.assistModeNames)) }
         
         status.totalDistance?.let {
             if (it > 0) mqttManager.publish("$topic/totaldistance", it.toString(), retained = true)

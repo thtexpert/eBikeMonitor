@@ -7,7 +7,29 @@ data class BoschMessage(
     val messageType: Int,
     val value: Int,
     val rawBytes: List<Byte>
-)
+) {
+    fun decodeAssistModes(): List<String> {
+        val modes = mutableListOf<String>()
+        if (messageId != 0x180C) return modes
+
+        // We know rawBytes contains the full message starting from msgId chunk payload
+        // Pattern: [0x0A (10), length, ascii bytes...]
+        var idx = 0
+        while (idx < rawBytes.size - 1) {
+            if (rawBytes[idx] == 0x0A.toByte()) {
+                val len = rawBytes[idx + 1].toInt() and 0xFF
+                if (idx + 2 + len <= rawBytes.size) {
+                    val strBytes = rawBytes.subList(idx + 2, idx + 2 + len).toByteArray()
+                    modes.add(String(strBytes, Charsets.UTF_8))
+                    idx += 2 + len
+                    continue
+                }
+            }
+            idx++
+        }
+        return modes
+    }
+}
 
 object BoschParser {
     private const val TAG = "BoschParser"
