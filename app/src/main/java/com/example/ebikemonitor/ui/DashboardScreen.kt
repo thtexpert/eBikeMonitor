@@ -86,8 +86,14 @@ fun DashboardScreen(
             }
 
             // Version Info at Bottom
+            val versionText = buildString {
+                append("v${com.example.ebikemonitor.BuildConfig.VERSION_NAME}")
+                bikeStatus.ebikeLedSoftwareVersion?.let {
+                    append(" | LED: $it")
+                }
+            }
             Text(
-                text = "v${com.example.ebikemonitor.BuildConfig.VERSION_NAME}",
+                text = versionText,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier

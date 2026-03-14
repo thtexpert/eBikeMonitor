@@ -96,6 +96,16 @@ class BleManager(private val context: Context) {
                 0x9809 -> currentStatus = currentStatus.copy(assistMode = msg.value)
                 0x9818 -> currentStatus = currentStatus.copy(totalDistance = msg.value / 1000.0)
                 0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
+                0x206B -> {
+                    val raw = msg.rawBytes
+                    if (raw.size >= 9 && raw[7] == 0x0A.toByte()) {
+                        val strLen = raw[8].toInt() and 0xFF
+                        if (raw.size >= 9 + strLen) {
+                            val strBytes = raw.subList(9, 9 + strLen).toByteArray()
+                            currentStatus = currentStatus.copy(ebikeLedSoftwareVersion = String(strBytes, Charsets.UTF_8))
+                        }
+                    }
+                }
             }
         }
         _bikeStatus.value = currentStatus.copy(lastUpdateTimestamp = System.currentTimeMillis())

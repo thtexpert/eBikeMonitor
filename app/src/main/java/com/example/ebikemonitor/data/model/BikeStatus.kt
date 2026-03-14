@@ -9,6 +9,7 @@ data class BikeStatus(
     val assistMode: Int? = null,
     val totalDistance: Double? = null,
     val totalBattery: Double? = null,
+    val ebikeLedSoftwareVersion: String? = null,
     val lastUpdateTimestamp: Long = 0L
 )
 

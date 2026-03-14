@@ -130,6 +130,7 @@ class MainViewModel(
                      status.assistMode?.let { mqttManager.publish("$topic/assistmode", getAssistModeName(it)) }
                      status.humanPower?.let { mqttManager.publish("$topic/power", it.toString()) }
                      status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
+                     status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
                  }
              }
         }
@@ -265,6 +266,7 @@ class MainViewModel(
         }
         
         status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
+        status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
     }
 
     fun connectMqtt() {

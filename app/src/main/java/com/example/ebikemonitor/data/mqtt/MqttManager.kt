@@ -153,6 +153,7 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "Cadence", "cadence", "cadence", "rpm", icon = "mdi:bike-fast")
         publishConfig("sensor", "total Distance", "total_dist", "totaldistance", "km", "distance", "total_increasing")
         publishConfig("sensor", "total Energy from Battery", "total_batt", "totalbattery", "kWh", "energy", "total_increasing")
+        publishConfig("sensor", "eBike LED Software Version", "ebike_led_sw_version", "ebikeledsoftwareversion", icon = "mdi:information-outline", stateClass = null)
         
         // Connectivity/Status
         publishConfig("sensor", "last MQTT Connect Time", "mqtt_connect", "mqttconnecttimestamp", deviceClass = "timestamp", stateClass = null)
