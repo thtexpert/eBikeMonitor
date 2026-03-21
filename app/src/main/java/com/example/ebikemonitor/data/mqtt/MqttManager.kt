@@ -9,12 +9,12 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.eclipse.paho.android.service.MqttAndroidClient
 import org.eclipse.paho.client.mqttv3.*
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 
 class MqttManager(private val context: Context) {
     
-    private var client: MqttAndroidClient? = null
+    private var client: MqttAsyncClient? = null
     private val TAG = "MqttManager"
 
     private val _isConnected = MutableStateFlow(false)
@@ -36,7 +36,7 @@ class MqttManager(private val context: Context) {
         }
 
         val serverUri = "$brokerUrl"
-        client = MqttAndroidClient(context, serverUri, clientId)
+        client = MqttAsyncClient(serverUri, clientId, MemoryPersistence())
         
         val options = MqttConnectOptions().apply {
             userName = user

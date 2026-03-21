@@ -44,8 +44,9 @@
             android:foregroundServiceType="connectedDevice" 
             android:exported="false" />
             
-        <service android:name="org.eclipse.paho.android.service.MqttService" />
-
+        <service
+            android:name="org.eclipse.paho.android.service.MqttService"
+            android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

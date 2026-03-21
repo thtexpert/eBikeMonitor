@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace = "com.example.ebikemonitor"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.ebikemonitor"
         minSdk = 29
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.10.3"
+        versionCode = 15
+        versionName = "1.11.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -34,11 +34,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
     buildFeatures {
         compose = true
@@ -61,6 +61,14 @@ android {
     }
 }
 
+configurations.all {
+    resolutionStrategy {
+        force("org.jetbrains.kotlin:kotlin-stdlib:1.9.0")
+        force("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0")
+        force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.0")
+    }
+}
+
 dependencies {
 
     implementation(libs.androidx.core.ktx)
@@ -75,14 +83,10 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.paho.mqtt)
-    implementation(libs.paho.android)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.accompanist.permissions)
-    
-    // Legacy support for Paho Android Service if needed
-    implementation("androidx.legacy:legacy-support-v4:1.0.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
