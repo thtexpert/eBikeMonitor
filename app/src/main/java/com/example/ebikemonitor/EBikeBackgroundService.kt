@@ -82,7 +82,7 @@ class EBikeBackgroundService : Service() {
         manager.cancel(NOTIFICATION_ID)
         
         // Disconnect MQTT (this is best effort, process kill follows)
-        app.mqttManager.disconnect(topic)
+        app.mqttManager.disconnect()
         serviceScope.cancel() 
         
         // Ensure the process is truly terminated after a tiny delay for cleanup

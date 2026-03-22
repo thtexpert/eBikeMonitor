@@ -16,6 +16,8 @@ class MqttManager(private val context: Context) {
     
     private var client: MqttAsyncClient? = null
     private val TAG = "MqttManager"
+    var baseTopic = "ebikemonitor"
+        private set
 
     private val _isConnected = MutableStateFlow(false)
     val isConnected = _isConnected.asStateFlow()
@@ -34,6 +36,8 @@ class MqttManager(private val context: Context) {
         if (client != null && client!!.isConnected) {
             return
         }
+        
+        this.baseTopic = topic
 
         val serverUri = "$brokerUrl"
         client = MqttAsyncClient(serverUri, clientId, MemoryPersistence())
@@ -121,7 +125,7 @@ class MqttManager(private val context: Context) {
 
     fun sendHomeAssistantDiscovery(deviceId: String, deviceDisplayName: String) {
         val discoveryPrefix = "homeassistant"
-        val stateTopic = "ebikemonitor"
+        val stateTopic = "ebikemonitor/$deviceId"
         
         val deviceJson = "{\"identifiers\":[\"ebikemonitor_$deviceId\"],\"name\":\"$deviceDisplayName\",\"manufacturer\":\"eBikeMonitor\",\"model\":\"Bosch Smart System eBike\"}"
 
@@ -161,10 +165,10 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "App Status", "app_status", "status",  stateClass = null)
     }
 
-    fun disconnect(topic: String) {
+    fun disconnect() {
         try {
             if (isConnected.value) {
-                publish("$topic/status", "offline", retained = false)
+                publish("${this.baseTopic}/status", "offline", retained = false)
             }
             stopKeepAlive()
             client?.disconnect()

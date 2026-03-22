@@ -88,12 +88,14 @@ class MainViewModel(
                     val status = bleManager.bikeStatus.value
                     publishFullStatus(status)
                     
+                    val topic = mqttManager.baseTopic
+                    
                     // Publish BLE status
                     val bleConnected = bleManager.isConnected.value
-                    mqttManager.publish("ebikemonitor/blestatus", if (bleConnected) "connected" else "disconnected")
+                    mqttManager.publish("$topic/blestatus", if (bleConnected) "connected" else "disconnected")
                     
                     // Publish Connection Timestamp
-                    mqttManager.publish("ebikemonitor/mqttconnecttimestamp", Instant.now().toString());
+                    mqttManager.publish("$topic/mqttconnecttimestamp", Instant.now().toString());
                 }
             }
         }
@@ -102,8 +104,9 @@ class MainViewModel(
         viewModelScope.launch {
             bleManager.isConnected.collect { bleConnected ->
                 if (mqttManager.isConnected.value) {
+                     val topic = mqttManager.baseTopic
                      val statusPayload = if (bleConnected) "connected" else "disconnected"
-                     mqttManager.publish("ebikemonitor/blestatus", statusPayload)
+                     mqttManager.publish("$topic/blestatus", statusPayload)
                 }
             }
         }
@@ -119,7 +122,7 @@ class MainViewModel(
         viewModelScope.launch {
              bleManager.bikeStatus.collect { status ->
                  if (mqttManager.isConnected.value) {
-                     val topic = "ebikemonitor"
+                     val topic = mqttManager.baseTopic
                      
                      status.speed?.let { mqttManager.publish("$topic/speed", it.toString()) }
                      
@@ -245,7 +248,7 @@ class MainViewModel(
     }
     
     private suspend fun publishFullStatus(status: BikeStatus) {
-        val topic = "ebikemonitor"
+        val topic = mqttManager.baseTopic
         
         status.speed?.let { mqttManager.publish("$topic/speed", it.toString()) }
         status.cadence?.let { mqttManager.publish("$topic/cadence", it.toString()) }
@@ -280,7 +283,9 @@ class MainViewModel(
             val clientId = if (name.isNotEmpty()) name else "MyEbike"
             
             if (uri.isNotEmpty()) {
-                val topic = "ebikemonitor"
+                val mac = settingsRepository.bleMacAddress.first()
+                val deviceId = mac?.lowercase()?.replace(":", "") ?: "unknown"
+                val topic = "ebikemonitor/$deviceId"
                 mqttManager.connect(uri, clientId, user, pass, topic)
             }
         }
@@ -288,8 +293,7 @@ class MainViewModel(
 
     fun toggleMqttConnection() {
         if (isMqttConnected.value) {
-            val topic = "ebikemonitor"
-            viewModelScope.launch { mqttManager.disconnect(topic) }
+            viewModelScope.launch { mqttManager.disconnect() }
         } else {
             connectMqtt()
         }
@@ -377,7 +381,7 @@ class MainViewModel(
     override fun onCleared() {
         // Disconnect as an extra safety measure when the UI is gone
         // Do this BEFORE super.onCleared() so the viewModelScope is still active
-        mqttManager.disconnect("ebikemonitor")
+        mqttManager.disconnect()
         bleManager.disconnect()
         super.onCleared()
     }
