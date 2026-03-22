@@ -50,6 +50,14 @@ class BleManager(private val context: Context) {
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.e("BleManager", "GATT Error: $status")
+                _isConnected.value = false
+                gatt.close()
+                bluetoothGatt = null
+                return
+            }
+
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.d("BleManager", "Connected to GATT")
                 _isConnected.value = true
@@ -57,7 +65,7 @@ class BleManager(private val context: Context) {
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.d("BleManager", "Disconnected from GATT")
                 _isConnected.value = false
-                bluetoothGatt?.close()
+                gatt.close()
                 bluetoothGatt = null
             }
         }
@@ -137,7 +145,11 @@ class BleManager(private val context: Context) {
     fun connect(macAddress: String) {
         if (bluetoothAdapter == null) return
         val device = bluetoothAdapter.getRemoteDevice(macAddress)
-        bluetoothGatt = device.connectGatt(context, false, gattCallback)
+        bluetoothGatt = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        } else {
+            device.connectGatt(context, false, gattCallback)
+        }
     }
 
     fun disconnect() {
