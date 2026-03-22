@@ -88,9 +88,12 @@ class EBikeBackgroundService : Service() {
         // Ensure the process is truly terminated after a tiny delay for cleanup
         // Note: Process.killProcess is very aggressive. We only use it if we really want to ensure nothing stays in memory.
         // However, it can cause issues during configuration changes if not handled carefully in the Activity.
-        // android.util.Log.d("EBikeService", "Killing process...")
-        // val pid = android.os.Process.myPid()
-        // android.os.Process.killProcess(pid)
+        android.util.Log.d("EBikeService", "Killing process as requested...")
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            val pid = android.os.Process.myPid()
+            android.os.Process.killProcess(pid)
+            kotlin.system.exitProcess(0)
+        }, 500)
     }
 
     @android.annotation.SuppressLint("MissingPermission")

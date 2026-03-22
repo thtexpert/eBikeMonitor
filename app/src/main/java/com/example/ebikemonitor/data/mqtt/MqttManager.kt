@@ -33,13 +33,29 @@ class MqttManager(private val context: Context) {
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
 
     fun connect(brokerUrl: String, clientId: String, user: String, pass: String, topic: String) {
-        if (client != null && client!!.isConnected) {
-            return
+        val serverUri = "$brokerUrl"
+
+        if (client != null) {
+            if (client!!.isConnected) return
+            
+            if (client!!.serverURI == serverUri && client!!.clientId == clientId) {
+                try {
+                    Log.d(TAG, "Forcing existing client to reconnect")
+                    client!!.reconnect()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error forcing reconnect: ${e.message}")
+                }
+                return
+            } else {
+                try {
+                    client!!.disconnectForcibly(0, 500)
+                    client!!.close()
+                } catch (e: Exception) {}
+            }
         }
         
         this.baseTopic = topic
 
-        val serverUri = "$brokerUrl"
         client = MqttAsyncClient(serverUri, clientId, MemoryPersistence())
         
         val options = MqttConnectOptions().apply {
@@ -47,6 +63,7 @@ class MqttManager(private val context: Context) {
             password = pass.toCharArray()
             isAutomaticReconnect = true
             isCleanSession = false
+            maxReconnectDelay = 5000
         }
         options.setKeepAliveInterval(60);
         // --- LWT CONFIGURATION ---
