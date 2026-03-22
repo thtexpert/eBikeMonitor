@@ -19,6 +19,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Android 14+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Android 13+ Notifications -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" 
         tools:ignore="QueryAllPackagesPermission" />
@@ -44,9 +46,6 @@
             android:foregroundServiceType="connectedDevice" 
             android:exported="false" />
             
-        <service
-            android:name="org.eclipse.paho.android.service.MqttService"
-            android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

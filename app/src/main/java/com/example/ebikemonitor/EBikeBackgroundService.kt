@@ -93,6 +93,7 @@ class EBikeBackgroundService : Service() {
         // android.os.Process.killProcess(pid)
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     private fun updateNotification(text: String) {
         val notification = createNotification(text)
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
