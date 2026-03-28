@@ -342,13 +342,12 @@ class MainViewModel(
         viewModelScope.launch {
             val name = savedEBikeName.value
             val mac = savedBleMac.value
-            if (mac.isNullOrEmpty()) {
-                _mqttErrorText.value = "Discovery Failed: Select eBike first"
+            if (name.isBlank() || mac.isNullOrEmpty()) {
+                _mqttErrorText.value = "Discovery Failed: Valid eBike Name and Target MAC required"
                 return@launch
             }
             val deviceId = mac.lowercase().replace(":", "")
-            val deviceName = if (name.isNotEmpty()) name else "My eBike"
-            mqttManager.sendHomeAssistantDiscovery(deviceId, deviceName)
+            mqttManager.sendHomeAssistantDiscovery(deviceId, name)
         }
     }
     
