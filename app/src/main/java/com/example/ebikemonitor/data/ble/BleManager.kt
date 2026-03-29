@@ -159,4 +159,10 @@ class BleManager(private val context: Context) {
     fun isBluetoothEnabled(): Boolean {
         return bluetoothAdapter?.isEnabled == true
     }
+
+    fun setAssistModeNames(names: List<String>) {
+        if (_bikeStatus.value.assistModeNames.isEmpty() && names.isNotEmpty()) {
+            _bikeStatus.value = _bikeStatus.value.copy(assistModeNames = names)
+        }
+    }
 }

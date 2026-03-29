@@ -79,6 +79,28 @@ class MainViewModel(
                 connectMqtt()
             }
         }
+        
+        // Synchronize assist mode names from DataStore to BleManager
+        viewModelScope.launch {
+            settingsRepository.assistModeNames.collect { names ->
+                if (names.isNotEmpty()) {
+                    bleManager.setAssistModeNames(names)
+                }
+            }
+        }
+        
+        // Synchronize from BleManager to DataStore when new names are received
+        viewModelScope.launch {
+            bleManager.bikeStatus.collect { status ->
+                val names = status.assistModeNames
+                if (names.isNotEmpty()) {
+                    val cached = settingsRepository.assistModeNames.first()
+                    if (names != cached) {
+                        settingsRepository.saveAssistModeNames(names)
+                    }
+                }
+            }
+        }
 
         // MQTT Re-sync logic
         viewModelScope.launch {
@@ -125,6 +147,7 @@ class MainViewModel(
                      val topic = mqttManager.baseTopic
                      
                      status.speed?.let { mqttManager.publish("$topic/speed", it.toString()) }
+                     status.cadence?.let { mqttManager.publish("$topic/cadence", it.toString()) }
                      
                      status.batteryLevel?.let { 
                          if (it > 0) mqttManager.publish("$topic/stateofcharge", it.toString(), retained = true) 
@@ -133,6 +156,14 @@ class MainViewModel(
                      status.assistMode?.let { mqttManager.publish("$topic/assistmode", getAssistModeName(it, status.assistModeNames)) }
                      status.humanPower?.let { mqttManager.publish("$topic/power", it.toString()) }
                      status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
+                     
+                     status.totalDistance?.let {
+                         if (it > 0) mqttManager.publish("$topic/totaldistance", it.toString(), retained = true)
+                     }
+                     status.totalBattery?.let {
+                         if (it > 0) mqttManager.publish("$topic/totalbattery", it.toString(), retained = true)
+                     }
+                     
                      status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
                  }
              }

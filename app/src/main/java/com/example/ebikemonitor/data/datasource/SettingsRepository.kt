@@ -25,6 +25,8 @@ class SettingsRepository(private val context: Context) {
         val MQTT_BROKER_URI = stringPreferencesKey("mqtt_broker_uri")
         val MQTT_USER = stringPreferencesKey("mqtt_user")
         val MQTT_PASSWORD = stringPreferencesKey("mqtt_password")
+        
+        val ASSIST_MODE_NAMES = stringPreferencesKey("assist_mode_names")
     }
 
     val bleMacAddress: Flow<String?> = context.dataStore.data.map { it[BLE_MAC_ADDRESS] }
@@ -36,6 +38,11 @@ class SettingsRepository(private val context: Context) {
     val mqttBrokerUri: Flow<String> = context.dataStore.data.map { it[MQTT_BROKER_URI] ?: "" }
     val mqttUser: Flow<String> = context.dataStore.data.map { it[MQTT_USER] ?: "" }
     val mqttPassword: Flow<String> = context.dataStore.data.map { it[MQTT_PASSWORD] ?: "" }
+    
+    val assistModeNames: Flow<List<String>> = context.dataStore.data.map { 
+        val str = it[ASSIST_MODE_NAMES] ?: ""
+        if (str.isEmpty()) emptyList() else str.split(",")
+    }
 
     suspend fun saveBleMacAddress(mac: String) {
         context.dataStore.edit { it[BLE_MAC_ADDRESS] = mac }
@@ -63,5 +70,9 @@ class SettingsRepository(private val context: Context) {
             it[MQTT_USER] = user
             it[MQTT_PASSWORD] = pass
         }
+    }
+    
+    suspend fun saveAssistModeNames(names: List<String>) {
+        context.dataStore.edit { it[ASSIST_MODE_NAMES] = names.joinToString(",") }
     }
 }
