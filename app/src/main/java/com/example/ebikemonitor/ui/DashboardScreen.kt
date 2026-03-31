@@ -26,6 +26,8 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 
+private const val SHOW_DEBUG_UI = false
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
@@ -153,16 +155,18 @@ fun PortraitLayout(
                     SensorRow("Total Energy", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
                 }
             }
-            item {
-                val expectedCount = if (bikeStatus.assistModeNames.isNotEmpty()) bikeStatus.assistModeNames.size else 5
-                DebugUsageRecords(
-                    records = bikeStatus.unsortedUsageRecords,
-                    sortedRecordsA = bikeStatus.sortedUsageRecordsA,
-                    sortedRecordsB = bikeStatus.sortedUsageRecordsB,
-                    confirmedIndices = bikeStatus.confirmedModeIndices,
-                    modeNames = bikeStatus.assistModeNames,
-                    expectedCount = expectedCount
-                )
+            if (SHOW_DEBUG_UI) {
+                item {
+                    val expectedCount = if (bikeStatus.assistModeNames.isNotEmpty()) bikeStatus.assistModeNames.size else 5
+                    DebugUsageRecords(
+                        records = bikeStatus.unsortedUsageRecords,
+                        sortedRecordsA = bikeStatus.sortedUsageRecordsA,
+                        sortedRecordsB = bikeStatus.sortedUsageRecordsB,
+                        confirmedIndices = bikeStatus.confirmedModeIndices,
+                        modeNames = bikeStatus.assistModeNames,
+                        expectedCount = expectedCount
+                    )
+                }
             }
         }
     }
@@ -191,15 +195,17 @@ fun LandscapeLayout(
                 SensorRow("Total Distance", bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
                 SensorRow("Total Energy", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
             }
-            val expectedCount = if (bikeStatus.assistModeNames.isNotEmpty()) bikeStatus.assistModeNames.size else 5
-            DebugUsageRecords(
-                records = bikeStatus.unsortedUsageRecords,
-                sortedRecordsA = bikeStatus.sortedUsageRecordsA,
-                sortedRecordsB = bikeStatus.sortedUsageRecordsB,
-                confirmedIndices = bikeStatus.confirmedModeIndices,
-                modeNames = bikeStatus.assistModeNames,
-                expectedCount = expectedCount
-            )
+            if (SHOW_DEBUG_UI) {
+                val expectedCount = if (bikeStatus.assistModeNames.isNotEmpty()) bikeStatus.assistModeNames.size else 5
+                DebugUsageRecords(
+                    records = bikeStatus.unsortedUsageRecords,
+                    sortedRecordsA = bikeStatus.sortedUsageRecordsA,
+                    sortedRecordsB = bikeStatus.sortedUsageRecordsB,
+                    confirmedIndices = bikeStatus.confirmedModeIndices,
+                    modeNames = bikeStatus.assistModeNames,
+                    expectedCount = expectedCount
+                )
+            }
         }
 
         LazyColumn(

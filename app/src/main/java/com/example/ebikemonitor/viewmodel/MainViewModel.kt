@@ -165,6 +165,21 @@ class MainViewModel(
                      }
                      
                      status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
+
+                     // Per-Mode Metrics
+                     status.sortedUsageRecordsB.forEachIndexed { index, record ->
+                         if (record != null) {
+                             val modeName = status.assistModeNames.getOrNull(index) ?: return@forEachIndexed
+                             val safeMode = sanitizeForMqtt(modeName)
+                             
+                             if (record.distance > 0) {
+                                 mqttManager.publish("$topic/${safeMode}distance", (record.distance / 1000.0).toString())
+                             }
+                             if (record.energy > 0) {
+                                 mqttManager.publish("$topic/${safeMode}battery", (record.energy / 1000.0).toString())
+                             }
+                         }
+                     }
                  }
              }
         }
@@ -278,6 +293,10 @@ class MainViewModel(
         }
     }
     
+    private fun sanitizeForMqtt(input: String): String {
+        return input.lowercase().replace(Regex("[^a-z0-9]"), "_")
+    }
+
     private suspend fun publishFullStatus(status: BikeStatus) {
         val topic = mqttManager.baseTopic
         
@@ -301,6 +320,21 @@ class MainViewModel(
         
         status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
         status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
+
+        // Per-Mode Metrics
+        status.sortedUsageRecordsB.forEachIndexed { index, record ->
+            if (record != null) {
+                val modeName = status.assistModeNames.getOrNull(index) ?: return@forEachIndexed
+                val safeMode = sanitizeForMqtt(modeName)
+                
+                if (record.distance > 0) {
+                    mqttManager.publish("$topic/${safeMode}distance", (record.distance / 1000.0).toString())
+                }
+                if (record.energy > 0) {
+                    mqttManager.publish("$topic/${safeMode}battery", (record.energy / 1000.0).toString())
+                }
+            }
+        }
     }
 
     fun connectMqtt() {
@@ -378,7 +412,7 @@ class MainViewModel(
                 return@launch
             }
             val deviceId = mac.lowercase().replace(":", "")
-            mqttManager.sendHomeAssistantDiscovery(deviceId, name)
+            mqttManager.sendHomeAssistantDiscovery(deviceId, name, uiState.value.assistModeNames)
         }
     }
     

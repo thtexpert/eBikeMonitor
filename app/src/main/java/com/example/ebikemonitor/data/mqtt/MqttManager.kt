@@ -140,7 +140,11 @@ class MqttManager(private val context: Context) {
         }
     }
 
-    fun sendHomeAssistantDiscovery(deviceId: String, deviceDisplayName: String) {
+    private fun sanitize(input: String): String {
+        return input.lowercase().replace(Regex("[^a-z0-9]"), "_")
+    }
+
+    fun sendHomeAssistantDiscovery(deviceId: String, deviceDisplayName: String, assistModeNames: List<String> = emptyList()) {
         val discoveryPrefix = "homeassistant"
         val stateTopic = "ebikemonitor/$deviceId"
         
@@ -175,6 +179,13 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "total Distance", "total_dist", "totaldistance", "km", "distance", "total_increasing")
         publishConfig("sensor", "total Energy from Battery", "total_batt", "totalbattery", "kWh", "energy", "total_increasing")
         publishConfig("sensor", "eBike LED Software Version", "ebike_led_sw_version", "ebikeledsoftwareversion", icon = "mdi:information-outline", stateClass = null)
+
+        // Per-Mode Sensors
+        assistModeNames.forEach { mode ->
+            val safeMode = sanitize(mode)
+            publishConfig("sensor", "$mode Distance", "${safeMode}_dist", "${safeMode}distance", "km", "distance", "total_increasing")
+            publishConfig("sensor", "$mode Energy from Battery", "${safeMode}_batt", "${safeMode}battery", "kWh", "energy", "total_increasing")
+        }
         
         // Connectivity/Status
         publishConfig("sensor", "last MQTT Connect Time", "mqtt_connect", "mqttconnecttimestamp", deviceClass = "timestamp", stateClass = null)
