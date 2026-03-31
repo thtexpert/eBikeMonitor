@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ebikemonitor.data.model.BikeStatus
 import com.example.ebikemonitor.data.model.getAssistModeName
+import com.example.ebikemonitor.data.parser.UsageRecord
 import com.example.ebikemonitor.viewmodel.MainViewModel
 import android.content.res.Configuration
 import android.bluetooth.BluetoothAdapter
@@ -152,6 +153,17 @@ fun PortraitLayout(
                     SensorRow("Total Energy", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
                 }
             }
+            item {
+                val expectedCount = if (bikeStatus.assistModeNames.isNotEmpty()) bikeStatus.assistModeNames.size else 5
+                DebugUsageRecords(
+                    records = bikeStatus.unsortedUsageRecords,
+                    sortedRecordsA = bikeStatus.sortedUsageRecordsA,
+                    sortedRecordsB = bikeStatus.sortedUsageRecordsB,
+                    confirmedIndices = bikeStatus.confirmedModeIndices,
+                    modeNames = bikeStatus.assistModeNames,
+                    expectedCount = expectedCount
+                )
+            }
         }
     }
 }
@@ -179,6 +191,15 @@ fun LandscapeLayout(
                 SensorRow("Total Distance", bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
                 SensorRow("Total Energy", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
             }
+            val expectedCount = if (bikeStatus.assistModeNames.isNotEmpty()) bikeStatus.assistModeNames.size else 5
+            DebugUsageRecords(
+                records = bikeStatus.unsortedUsageRecords,
+                sortedRecordsA = bikeStatus.sortedUsageRecordsA,
+                sortedRecordsB = bikeStatus.sortedUsageRecordsB,
+                confirmedIndices = bikeStatus.confirmedModeIndices,
+                modeNames = bikeStatus.assistModeNames,
+                expectedCount = expectedCount
+            )
         }
 
         LazyColumn(
@@ -438,6 +459,98 @@ fun UsageAccessWarning(viewModel: MainViewModel) {
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Text("GRANT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DebugUsageRecords(
+    records: List<UsageRecord>,
+    sortedRecordsA: List<UsageRecord>,
+    sortedRecordsB: List<UsageRecord?>,
+    confirmedIndices: Set<Int>,
+    modeNames: List<String>,
+    expectedCount: Int
+) {
+    if (records.isNotEmpty()) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                // Version A
+                if (sortedRecordsA.isNotEmpty() && sortedRecordsA.size == modeNames.size) {
+                    Text(
+                        text = "V-A: Consumption Sorting", 
+                        style = MaterialTheme.typography.labelMedium, 
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4CAF50)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    sortedRecordsA.forEachIndexed { index, record ->
+                        val modeName = modeNames.getOrElse(index) { "Mode $index" }
+                        val consumption = record.energy.toDouble() / record.distance
+                        val consumptionDisplay = "%.3f Wh/km".format(consumption * 1000.0)
+                        Text(
+                            text = "$modeName: ${record.distance}m, ${record.energy}Wh ($consumptionDisplay)", 
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Divider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+                }
+
+                // Version B
+                if (modeNames.isNotEmpty()) {
+                    Text(
+                        text = "V-B: Delta Discovery", 
+                        style = MaterialTheme.typography.labelMedium, 
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2196F3)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    modeNames.forEachIndexed { index, modeName ->
+                        val isConfirmed = confirmedIndices.contains(index)
+                        val record = if (index < sortedRecordsB.size) sortedRecordsB[index] else null
+                        
+                        val textColor = if (isConfirmed) Color(0xFF4CAF50) else Color.Gray
+                        val label = if (isConfirmed) "[OK]" else "[Pending]"
+                        
+                        Text(
+                            text = if (record != null) {
+                                "$modeName $label: ${record.distance}m, ${record.energy}Wh"
+                            } else {
+                                "$modeName $label: ---"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = textColor
+                        )
+                    }
+                    Divider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+                }
+
+                Text(
+                    text = "Debug: Unsorted Incoming (${records.size}/$expectedCount)", 
+                    style = MaterialTheme.typography.labelMedium, 
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                records.forEachIndexed { index, record ->
+                    Text(
+                        text = "${index + 1}: ${record.distance}m, ${record.energy}Wh", 
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

@@ -38,6 +38,8 @@ class BleManager(private val context: Context) {
     private val _bikeStatus = MutableStateFlow(BikeStatus())
     val bikeStatus = _bikeStatus.asStateFlow()
 
+    private val unsortedModeUsageList = mutableListOf<com.example.ebikemonitor.data.parser.UsageRecord>()
+
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
@@ -120,10 +122,89 @@ class BleManager(private val context: Context) {
                         currentStatus = currentStatus.copy(assistModeNames = decodedModes)
                     }
                 }
+                0xA252 -> {
+                    val tripDists = msg.decodeTripDistPerMode()
+                    if (tripDists != null) {
+                        currentStatus = currentStatus.copy(tripDistPerMode = tripDists)
+                        Log.d("BleManager", "Trip distances updated: $tripDists")
+                    }
+                }
+                0x108C -> {
+                    val record = msg.decodeUsageRecord()
+                    if (record != null) {
+                        val expectedCount = if (currentStatus.assistModeNames.isNotEmpty()) {
+                            currentStatus.assistModeNames.size
+                        } else {
+                            5
+                        }
+
+                        // Start a new batch if we've already reached the expected count
+                        if (unsortedModeUsageList.size >= expectedCount) {
+                            unsortedModeUsageList.clear()
+                        }
+                        unsortedModeUsageList.add(record)
+                        currentStatus = currentStatus.copy(unsortedUsageRecords = unsortedModeUsageList.toList())
+                        
+                        if (unsortedModeUsageList.size == expectedCount) {
+                            Log.d("BleManager", "Batch of $expectedCount usage records complete: $unsortedModeUsageList")
+                            
+                            // Capture initial baseline if not already established
+                            if (currentStatus.initialTripDistPerMode == null && currentStatus.tripDistPerMode.size == expectedCount) {
+                                Log.d("BleManager", "Version B: Capturing initial trip baseline.")
+                                currentStatus = currentStatus.copy(
+                                    initialTripDistPerMode = currentStatus.tripDistPerMode.toList(),
+                                    initialUnsortedUsageRecords = unsortedModeUsageList.toList()
+                                )
+                            }
+
+                            // Version A: Consumption-based
+                            val sortedA = BoschParser.processUsageRecords(unsortedModeUsageList)
+                            if (sortedA != null) {
+                                currentStatus = currentStatus.copy(sortedUsageRecordsA = sortedA)
+                                Log.d("BleManager", "Version A successful: $sortedA")
+                            }
+
+                            // Version B: Cumulative Delta-based with Discovery Mapping
+                            val resultB = BoschParser.processVersionBWithDiscovery(unsortedModeUsageList, currentStatus)
+                            if (resultB != null) {
+                                val (sortedB, confirmed, mapping) = resultB
+                                currentStatus = currentStatus.copy(
+                                    sortedUsageRecordsB = sortedB,
+                                    confirmedModeIndices = confirmed,
+                                    modeToInitialIndex = mapping
+                                )
+                                Log.d("BleManager", "Version B Update: Confirmed = $confirmed, Mappings = $mapping")
+                            } else {
+                                // Check for Trip Reset relative to the INITIAL baseline
+                                val cur = currentStatus.tripDistPerMode
+                                val initial = currentStatus.initialTripDistPerMode
+                                if (initial != null && cur.size == initial.size && cur.indices.any { cur[it] < initial[it] }) {
+                                    Log.d("BleManager", "Version B: Trip Reset detected relative to baseline. Clearing B history.")
+                                    currentStatus = currentStatus.copy(
+                                        initialTripDistPerMode = null,
+                                        initialUnsortedUsageRecords = null,
+                                        modeToInitialIndex = emptyMap(),
+                                        sortedUsageRecordsB = emptyList(),
+                                        confirmedModeIndices = emptySet(),
+                                        prevTripDistPerMode = null,
+                                        prevUnsortedUsageRecords = null
+                                    )
+                                }
+                            }
+
+                            // Update cycle history
+                            currentStatus = currentStatus.copy(
+                                prevTripDistPerMode = currentStatus.tripDistPerMode.toList(),
+                                prevUnsortedUsageRecords = unsortedModeUsageList.toList()
+                            )
+                        }
+                    }
+                }
             }
         }
         _bikeStatus.value = currentStatus.copy(lastUpdateTimestamp = System.currentTimeMillis())
     }
+
 
     fun startScan() {
         if (bluetoothAdapter?.isEnabled == true) {
