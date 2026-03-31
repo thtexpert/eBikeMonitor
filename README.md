@@ -1,4 +1,4 @@
-# Bosch smart system ebike (BES3) data monitoring to MQTT
+# Bosch smart system ebike (BES3) live data monitoring to MQTT
 
 ## eBikeMonitor
 
