@@ -169,6 +169,7 @@ class MainViewModel(
                      }
                      
                      status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
+                     status.batterySerialNumber?.let { mqttManager.publish("$topic/batteryserialnumber", it, retained = true) }
 
                      // Per-Mode Metrics
                      status.sortedUsageRecordsB.forEachIndexed { index, record ->
@@ -328,6 +329,7 @@ class MainViewModel(
         
         status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
         status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
+        status.batterySerialNumber?.let { mqttManager.publish("$topic/batteryserialnumber", it, retained = true) }
 
         // Per-Mode Metrics
         status.sortedUsageRecordsB.forEachIndexed { index, record ->

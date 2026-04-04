@@ -275,4 +275,16 @@ class BoschParserTest {
         assertEquals("ECO record distance", 20080, res2.first[1]?.distance)
         assertEquals("TOUR record distance", 32050, res2.first[2]?.distance)
     }
+
+    @Test
+    fun testParse0081BatterySerial() {
+        val hex = "30200081C080110A1933373333302D303038322D33332D4130312D30312D30303230"
+        val bytes = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        val messages = BoschParser.parse(bytes)
+        val msg = messages.find { it.messageId == 0x0081 }
+        
+        assertNotNull("Message 0x0081 not found", msg)
+        val serial = msg!!.decodeStringField()
+        assertEquals("37330-0082-33-A01-01-0020", serial)
+    }
 }

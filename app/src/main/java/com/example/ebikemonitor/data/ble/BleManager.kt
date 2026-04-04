@@ -107,13 +107,16 @@ class BleManager(private val context: Context) {
                 0x9818 -> currentStatus = currentStatus.copy(totalDistance = msg.value / 1000.0)
                 0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
                 0x206B -> {
-                    val raw = msg.rawBytes
-                    if (raw.size >= 9 && raw[7] == 0x0A.toByte()) {
-                        val strLen = raw[8].toInt() and 0xFF
-                        if (raw.size >= 9 + strLen) {
-                            val strBytes = raw.subList(9, 9 + strLen).toByteArray()
-                            currentStatus = currentStatus.copy(ebikeLedSoftwareVersion = String(strBytes, Charsets.UTF_8))
-                        }
+                    val softwareVersion = msg.decodeStringField()
+                    if (softwareVersion != null) {
+                        currentStatus = currentStatus.copy(ebikeLedSoftwareVersion = softwareVersion)
+                    }
+                }
+                0x0081 -> {
+                    val batterySerial = msg.decodeStringField()
+                    if (batterySerial != null) {
+                        currentStatus = currentStatus.copy(batterySerialNumber = batterySerial)
+                        Log.d("BleManager", "Battery Serial decoded: ${currentStatus.batterySerialNumber}")
                     }
                 }
                 0x180C -> {

@@ -179,6 +179,7 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "total Distance", "total_dist", "totaldistance", "km", "distance", "total_increasing")
         publishConfig("sensor", "total Energy from Battery", "total_batt", "totalbattery", "kWh", "energy", "total_increasing")
         publishConfig("sensor", "total Energy from Motor", "motor_total_energy", "totalenergyfrommotor", "kWh", "energy", "total_increasing")
+        publishConfig("sensor", "Battery Serial Number", "battery_serial", "batteryserialnumber", icon = "mdi:barcode-scan", stateClass = null)
         publishConfig("sensor", "eBike LED Software Version", "ebike_led_sw_version", "ebikeledsoftwareversion", icon = "mdi:information-outline", stateClass = null)
 
         // Per-Mode Sensors

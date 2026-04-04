@@ -103,6 +103,21 @@ data class BoschMessage(
         }
         return modes
     }
+
+    fun decodeStringField(): String? {
+        // Pattern: [..., 0x0A, length, ascii bytes...]
+        // 0x0A is typically at rawBytes[7] for these messages
+        for (i in 0 until rawBytes.size - 1) {
+            if (rawBytes[i] == 0x0A.toByte()) {
+                val len = rawBytes[i + 1].toInt() and 0xFF
+                if (i + 2 + len <= rawBytes.size) {
+                    val strBytes = rawBytes.subList(i + 2, i + 2 + len).toByteArray()
+                    return String(strBytes, Charsets.UTF_8)
+                }
+            }
+        }
+        return null
+    }
 }
 
 object BoschParser {
