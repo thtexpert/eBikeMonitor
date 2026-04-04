@@ -143,7 +143,17 @@ class BleManager(private val context: Context) {
                             unsortedModeUsageList.clear()
                         }
                         unsortedModeUsageList.add(record)
-                        currentStatus = currentStatus.copy(unsortedUsageRecords = unsortedModeUsageList.toList())
+                        
+                        val sumKWh = if (unsortedModeUsageList.size == expectedCount) {
+                            unsortedModeUsageList.sumOf { it.energy.toDouble() } / 1000.0
+                        } else {
+                            null
+                        }
+
+                        currentStatus = currentStatus.copy(
+                            unsortedUsageRecords = unsortedModeUsageList.toList(),
+                            totalEnergyFromMotor = sumKWh
+                        )
                         
                         if (unsortedModeUsageList.size == expectedCount) {
                             Log.d("BleManager", "Batch of $expectedCount usage records complete: $unsortedModeUsageList")

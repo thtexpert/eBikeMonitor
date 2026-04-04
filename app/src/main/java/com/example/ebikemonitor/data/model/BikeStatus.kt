@@ -22,6 +22,7 @@ data class BikeStatus(
     val initialTripDistPerMode: List<Int>? = null,
     val initialUnsortedUsageRecords: List<UsageRecord>? = null,
     val modeToInitialIndex: Map<Int, Int> = emptyMap(), // ModeIndex -> InitialRecordIndex
+    val totalEnergyFromMotor: Double? = null,
     val lastUpdateTimestamp: Long = 0L
 )
 

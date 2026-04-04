@@ -164,6 +164,10 @@ class MainViewModel(
                          if (it > 0) mqttManager.publish("$topic/totalbattery", it.toString(), retained = true)
                      }
                      
+                     status.totalEnergyFromMotor?.let {
+                         if (it > 0) mqttManager.publish("$topic/totalenergyfrommotor", it.toString(), retained = true)
+                     }
+                     
                      status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
 
                      // Per-Mode Metrics
@@ -316,6 +320,10 @@ class MainViewModel(
 
         status.totalBattery?.let {
             if (it > 0) mqttManager.publish("$topic/totalbattery", it.toString(), retained = true)
+        }
+        
+        status.totalEnergyFromMotor?.let {
+            if (it > 0) mqttManager.publish("$topic/totalenergyfrommotor", it.toString(), retained = true)
         }
         
         status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
