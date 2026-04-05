@@ -13,13 +13,13 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | `power` | Human Power | `sensor.<name>_power` | W | Calculated human power input. |
 | `motorpower` | Motor Power | `sensor.<name>_motor_power` | W | Instantaneous motor power usage. |
 | `assistmode` | Assist Mode | `sensor.<name>_assist_mode` | - | Current mode (e.g., ECO, TOUR+, TURBO). |
-| `totaldistance` | Total Distance | `sensor.<name>_total_distance` | km | Total odometer from the drive unit. |
-| `totalenergy` | Total Energy | `sensor.<name>_total_energy` | kWh | **Primary** motor energy usage. |
-| `totalbattery` | Total Battery | `sensor.<name>_total_battery` | kWh | Total energy drained from the pack. |
+| `totaldistance` | Total Distance | `sensor.<name>_total_distance` | km | Total odometer from the drive unit. (**Retained**) |
+| `totalenergy` | Total Energy | `sensor.<name>_total_energy` | kWh | **Primary** motor energy usage. (**Retained**) |
+| `totalbattery` | Total Battery | `sensor.<name>_total_battery` | kWh | Total energy drained from the pack. (**Retained**) |
 | `stateofcharge` | Battery Level | `sensor.<name>_battery_level` | % | Current battery percentage. |
 | `status` | App Status | `sensor.<name>_app_status` | - | LWT status (`online`/`offline`). |
 | `blestatus` | BLE Status | `sensor.<name>_ble_status` | - | App <-> eBike connection state. |
-| `mqttconnecttimestamp`| MQTT Connect Time | `sensor.<name>_last_mqtt_connect_time` | ISO8601 | Last MQTT connection timestamp. |
+| `mqttconnecttimestamp`| MQTT Connect Time | `sensor.<name>_last_mqtt_connect_time` | ISO8601 | Last MQTT connection timestamp. (**Retained**) |
 | `ebikeledsoftwareversion`| LED Version | `sensor.<name>_ebike_led_software_version` | - | Firmware version of the remote. |
 | `batteryserialnumber` | Battery Serial | `sensor.<name>_battery_serial_number` | - | Serial of the current pack. |
 
@@ -27,8 +27,11 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 > `<name>` is the **eBike Name** you configured in the app settings (e.g., `cubetoni`). Home Assistant automatically prefixes the sensor names with the device name.
 
 ### Per-Mode Statistics
-- `sensor.<name>_<mode>_distance`: Distance in this mode (km).
-- `sensor.<name>_<mode>_energy`: Energy used in this mode (kWh).
+- `sensor.<name>_<mode>_distance`: Distance in this mode (km) — **Retained**.
+- `sensor.<name>_<mode>_energy`: Energy used in this mode (kWh) — **Retained**.
+
+> [!NOTE]
+> Per-mode statistics, as well as **Total Distance**, **Total Energy**, **Total Battery**, and **MQTT Connect Time**, are published as **retained** MQTT messages. This ensures that their last known values are immediately available to Home Assistant even if it restarts.
 
 ---
 

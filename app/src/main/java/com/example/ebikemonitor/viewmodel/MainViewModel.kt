@@ -221,10 +221,10 @@ class MainViewModel(
                                  val safeMode = sanitizeForMqtt(modeName)
                                  
                                  if (record.distance > 0) {
-                                     mqttManager.publish("$bikeTopic/${safeMode}distance", (record.distance / 1000.0).toString())
+                                     mqttManager.publish("$bikeTopic/${safeMode}distance", (record.distance / 1000.0).toString(), retained = true)
                                  }
                                  if (record.energy > 0) {
-                                     mqttManager.publish("$bikeTopic/${safeMode}energy", (record.energy / 1000.0).toString())
+                                     mqttManager.publish("$bikeTopic/${safeMode}energy", (record.energy / 1000.0).toString(), retained = true)
                                  }
                              }
                          }
@@ -232,7 +232,7 @@ class MainViewModel(
                          // --- SESSION METADATA ---
                          val bleConnected = bleManager.isConnected.value
                          mqttManager.publish("$bikeTopic/blestatus", if (bleConnected) "connected" else "disconnected")
-                         mqttSessionConnectTime?.let { mqttManager.publish("$bikeTopic/mqttconnecttimestamp", it) }
+                         mqttSessionConnectTime?.let { mqttManager.publish("$bikeTopic/mqttconnecttimestamp", it, retained = true) }
                      }
 
                      // --- BATTERY TELEMETRY GATEKEEPER ---
@@ -406,10 +406,10 @@ class MainViewModel(
                 val safeMode = sanitizeForMqtt(modeName)
                 
                 if (record.distance > 0) {
-                    mqttManager.publish("$topic/${safeMode}distance", (record.distance / 1000.0).toString())
+                    mqttManager.publish("$topic/${safeMode}distance", (record.distance / 1000.0).toString(), retained = true)
                 }
                 if (record.energy > 0) {
-                    mqttManager.publish("$topic/${safeMode}energy", (record.energy / 1000.0).toString())
+                    mqttManager.publish("$topic/${safeMode}energy", (record.energy / 1000.0).toString(), retained = true)
                 }
             }
         }
