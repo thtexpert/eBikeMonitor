@@ -134,6 +134,8 @@ fun PortraitLayout(
         ActionButtonsRow(viewModel, isMqttConnected, isBleConnected, bluetoothEnableLauncher)
         
         UsageAccessWarning(viewModel)
+        
+        DiscoveryUpdateNudges(viewModel)
 
         LazyColumn(
             modifier = Modifier.weight(1f),
@@ -152,7 +154,8 @@ fun PortraitLayout(
                 HomeAssistantCard(title = "Totals", icon = Icons.Default.Analytics) {
                     SensorRow("SoC", bikeStatus.batteryLevel?.toString() ?: "--", "%", getBatteryIcon(bikeStatus.batteryLevel ?: 0), isMqttConnected && (bikeStatus.batteryLevel ?: 0) > 0)
                     SensorRow("Total Distance", bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
-                    SensorRow("Total Energy", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
+                    SensorRow("Total Energy", bikeStatus.totalEnergyFromMotor?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalEnergyFromMotor != null)
+                    SensorRow("Total Battery", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
                 }
             }
             if (SHOW_DEBUG_UI) {
@@ -190,10 +193,12 @@ fun LandscapeLayout(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             UsageAccessWarning(viewModel)
+            DiscoveryUpdateNudges(viewModel)
             HomeAssistantCard(title = "Totals", icon = Icons.Default.Analytics) {
                 SensorRow("SoC", bikeStatus.batteryLevel?.toString() ?: "--", "%", getBatteryIcon(bikeStatus.batteryLevel ?: 0), isMqttConnected && (bikeStatus.batteryLevel ?: 0) > 0)
                 SensorRow("Total Distance", bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
-                SensorRow("Total Energy", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
+                SensorRow("Total Energy", bikeStatus.totalEnergyFromMotor?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalEnergyFromMotor != null)
+                SensorRow("Total Battery", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
             }
             if (SHOW_DEBUG_UI) {
                 val expectedCount = if (bikeStatus.assistModeNames.isNotEmpty()) bikeStatus.assistModeNames.size else 5
@@ -466,6 +471,63 @@ fun UsageAccessWarning(viewModel: MainViewModel) {
                 ) {
                     Text("GRANT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun DiscoveryUpdateNudges(viewModel: MainViewModel) {
+    val isBikeOutdated by viewModel.isBikeDiscoveryOutdated.collectAsState()
+    val isBatteryOutdated by viewModel.isBatteryDiscoveryOutdated.collectAsState()
+    
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (isBikeOutdated) {
+            DiscoveryNudge(
+                message = "New eBike MQTT topics available",
+                buttonText = "UPDATE BIKE",
+                onUpdate = { viewModel.updateBikeDiscovery() }
+            )
+        }
+        
+        if (isBatteryOutdated) {
+            DiscoveryNudge(
+                message = "Register this PowerTube in HA",
+                buttonText = "REGISTER BATTERY",
+                onUpdate = { viewModel.updateBatteryDiscovery() }
+            )
+        }
+    }
+}
+
+@Composable
+fun DiscoveryNudge(
+    message: String,
+    buttonText: String,
+    onUpdate: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                message,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                onClick = onUpdate,
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) {
+                Text(buttonText, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -144,18 +144,18 @@ class MqttManager(private val context: Context) {
         return input.lowercase().replace(Regex("[^a-z0-9]"), "_")
     }
 
-    fun sendHomeAssistantDiscovery(deviceId: String, deviceDisplayName: String, assistModeNames: List<String> = emptyList()) {
+    fun sendBikeDiscovery(deviceId: String, deviceDisplayName: String, assistModeNames: List<String> = emptyList()) {
         val discoveryPrefix = "homeassistant"
         val stateTopic = "ebikemonitor/$deviceId"
         
         val deviceJson = "{\"identifiers\":[\"ebikemonitor_$deviceId\"],\"name\":\"$deviceDisplayName\",\"manufacturer\":\"eBikeMonitor\",\"model\":\"Bosch Smart System eBike\"}"
 
-        fun publishConfig(component: String, name: String, sensorId: String, topic: String, unit: String? = null, deviceClass: String? = null, stateClass: String? = "measurement", icon: String? = null) {
+        fun publishConfig(component: String, name: String, sensorId: String, topicPath: String, unit: String? = null, deviceClass: String? = null, stateClass: String? = "measurement", icon: String? = null) {
             val configTopic = "$discoveryPrefix/$component/ebikemonitor_${deviceId}_$sensorId/config"
             
             val fields = mutableListOf<String>()
             fields.add("\"name\":\"$name\"")
-            fields.add("\"state_topic\":\"$stateTopic/$topic\"")
+            fields.add("\"state_topic\":\"$stateTopic/$topicPath\"")
             fields.add("\"unique_id\":\"ebikemonitor_${deviceId}_$sensorId\"")
             unit?.let { fields.add("\"unit_of_measurement\":\"$it\"") }
             deviceClass?.let { fields.add("\"device_class\":\"$it\"") }
@@ -165,7 +165,7 @@ class MqttManager(private val context: Context) {
             
             val payload = "{" + fields.joinToString(",") + "}"
             
-            Log.d("MqttManager", "Sending HA Discovery for $sensorId to $configTopic")
+            Log.d("MqttManager", "Sending Bike Discovery for $sensorId to $configTopic")
             publish(configTopic, payload, retained = true)
         }
 
@@ -176,23 +176,56 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "Motor Power", "motor_power", "motorpower", "W", "power")
         publishConfig("sensor", "Assist Mode", "assist_mode", "assistmode", stateClass = null, icon = "mdi:bicycle-electric")
         publishConfig("sensor", "Cadence", "cadence", "cadence", "rpm", icon = "mdi:bike-fast")
-        publishConfig("sensor", "total Distance", "total_dist", "totaldistance", "km", "distance", "total_increasing")
-        publishConfig("sensor", "total Energy from Battery", "total_batt", "totalbattery", "kWh", "energy", "total_increasing")
-        publishConfig("sensor", "total Energy from Motor", "motor_total_energy", "totalenergyfrommotor", "kWh", "energy", "total_increasing")
+        publishConfig("sensor", "Total Distance", "total_dist", "totaldistance", "km", "distance", "total_increasing")
+        publishConfig("sensor", "Total Battery", "total_batt", "totalbattery", "kWh", "energy", "total_increasing")
+        publishConfig("sensor", "Total Energy", "total_energy", "totalenergy", "kWh", "energy", "total_increasing")
         publishConfig("sensor", "Battery Serial Number", "battery_serial", "batteryserialnumber", icon = "mdi:barcode-scan", stateClass = null)
         publishConfig("sensor", "eBike LED Software Version", "ebike_led_sw_version", "ebikeledsoftwareversion", icon = "mdi:information-outline", stateClass = null)
 
-        // Per-Mode Sensors
+        // Per-Mode Sensors (Dropping _from_battery)
         assistModeNames.forEach { mode ->
             val safeMode = sanitize(mode)
             publishConfig("sensor", "$mode Distance", "${safeMode}_dist", "${safeMode}distance", "km", "distance", "total_increasing")
-            publishConfig("sensor", "$mode Energy from Battery", "${safeMode}_batt", "${safeMode}battery", "kWh", "energy", "total_increasing")
+            publishConfig("sensor", "$mode Energy", "${safeMode}_energy", "${safeMode}energy", "kWh", "energy", "total_increasing")
         }
         
         // Connectivity/Status
         publishConfig("sensor", "last MQTT Connect Time", "mqtt_connect", "mqttconnecttimestamp", deviceClass = "timestamp", stateClass = null)
         publishConfig("sensor", "BLE Status", "ble_status", "blestatus", stateClass = null)
         publishConfig("sensor", "App Status", "app_status", "status",  stateClass = null)
+    }
+
+    fun sendPowerTubeDiscovery(serial: String, modelName: String?) {
+        val discoveryPrefix = "homeassistant"
+        val deviceId = sanitize(serial)
+        val stateTopic = "powertube/$serial"
+        
+        val displayModel = modelName ?: "PowerTube"
+        val deviceJson = "{\"identifiers\":[\"powertube_$deviceId\"],\"name\":\"Bosch $displayModel\",\"manufacturer\":\"Bosch\",\"model\":\"$displayModel\"}"
+
+        fun publishConfig(component: String, name: String, sensorId: String, topicPath: String, unit: String? = null, deviceClass: String? = null, stateClass: String? = "measurement", icon: String? = null) {
+            val configTopic = "$discoveryPrefix/$component/powertube_${deviceId}_$sensorId/config"
+            
+            val fields = mutableListOf<String>()
+            fields.add("\"name\":\"$name\"")
+            fields.add("\"state_topic\":\"$stateTopic/$topicPath\"")
+            fields.add("\"unique_id\":\"powertube_${deviceId}_$sensorId\"")
+            unit?.let { fields.add("\"unit_of_measurement\":\"$it\"") }
+            deviceClass?.let { fields.add("\"device_class\":\"$it\"") }
+            stateClass?.let { fields.add("\"state_class\":\"$it\"") }
+            icon?.let { fields.add("\"icon\":\"$it\"") }
+            fields.add("\"device\":$deviceJson")
+            
+            val payload = "{" + fields.joinToString(",") + "}"
+            
+            Log.d("MqttManager", "Sending PowerTube Discovery for $sensorId to $configTopic")
+            publish(configTopic, payload, retained = true)
+        }
+
+        publishConfig("sensor", "Charge Level", "battery", "stateofcharge", "%", "battery")
+        publishConfig("sensor", "Total Energy Used", "total_energy", "totalbattery", "kWh", "energy", "total_increasing")
+        publishConfig("sensor", "Charge Cycles", "charge_cycles", "chargecycles", icon = "mdi:battery-sync", stateClass = "total_increasing")
+        publishConfig("sensor", "Hardware Serial", "serial", "serial", icon = "mdi:barcode-scan", stateClass = null)
     }
 
     fun disconnect() {

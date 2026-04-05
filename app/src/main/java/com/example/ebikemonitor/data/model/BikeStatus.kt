@@ -24,6 +24,8 @@ data class BikeStatus(
     val modeToInitialIndex: Map<Int, Int> = emptyMap(), // ModeIndex -> InitialRecordIndex
     val totalEnergyFromMotor: Double? = null,
     val batterySerialNumber: String? = null,
+    val batteryModel: String? = null,
+    val chargeCycles: Int? = null,
     val lastUpdateTimestamp: Long = 0L
 )
 

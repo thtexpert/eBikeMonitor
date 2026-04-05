@@ -119,6 +119,13 @@ class BleManager(private val context: Context) {
                         Log.d("BleManager", "Battery Serial decoded: ${currentStatus.batterySerialNumber}")
                     }
                 }
+                0x009B -> {
+                    val model = msg.decodeStringField()
+                    if (model != null) {
+                        currentStatus = currentStatus.copy(batteryModel = model)
+                        Log.d("BleManager", "Battery Model decoded: $model")
+                    }
+                }
                 0x180C -> {
                     val decodedModes = msg.decodeAssistModes()
                     if (decodedModes.isNotEmpty()) {

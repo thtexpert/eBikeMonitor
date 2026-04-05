@@ -31,6 +31,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.Date
+import com.example.ebikemonitor.data.model.BikeProfile
+import com.example.ebikemonitor.data.model.BatteryProfile
+import com.example.ebikemonitor.data.datasource.CURRENT_BIKE_DISCOVERY_VERSION
+import com.example.ebikemonitor.data.datasource.CURRENT_BATTERY_DISCOVERY_VERSION
 
 class MainViewModel(
     application: Application,
@@ -49,9 +53,10 @@ class MainViewModel(
     private val _mqttErrorText = MutableStateFlow("")
     val mqttErrorText = _mqttErrorText.asStateFlow()
     
-    // Flow App Detection
     private val _isFlowRunning = MutableStateFlow(false)
     val isFlowRunning = _isFlowRunning.asStateFlow()
+    
+    private var mqttSessionConnectTime: String? = null
     
     private val _isUsageAccessGranted = MutableStateFlow(false)
     val isUsageAccessGranted = _isUsageAccessGranted.asStateFlow()
@@ -61,7 +66,22 @@ class MainViewModel(
     val savedEBikeName = settingsRepository.eBikeName.stateIn(viewModelScope, SharingStarted.Lazily, "")
     val autoConnectBle = settingsRepository.autoConnectBle.stateIn(viewModelScope, SharingStarted.Lazily, true)
     
+    val bikeProfiles = settingsRepository.bikeProfiles.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val batteryProfiles = settingsRepository.batteryProfiles.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val activeBikeMac = settingsRepository.activeBikeMac.stateIn(viewModelScope, SharingStarted.Lazily, null)
+
+    private val _isBikeDiscoveryOutdated = MutableStateFlow(false)
+    val isBikeDiscoveryOutdated = _isBikeDiscoveryOutdated.asStateFlow()
+
+    private val _isBatteryDiscoveryOutdated = MutableStateFlow(false)
+    val isBatteryDiscoveryOutdated = _isBatteryDiscoveryOutdated.asStateFlow()
+
     init {
+        // Legacy Migration
+        viewModelScope.launch {
+            settingsRepository.migrateLegacySettings()
+        }
+
         // Auto-connect logic
         viewModelScope.launch {
             // Wait for settings to load
@@ -106,18 +126,12 @@ class MainViewModel(
         viewModelScope.launch {
             mqttManager.isConnected.collect { connected ->
                 if (connected) {
+                    mqttSessionConnectTime = Instant.now().toString()
                     // Publish all current values
                     val status = bleManager.bikeStatus.value
                     publishFullStatus(status)
-                    
-                    val topic = mqttManager.baseTopic
-                    
-                    // Publish BLE status
-                    val bleConnected = bleManager.isConnected.value
-                    mqttManager.publish("$topic/blestatus", if (bleConnected) "connected" else "disconnected")
-                    
-                    // Publish Connection Timestamp
-                    mqttManager.publish("$topic/mqttconnecttimestamp", Instant.now().toString());
+                } else {
+                    mqttSessionConnectTime = null
                 }
             }
         }
@@ -126,9 +140,13 @@ class MainViewModel(
         viewModelScope.launch {
             bleManager.isConnected.collect { bleConnected ->
                 if (mqttManager.isConnected.value) {
-                     val topic = mqttManager.baseTopic
-                     val statusPayload = if (bleConnected) "connected" else "disconnected"
-                     mqttManager.publish("$topic/blestatus", statusPayload)
+                     val mac = activeBikeMac.value
+                     val profile = bikeProfiles.value.find { it.macAddress == mac }
+                     if (profile != null && profile.lastDiscoveryVersion >= CURRENT_BIKE_DISCOVERY_VERSION) {
+                         val bikeTopic = "ebikemonitor/${mac?.lowercase()?.replace(":", "") ?: "unknown"}"
+                         val statusPayload = if (bleConnected) "connected" else "disconnected"
+                         mqttManager.publish("$bikeTopic/blestatus", statusPayload)
+                     }
                 }
             }
         }
@@ -140,49 +158,99 @@ class MainViewModel(
             }
         }
 
+        // Discovery Version Monitoring
+        viewModelScope.launch {
+            combine(bikeProfiles, batteryProfiles, activeBikeMac, uiState) { profiles, battProfs, activeMac, status ->
+                val activeProfile = profiles.find { it.macAddress == activeMac }
+                val bikeOutdated = (activeProfile?.lastDiscoveryVersion ?: 0) < CURRENT_BIKE_DISCOVERY_VERSION
+                
+                val serial = status.batterySerialNumber
+                val batteryOutdated = if (serial != null) {
+                    val battProfile = battProfs.find { it.serialNumber == serial }
+                    (battProfile?.lastDiscoveryVersion ?: 0) < CURRENT_BATTERY_DISCOVERY_VERSION
+                } else {
+                    false
+                }
+                
+                Pair(bikeOutdated, batteryOutdated)
+            }.collect { (bikeOutdated, batteryOutdated) ->
+                _isBikeDiscoveryOutdated.value = bikeOutdated
+                _isBatteryDiscoveryOutdated.value = batteryOutdated
+            }
+        }
+
         // MQTT Live Update logic
         viewModelScope.launch {
              bleManager.bikeStatus.collect { status ->
                  if (mqttManager.isConnected.value) {
-                     val topic = mqttManager.baseTopic
+                     val mac = activeBikeMac.value
+                     val profile = bikeProfiles.value.find { it.macAddress == mac }
+                     val bikeTopic = "ebikemonitor/${mac?.lowercase()?.replace(":", "") ?: "unknown"}"
                      
-                     status.speed?.let { mqttManager.publish("$topic/speed", it.toString()) }
-                     status.cadence?.let { mqttManager.publish("$topic/cadence", it.toString()) }
-                     
-                     status.batteryLevel?.let { 
-                         if (it > 0) mqttManager.publish("$topic/stateofcharge", it.toString(), retained = true) 
-                     }
-                     
-                     status.assistMode?.let { mqttManager.publish("$topic/assistmode", getAssistModeName(it, status.assistModeNames)) }
-                     status.humanPower?.let { mqttManager.publish("$topic/power", it.toString()) }
-                     status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
-                     
-                     status.totalDistance?.let {
-                         if (it > 0) mqttManager.publish("$topic/totaldistance", it.toString(), retained = true)
-                     }
-                     status.totalBattery?.let {
-                         if (it > 0) mqttManager.publish("$topic/totalbattery", it.toString(), retained = true)
-                     }
-                     
-                     status.totalEnergyFromMotor?.let {
-                         if (it > 0) mqttManager.publish("$topic/totalenergyfrommotor", it.toString(), retained = true)
-                     }
-                     
-                     status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
-                     status.batterySerialNumber?.let { mqttManager.publish("$topic/batteryserialnumber", it, retained = true) }
+                     // --- BIKE TELEMETRY GATEKEEPER ---
+                     if (profile != null && profile.lastDiscoveryVersion >= CURRENT_BIKE_DISCOVERY_VERSION) {
+                         status.speed?.let { mqttManager.publish("$bikeTopic/speed", it.toString()) }
+                         status.cadence?.let { mqttManager.publish("$bikeTopic/cadence", it.toString()) }
+                         status.assistMode?.let { mqttManager.publish("$bikeTopic/assistmode", getAssistModeName(it, status.assistModeNames)) }
+                         status.humanPower?.let { mqttManager.publish("$bikeTopic/power", it.toString()) }
+                         status.motorPower?.let { mqttManager.publish("$bikeTopic/motorpower", it.toString()) }
+                         
+                         status.totalDistance?.let {
+                             if (it > 0) mqttManager.publish("$bikeTopic/totaldistance", it.toString(), retained = true)
+                         }
+                         
+                         // Mirror current battery data to bike topic (always reflects currently mounted pack)
+                         status.batteryLevel?.let { 
+                             if (it > 0) mqttManager.publish("$bikeTopic/stateofcharge", it.toString(), retained = true) 
+                         }
+                         status.totalBattery?.let {
+                             if (it > 0) mqttManager.publish("$bikeTopic/totalbattery", it.toString(), retained = true)
+                         }
+                         
+                         status.totalEnergyFromMotor?.let {
+                             if (it > 0) mqttManager.publish("$bikeTopic/totalenergy", it.toString(), retained = true)
+                         }
+                         
+                         status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$bikeTopic/ebikeledsoftwareversion", it, retained = true) }
+                         status.batterySerialNumber?.let { mqttManager.publish("$bikeTopic/batteryserialnumber", it, retained = true) }
 
-                     // Per-Mode Metrics
-                     status.sortedUsageRecordsB.forEachIndexed { index, record ->
-                         if (record != null) {
-                             val modeName = status.assistModeNames.getOrNull(index) ?: return@forEachIndexed
-                             val safeMode = sanitizeForMqtt(modeName)
-                             
-                             if (record.distance > 0) {
-                                 mqttManager.publish("$topic/${safeMode}distance", (record.distance / 1000.0).toString())
+                         // Per-Mode Metrics (New sensor names logic)
+                         status.sortedUsageRecordsB.forEachIndexed { index, record ->
+                             if (record != null) {
+                                 val modeName = status.assistModeNames.getOrNull(index) ?: return@forEachIndexed
+                                 val safeMode = sanitizeForMqtt(modeName)
+                                 
+                                 if (record.distance > 0) {
+                                     mqttManager.publish("$bikeTopic/${safeMode}distance", (record.distance / 1000.0).toString())
+                                 }
+                                 if (record.energy > 0) {
+                                     mqttManager.publish("$bikeTopic/${safeMode}energy", (record.energy / 1000.0).toString())
+                                 }
                              }
-                             if (record.energy > 0) {
-                                 mqttManager.publish("$topic/${safeMode}battery", (record.energy / 1000.0).toString())
+                         }
+
+                         // --- SESSION METADATA ---
+                         val bleConnected = bleManager.isConnected.value
+                         mqttManager.publish("$bikeTopic/blestatus", if (bleConnected) "connected" else "disconnected")
+                         mqttSessionConnectTime?.let { mqttManager.publish("$bikeTopic/mqttconnecttimestamp", it) }
+                     }
+
+                     // --- BATTERY TELEMETRY GATEKEEPER ---
+                     val serial = status.batterySerialNumber
+                     if (serial != null) {
+                         val battProfile = batteryProfiles.value.find { it.serialNumber == serial }
+                         if (battProfile != null && battProfile.lastDiscoveryVersion >= CURRENT_BATTERY_DISCOVERY_VERSION) {
+                             val battTopic = "powertube/$serial"
+                             status.batteryLevel?.let { 
+                                 if (it > 0) mqttManager.publish("$battTopic/stateofcharge", it.toString(), retained = true) 
                              }
+                             status.totalBattery?.let {
+                                 if (it > 0) mqttManager.publish("$battTopic/totalbattery", it.toString(), retained = true)
+                             }
+                             status.chargeCycles?.let {
+                                 mqttManager.publish("$battTopic/chargecycles", it.toString(), retained = true)
+                             }
+                             mqttManager.publish("$battTopic/serial", serial, retained = true)
                          }
                      }
                  }
@@ -324,14 +392,14 @@ class MainViewModel(
         }
         
         status.totalEnergyFromMotor?.let {
-            if (it > 0) mqttManager.publish("$topic/totalenergyfrommotor", it.toString(), retained = true)
+            if (it > 0) mqttManager.publish("$topic/totalenergy", it.toString(), retained = true)
         }
         
         status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
         status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
         status.batterySerialNumber?.let { mqttManager.publish("$topic/batteryserialnumber", it, retained = true) }
 
-        // Per-Mode Metrics
+        // Per-Mode Metrics (New sensor names logic)
         status.sortedUsageRecordsB.forEachIndexed { index, record ->
             if (record != null) {
                 val modeName = status.assistModeNames.getOrNull(index) ?: return@forEachIndexed
@@ -341,7 +409,7 @@ class MainViewModel(
                     mqttManager.publish("$topic/${safeMode}distance", (record.distance / 1000.0).toString())
                 }
                 if (record.energy > 0) {
-                    mqttManager.publish("$topic/${safeMode}battery", (record.energy / 1000.0).toString())
+                    mqttManager.publish("$topic/${safeMode}energy", (record.energy / 1000.0).toString())
                 }
             }
         }
@@ -358,7 +426,7 @@ class MainViewModel(
             val clientId = if (name.isNotEmpty()) name else "MyEbike"
             
             if (uri.isNotEmpty()) {
-                val mac = settingsRepository.bleMacAddress.first()
+                val mac = activeBikeMac.value
                 val deviceId = mac?.lowercase()?.replace(":", "") ?: "unknown"
                 val topic = "ebikemonitor/$deviceId"
                 mqttManager.connect(uri, clientId, user, pass, topic)
@@ -379,7 +447,7 @@ class MainViewModel(
             bleManager.disconnect()
         } else {
             viewModelScope.launch {
-                val mac = savedBleMac.value
+                val mac = activeBikeMac.value
                 if (mac != null) {
                     bleManager.connect(mac)
                 }
@@ -393,8 +461,27 @@ class MainViewModel(
     
     fun connectToDevice(mac: String) {
         viewModelScope.launch {
-            settingsRepository.saveBleMacAddress(mac)
+            settingsRepository.setActiveBikeMac(mac)
+            
+            // If bike doesn't exist in profiles, add it
+            val profiles = bikeProfiles.value
+            if (profiles.none { it.macAddress == mac }) {
+                val newProfile = BikeProfile(macAddress = mac, name = "New Bike", lastDiscoveryVersion = 0)
+                settingsRepository.saveBikeProfiles(profiles + newProfile)
+            }
+            
             bleManager.connect(mac)
+        }
+    }
+
+    fun selectBike(mac: String) {
+        viewModelScope.launch {
+            settingsRepository.setActiveBikeMac(mac)
+            if (isBleConnected.value) {
+                bleManager.disconnect()
+                delay(500)
+                bleManager.connect(mac)
+            }
         }
     }
 
@@ -413,17 +500,36 @@ class MainViewModel(
         }
     }
 
-    fun sendHomeAssistantDiscovery() {
+    fun updateBikeDiscovery() {
         viewModelScope.launch {
-            val name = savedEBikeName.value
-            val mac = savedBleMac.value
-            if (name.isBlank() || mac.isNullOrEmpty()) {
-                _mqttErrorText.value = "Discovery Failed: Valid eBike Name and Target MAC required"
-                return@launch
-            }
+            val mac = activeBikeMac.value ?: return@launch
+            val profile = bikeProfiles.value.find { it.macAddress == mac } ?: return@launch
+            val name = profile.name
+            
             val deviceId = mac.lowercase().replace(":", "")
-            mqttManager.sendHomeAssistantDiscovery(deviceId, name, uiState.value.assistModeNames)
+            mqttManager.sendBikeDiscovery(deviceId, name, uiState.value.assistModeNames)
+            
+            settingsRepository.updateBikeDiscoveryVersion(mac, CURRENT_BIKE_DISCOVERY_VERSION)
+            
+            // Re-sync after discovery update to unblock telemetry
+            publishFullStatus(uiState.value)
         }
+    }
+
+    fun updateBatteryDiscovery() {
+        viewModelScope.launch {
+            val serial = uiState.value.batterySerialNumber ?: return@launch
+            val model = uiState.value.batteryModel
+            
+            mqttManager.sendPowerTubeDiscovery(serial, model)
+            
+            settingsRepository.updateBatteryDiscoveryVersion(serial, CURRENT_BATTERY_DISCOVERY_VERSION, model)
+        }
+    }
+
+    fun sendHomeAssistantDiscovery() {
+        // Legacy call redirected to new Bike Discovery
+        updateBikeDiscovery()
     }
     
     // Settings updaters
