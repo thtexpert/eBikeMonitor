@@ -181,6 +181,7 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "Total Energy", "total_energy", "totalenergy", "kWh", "energy", "total_increasing")
         publishConfig("sensor", "Battery Serial Number", "battery_serial", "batteryserialnumber", icon = "mdi:barcode-scan", stateClass = null)
         publishConfig("sensor", "eBike LED Software Version", "ebike_led_sw_version", "ebikeledsoftwareversion", icon = "mdi:information-outline", stateClass = null)
+        publishConfig("sensor", "Total Hours", "total_hours", "totalhours", "h", icon = "mdi:timer-outline", stateClass = "total_increasing")
 
         // Per-Mode Sensors (Dropping _from_battery)
         assistModeNames.forEach { mode ->
@@ -224,7 +225,7 @@ class MqttManager(private val context: Context) {
 
         publishConfig("sensor", "Charge Level", "battery", "stateofcharge", "%", "battery")
         publishConfig("sensor", "Total Energy Used", "total_energy", "totalbattery", "kWh", "energy", "total_increasing")
-        publishConfig("sensor", "Charge Cycles", "charge_cycles", "chargecycles", icon = "mdi:battery-sync", stateClass = "total_increasing")
+        publishConfig("sensor", "Charge Cycles", "charge_cycles", "chargecycles", "cycles", icon = "mdi:battery-sync", stateClass = "total_increasing")
         publishConfig("sensor", "Hardware Serial", "serial", "serial", icon = "mdi:barcode-scan", stateClass = null)
     }
 

@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.example.ebikemonitor.data.model.BikeStatus
+import com.example.ebikemonitor.data.model.UsageRecord
 import com.example.ebikemonitor.data.parser.BoschParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,7 +39,7 @@ class BleManager(private val context: Context) {
     private val _bikeStatus = MutableStateFlow(BikeStatus())
     val bikeStatus = _bikeStatus.asStateFlow()
 
-    private val unsortedModeUsageList = mutableListOf<com.example.ebikemonitor.data.parser.UsageRecord>()
+    private val unsortedModeUsageList = mutableListOf<UsageRecord>()
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -105,7 +106,9 @@ class BleManager(private val context: Context) {
                 0x80BC -> currentStatus = currentStatus.copy(batteryLevel = msg.value)
                 0x9809 -> currentStatus = currentStatus.copy(assistMode = msg.value)
                 0x9818 -> currentStatus = currentStatus.copy(totalDistance = msg.value / 1000.0)
+                0x9819 -> currentStatus = currentStatus.copy(driveUnitHours = msg.value)
                 0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
+                0x8096 -> currentStatus = currentStatus.copy(chargeCycles = msg.value / 10.0)
                 0x206B -> {
                     val softwareVersion = msg.decodeStringField()
                     if (softwareVersion != null) {
@@ -168,7 +171,26 @@ class BleManager(private val context: Context) {
                         if (unsortedModeUsageList.size == expectedCount) {
                             Log.d("BleManager", "Batch of $expectedCount usage records complete: $unsortedModeUsageList")
                             
-                            // Capture initial baseline if not already established
+                            // 1. Startup Decoding Ritual (Persistent Storage)
+                            if (currentStatus.initialTripDistPerMode == null && currentStatus.persistentBaselines != null) {
+                                val startupMapping = BoschParser.findBestStartupMapping(
+                                    newBatch = unsortedModeUsageList,
+                                    currentTrip = currentStatus.tripDistPerMode,
+                                    storedBaselines = currentStatus.persistentBaselines!!
+                                )
+                                
+                                if (startupMapping != null) {
+                                    Log.d("BleManager", "Version B: Startup decoding successful! Initializing baseline from storage.")
+                                    currentStatus = currentStatus.copy(
+                                        initialTripDistPerMode = currentStatus.tripDistPerMode.toList(),
+                                        initialUnsortedUsageRecords = unsortedModeUsageList.toList(),
+                                        modeToInitialIndex = startupMapping,
+                                        confirmedModeIndices = startupMapping.keys
+                                    )
+                                }
+                            }
+
+                            // 2. Normal Capture/Fallback: Session baseline if still not established
                             if (currentStatus.initialTripDistPerMode == null && currentStatus.tripDistPerMode.size == expectedCount) {
                                 Log.d("BleManager", "Version B: Capturing initial trip baseline.")
                                 currentStatus = currentStatus.copy(
@@ -264,6 +286,13 @@ class BleManager(private val context: Context) {
     fun setAssistModeNames(names: List<String>) {
         if (_bikeStatus.value.assistModeNames.isEmpty() && names.isNotEmpty()) {
             _bikeStatus.value = _bikeStatus.value.copy(assistModeNames = names)
+        }
+    }
+
+    fun setPersistentBaselines(baselines: List<Int>) {
+        if (_bikeStatus.value.persistentBaselines == null) {
+            _bikeStatus.value = _bikeStatus.value.copy(persistentBaselines = baselines)
+            Log.d("BleManager", "Persistent baselines loaded: $baselines")
         }
     }
 }

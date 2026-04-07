@@ -1,5 +1,4 @@
 package com.example.ebikemonitor.data.model
-import com.example.ebikemonitor.data.parser.UsageRecord
 
 data class BikeStatus(
     val speed: Double? = null,
@@ -25,7 +24,9 @@ data class BikeStatus(
     val totalEnergyFromMotor: Double? = null,
     val batterySerialNumber: String? = null,
     val batteryModel: String? = null,
-    val chargeCycles: Int? = null,
+    val chargeCycles: Double? = null,
+    val driveUnitHours: Int? = null,
+    val persistentBaselines: List<Int>? = null,
     val lastUpdateTimestamp: Long = 0L
 )
 

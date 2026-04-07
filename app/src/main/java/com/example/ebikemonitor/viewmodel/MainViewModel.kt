@@ -20,6 +20,7 @@ import com.example.ebikemonitor.data.ble.BleManager
 import com.example.ebikemonitor.data.datasource.SettingsRepository
 import com.example.ebikemonitor.data.model.BikeStatus
 import com.example.ebikemonitor.data.model.getAssistModeName
+import com.example.ebikemonitor.data.model.UsageRecord
 import com.example.ebikemonitor.data.mqtt.MqttManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -166,7 +167,7 @@ class MainViewModel(
                 
                 val serial = status.batterySerialNumber
                 val batteryOutdated = if (serial != null) {
-                    val battProfile = battProfs.find { it.serialNumber == serial }
+                    val battProfile = battProfs.find { it.hardwareSerial == serial }
                     (battProfile?.lastDiscoveryVersion ?: 0) < CURRENT_BATTERY_DISCOVERY_VERSION
                 } else {
                     false
@@ -176,6 +177,47 @@ class MainViewModel(
             }.collect { (bikeOutdated, batteryOutdated) ->
                 _isBikeDiscoveryOutdated.value = bikeOutdated
                 _isBatteryDiscoveryOutdated.value = batteryOutdated
+            }
+        }
+
+        // --- NEW: Persistent Usage Baseline Loading ---
+        viewModelScope.launch {
+            combine(activeBikeMac, bikeProfiles) { mac, profiles ->
+                profiles.find { it.macAddress == mac }
+            }.collect { profile ->
+                if (profile != null && profile.lastUsageRecords.isNotEmpty() && profile.lastTripDistPerMode.isNotEmpty()) {
+                    // Calculate B_i = Usage_stored,i - Trip_stored,i
+                    val baselines = profile.lastUsageRecords.mapIndexed { i, usage ->
+                        val trip = profile.lastTripDistPerMode.getOrNull(i) ?: 0
+                        (usage?.distance ?: 0) - trip
+                    }
+                    if (baselines.size == profile.lastUsageRecords.size) {
+                        bleManager.setPersistentBaselines(baselines)
+                    }
+                }
+            }
+        }
+
+        // --- NEW: Persistent Usage Saving ---
+        viewModelScope.launch {
+            bleManager.bikeStatus.collect { status ->
+                val mac = activeBikeMac.value ?: return@collect
+                val expectedCount = status.assistModeNames.size
+                
+                if (expectedCount > 0 && 
+                    status.confirmedModeIndices.size == expectedCount && 
+                    status.sortedUsageRecordsB.size == expectedCount &&
+                    status.tripDistPerMode.size == expectedCount) {
+                    
+                    val cachedProfile = bikeProfiles.value.find { it.macAddress == mac }
+                    val currentRecords = status.sortedUsageRecordsB
+                    val currentTrip = status.tripDistPerMode
+                    
+                    // Basic debounce: only save if data has changed
+                    if (cachedProfile != null && (cachedProfile.lastUsageRecords != currentRecords || cachedProfile.lastTripDistPerMode != currentTrip)) {
+                        settingsRepository.updateBikeUsageHistory(mac, currentRecords, currentTrip)
+                    }
+                }
             }
         }
 
@@ -213,6 +255,7 @@ class MainViewModel(
                          
                          status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$bikeTopic/ebikeledsoftwareversion", it, retained = true) }
                          status.batterySerialNumber?.let { mqttManager.publish("$bikeTopic/batteryserialnumber", it, retained = true) }
+                         status.driveUnitHours?.let { mqttManager.publish("$bikeTopic/totalhours", it.toString(), retained = true) }
 
                          // Per-Mode Metrics (New sensor names logic)
                          status.sortedUsageRecordsB.forEachIndexed { index, record ->
@@ -238,7 +281,7 @@ class MainViewModel(
                      // --- BATTERY TELEMETRY GATEKEEPER ---
                      val serial = status.batterySerialNumber
                      if (serial != null) {
-                         val battProfile = batteryProfiles.value.find { it.serialNumber == serial }
+                         val battProfile = batteryProfiles.value.find { it.hardwareSerial == serial }
                          if (battProfile != null && battProfile.lastDiscoveryVersion >= CURRENT_BATTERY_DISCOVERY_VERSION) {
                              val battTopic = "powertube/$serial"
                              status.batteryLevel?.let { 
@@ -398,6 +441,13 @@ class MainViewModel(
         status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
         status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
         status.batterySerialNumber?.let { mqttManager.publish("$topic/batteryserialnumber", it, retained = true) }
+        status.driveUnitHours?.let { mqttManager.publish("$topic/totalhours", it.toString(), retained = true) }
+        status.chargeCycles?.let { 
+            // Only publish to powertube topic if serial exists
+            status.batterySerialNumber?.let { serial ->
+                mqttManager.publish("powertube/$serial/chargecycles", it.toString(), retained = true)
+            }
+        }
 
         // Per-Mode Metrics (New sensor names logic)
         status.sortedUsageRecordsB.forEachIndexed { index, record ->

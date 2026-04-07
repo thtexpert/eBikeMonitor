@@ -1,11 +1,6 @@
 package com.example.ebikemonitor.data.parser
-
 import android.util.Log
-
-data class UsageRecord(
-    val distance: Int,
-    val energy: Int
-)
+import com.example.ebikemonitor.data.model.UsageRecord
 
 data class BoschMessage(
     val messageId: Int,
@@ -236,14 +231,87 @@ object BoschParser {
         return sortedList
     }
 
-    private const val MODE_MAPPING_TOLERANCE_METERS = 20
+    private const val MODE_MAPPING_TOLERANCE_METERS = 30
+    private const val STARTUP_AMBIGUITY_THRESHOLD_METERS = 25
 
     /**
-     * Version B: Delta-based Matching with Discovery Status.
-     * Uses cumulative trip deltas from the baseline (start of session) and persistent
-     * index mapping to remain resilient to broadcast reordering.
-     * Returns a Triple of (Updated Sorted List, Updated Confirmed Indices, Updated Mode-to-Initial-Index Map).
+     * Startup ritual: uses persistent baseline (Usage - Trip) to decode the very first unsorted batch.
+     * Returns a map of ModeIndex -> Index in newBatch, or null if ambiguous.
      */
+    fun findBestStartupMapping(
+        newBatch: List<UsageRecord>,
+        currentTrip: List<Int>,
+        storedBaselines: List<Int> // B_i = U_old,i - T_old,i
+    ): Map<Int, Int>? {
+        val numModes = currentTrip.size
+        if (newBatch.size != numModes || storedBaselines.size != numModes) return null
+
+        val indices = (0 until numModes).toList()
+        val allPermutations = mutableListOf<List<Int>>()
+        generatePermutations(indices, 0, allPermutations)
+
+        var bestP: List<Int>? = null
+        var minTotalError = Long.MAX_VALUE
+        var secondaryMinError = Long.MAX_VALUE
+        val tolerance = 100 // 100 meters drift tolerance for Odometer vs Trip
+
+        for (p in allPermutations) {
+            var totalError = 0L
+            var possible = true
+            
+            for (i in 0 until numModes) {
+                val record = newBatch[p[i]]
+                val currentBaseline = record.distance - currentTrip[i]
+                val storedBaseline = storedBaselines[i]
+                
+                // Odometer only increases. Baseline must be >= previous baseline.
+                if (currentBaseline < storedBaseline - tolerance) {
+                    possible = false
+                    break
+                }
+                totalError += kotlin.math.abs(currentBaseline - storedBaseline).toLong()
+            }
+            
+            if (possible) {
+                if (totalError < minTotalError) {
+                    secondaryMinError = minTotalError
+                    minTotalError = totalError
+                    bestP = p
+                } else if (totalError < secondaryMinError) {
+                    secondaryMinError = totalError
+                }
+            }
+        }
+
+        // Stability Check: Avoid incorrect matching if multiple permutations are similar
+        if (bestP != null && secondaryMinError != Long.MAX_VALUE) {
+            if (secondaryMinError - minTotalError < STARTUP_AMBIGUITY_THRESHOLD_METERS) {
+                Log.w("BoschParser", "Startup decoding ambiguous! Best Error: $minTotalError, Second Best: $secondaryMinError. Skipping.")
+                return null
+            }
+        }
+
+        return bestP?.mapIndexed { modeIdx, batchIdx -> modeIdx to batchIdx }?.toMap()
+    }
+
+    private fun generatePermutations(list: List<Int>, start: Int, result: MutableList<List<Int>>) {
+        if (start == list.size) {
+            result.add(list.toList())
+            return
+        }
+        val mutableList = list.toMutableList()
+        for (i in start until list.size) {
+            val temp = mutableList[start]
+            mutableList[start] = mutableList[i]
+            mutableList[i] = temp
+            
+            generatePermutations(mutableList, start + 1, result)
+            
+            val tempBack = mutableList[start]
+            mutableList[start] = mutableList[i]
+            mutableList[i] = tempBack
+        }
+    }
     fun processVersionBWithDiscovery(
         newBatch: List<UsageRecord>,
         status: com.example.ebikemonitor.data.model.BikeStatus

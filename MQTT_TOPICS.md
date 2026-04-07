@@ -22,6 +22,7 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | `mqttconnecttimestamp`| MQTT Connect Time | `sensor.<name>_last_mqtt_connect_time` | ISO8601 | Last MQTT connection timestamp. (**Retained**) |
 | `ebikeledsoftwareversion`| LED Version | `sensor.<name>_ebike_led_software_version` | - | Firmware version of the remote. |
 | `batteryserialnumber` | Battery Serial | `sensor.<name>_battery_serial_number` | - | Serial of the current pack. |
+| `totalhours` | Total Hours | `sensor.<name>_total_hours` | h | Lifetime drive unit operation hours. (**Retained**) |
 
 > [!NOTE]
 > `<name>` is the **eBike Name** you configured in the app settings (e.g., `cubetoni`). Home Assistant automatically prefixes the sensor names with the device name.
@@ -43,7 +44,7 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 |-------|-------------|-------------------------|------|-------------|
 | `stateofcharge` | Charge Level | `sensor.bosch_<model>_charge_level` | % | Current charge level of this pack. |
 | `totalbattery` | Total Energy Used | `sensor.bosch_<model>_total_energy_used` | kWh | Lifetime total energy discharged. |
-| `chargecycles` | Charge Cycles | `sensor.bosch_<model>_charge_cycles` | - | Estimated aggregate charge cycles. |
+| `chargecycles` | Charge Cycles | `sensor.bosch_<model>_charge_cycles` | cycles | Estimated aggregate charge cycles. |
 | `serial` | Hardware Serial | `sensor.bosch_<model>_hardware_serial` | - | The unique hardware identifier. |
 
 > [!NOTE]

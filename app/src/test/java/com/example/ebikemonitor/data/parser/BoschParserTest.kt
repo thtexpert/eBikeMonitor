@@ -1,4 +1,5 @@
 package com.example.ebikemonitor.data.parser
+import com.example.ebikemonitor.data.model.UsageRecord
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

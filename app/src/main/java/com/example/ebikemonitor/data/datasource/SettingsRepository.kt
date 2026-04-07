@@ -18,8 +18,8 @@ import com.example.ebikemonitor.data.model.BatteryProfile
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-const val CURRENT_BIKE_DISCOVERY_VERSION = 2
-const val CURRENT_BATTERY_DISCOVERY_VERSION = 1
+const val CURRENT_BIKE_DISCOVERY_VERSION = 3
+const val CURRENT_BATTERY_DISCOVERY_VERSION = 2
 
 class SettingsRepository(private val context: Context) {
 
@@ -140,15 +140,27 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun updateBatteryDiscoveryVersion(serial: String, version: Int, model: String? = null) {
         val profiles = batteryProfiles.first().toMutableList()
-        val index = profiles.indexOfFirst { it.serialNumber == serial }
+        val index = profiles.indexOfFirst { it.hardwareSerial == serial }
         if (index != -1) {
             profiles[index] = profiles[index].copy(
                 lastDiscoveryVersion = version,
-                model = model ?: profiles[index].model
+                modelName = model ?: profiles[index].modelName
             )
         } else {
-            profiles.add(BatteryProfile(serialNumber = serial, model = model, lastDiscoveryVersion = version))
+            profiles.add(BatteryProfile(hardwareSerial = serial, modelName = model, lastDiscoveryVersion = version))
         }
         saveBatteryProfiles(profiles)
+    }
+
+    suspend fun updateBikeUsageHistory(mac: String, usage: List<com.example.ebikemonitor.data.model.UsageRecord?>, trip: List<Int>) {
+        val profiles = bikeProfiles.first().toMutableList()
+        val index = profiles.indexOfFirst { it.macAddress == mac }
+        if (index != -1) {
+            profiles[index] = profiles[index].copy(
+                lastUsageRecords = usage,
+                lastTripDistPerMode = trip
+            )
+            saveBikeProfiles(profiles)
+        }
     }
 }

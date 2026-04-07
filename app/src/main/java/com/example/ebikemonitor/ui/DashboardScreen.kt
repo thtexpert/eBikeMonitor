@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ebikemonitor.data.model.BikeStatus
 import com.example.ebikemonitor.data.model.getAssistModeName
-import com.example.ebikemonitor.data.parser.UsageRecord
+import com.example.ebikemonitor.data.model.UsageRecord
 import com.example.ebikemonitor.viewmodel.MainViewModel
 import android.content.res.Configuration
 import android.bluetooth.BluetoothAdapter
@@ -26,7 +26,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 
-private const val SHOW_DEBUG_UI = false
+private const val SHOW_DEBUG_UI = true
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -166,6 +166,7 @@ fun PortraitLayout(
                         sortedRecordsA = bikeStatus.sortedUsageRecordsA,
                         sortedRecordsB = bikeStatus.sortedUsageRecordsB,
                         confirmedIndices = bikeStatus.confirmedModeIndices,
+                        persistentBaselines = bikeStatus.persistentBaselines,
                         modeNames = bikeStatus.assistModeNames,
                         expectedCount = expectedCount
                     )
@@ -207,6 +208,7 @@ fun LandscapeLayout(
                     sortedRecordsA = bikeStatus.sortedUsageRecordsA,
                     sortedRecordsB = bikeStatus.sortedUsageRecordsB,
                     confirmedIndices = bikeStatus.confirmedModeIndices,
+                    persistentBaselines = bikeStatus.persistentBaselines,
                     modeNames = bikeStatus.assistModeNames,
                     expectedCount = expectedCount
                 )
@@ -539,40 +541,17 @@ fun DebugUsageRecords(
     sortedRecordsA: List<UsageRecord>,
     sortedRecordsB: List<UsageRecord?>,
     confirmedIndices: Set<Int>,
+    persistentBaselines: List<Int>?,
     modeNames: List<String>,
     expectedCount: Int
 ) {
-    if (records.isNotEmpty()) {
+    if (records.isNotEmpty() || persistentBaselines != null) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             shape = RoundedCornerShape(8.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                // Version A
-                if (sortedRecordsA.isNotEmpty() && sortedRecordsA.size == modeNames.size) {
-                    Text(
-                        text = "V-A: Consumption Sorting", 
-                        style = MaterialTheme.typography.labelMedium, 
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF4CAF50)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    sortedRecordsA.forEachIndexed { index, record ->
-                        val modeName = modeNames.getOrElse(index) { "Mode $index" }
-                        val consumption = record.energy.toDouble() / record.distance
-                        val consumptionDisplay = "%.3f Wh/km".format(consumption * 1000.0)
-                        Text(
-                            text = "$modeName: ${record.distance}m, ${record.energy}Wh ($consumptionDisplay)", 
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Divider(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
-                }
 
                 // Version B
                 if (modeNames.isNotEmpty()) {
@@ -604,6 +583,34 @@ fun DebugUsageRecords(
                         modifier = Modifier.padding(vertical = 8.dp),
                         color = MaterialTheme.colorScheme.outlineVariant
                     )
+                }
+
+                // Persistent Baselines (Stored)
+                if (persistentBaselines != null) {
+                    Text(
+                        text = "Stored Baselines (from Phone)", 
+                        style = MaterialTheme.typography.labelMedium, 
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFF9800)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    val displayCount = if (modeNames.isNotEmpty()) modeNames.size else persistentBaselines.size
+                    repeat(displayCount) { index ->
+                        val name = modeNames.getOrElse(index) { "Mode $index" }
+                        val baseline = persistentBaselines.getOrNull(index)
+                        Text(
+                            text = "$name: ${baseline ?: "---"} m",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (records.isNotEmpty()) {
+                        Divider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                    }
                 }
 
                 Text(
