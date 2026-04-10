@@ -58,6 +58,8 @@ class MainViewModel(
     val isFlowRunning = _isFlowRunning.asStateFlow()
     
     private var mqttSessionConnectTime: String? = null
+    private var lastActiveBatterySerial: String? = null
+
     
     private val _isUsageAccessGranted = MutableStateFlow(false)
     val isUsageAccessGranted = _isUsageAccessGranted.asStateFlow()
@@ -278,24 +280,37 @@ class MainViewModel(
                          mqttSessionConnectTime?.let { mqttManager.publish("$bikeTopic/mqttconnecttimestamp", it, retained = true) }
                      }
 
-                     // --- BATTERY TELEMETRY GATEKEEPER ---
-                     val serial = status.batterySerialNumber
-                     if (serial != null) {
-                         val battProfile = batteryProfiles.value.find { it.hardwareSerial == serial }
-                         if (battProfile != null && battProfile.lastDiscoveryVersion >= CURRENT_BATTERY_DISCOVERY_VERSION) {
-                             val battTopic = "powertube/$serial"
-                             status.batteryLevel?.let { 
-                                 if (it > 0) mqttManager.publish("$battTopic/stateofcharge", it.toString(), retained = true) 
-                             }
-                             status.totalBattery?.let {
-                                 if (it > 0) mqttManager.publish("$battTopic/totalbattery", it.toString(), retained = true)
-                             }
-                             status.chargeCycles?.let {
-                                 mqttManager.publish("$battTopic/chargecycles", it.toString(), retained = true)
-                             }
-                             mqttManager.publish("$battTopic/serial", serial, retained = true)
-                         }
-                     }
+                      // --- BATTERY TELEMETRY GATEKEEPER ---
+                      val currentSerial = status.batterySerialNumber
+                      if (!currentSerial.isNullOrEmpty()) {
+                          if (lastActiveBatterySerial != currentSerial) {
+                              Log.d("MainViewModel", "[Telemetry] Battery Serial detected: $currentSerial")
+                              lastActiveBatterySerial = currentSerial
+                          }
+                      } else if (lastActiveBatterySerial != null) {
+                          Log.v("MainViewModel", "[Telemetry] Current serial is null, using latched: $lastActiveBatterySerial")
+                      }
+
+                      val serialToUse = lastActiveBatterySerial
+                      if (serialToUse != null) {
+                          val battProfile = batteryProfiles.value.find { it.hardwareSerial == serialToUse }
+                          // Relaxed: Any discovered battery profile is allowed to send telemetry
+                          if (battProfile != null) {
+                              val battTopic = "powertube/$serialToUse"
+                              status.batteryLevel?.let { 
+                                  if (it > 0) mqttManager.publish("$battTopic/stateofcharge", it.toString(), retained = true) 
+                              }
+                              status.totalBattery?.let {
+                                  if (it > 0) mqttManager.publish("$battTopic/totalbattery", it.toString(), retained = true)
+                              }
+                              status.chargeCycles?.let {
+                                  mqttManager.publish("$battTopic/chargecycles", it.toString(), retained = true)
+                              }
+                              mqttManager.publish("$battTopic/serial", serialToUse, retained = true)
+                          } else {
+                               Log.v("MainViewModel", "[Telemetry] No profile found for serial: $serialToUse. Blocking PowerTube telemetry.")
+                          }
+                      }
                  }
              }
         }
