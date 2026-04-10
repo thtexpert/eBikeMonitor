@@ -455,13 +455,22 @@ class MainViewModel(
         
         status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
         status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
-        status.batterySerialNumber?.let { mqttManager.publish("$topic/batteryserialnumber", it, retained = true) }
-        status.driveUnitHours?.let { mqttManager.publish("$topic/totalhours", it.toString(), retained = true) }
-        status.chargeCycles?.let { 
-            // Only publish to powertube topic if serial exists
-            status.batterySerialNumber?.let { serial ->
+        val serialToUse = status.batterySerialNumber ?: lastActiveBatterySerial
+        serialToUse?.let { serial ->
+            mqttManager.publish("$topic/batteryserialnumber", serial, retained = true)
+            status.driveUnitHours?.let { mqttManager.publish("$topic/totalhours", it.toString(), retained = true) }
+            
+            // Also sync battery-specific topics
+            status.batteryLevel?.let {
+                if (it > 0) mqttManager.publish("powertube/$serial/stateofcharge", it.toString(), retained = true)
+            }
+            status.totalBattery?.let {
+                if (it > 0) mqttManager.publish("powertube/$serial/totalbattery", it.toString(), retained = true)
+            }
+            status.chargeCycles?.let { 
                 mqttManager.publish("powertube/$serial/chargecycles", it.toString(), retained = true)
             }
+            mqttManager.publish("powertube/$serial/serial", serial, retained = true)
         }
 
         // Per-Mode Metrics (New sensor names logic)
