@@ -162,6 +162,7 @@ fun PortraitLayout(
                 item {
                     val expectedCount = if (bikeStatus.assistModeNames.isNotEmpty()) bikeStatus.assistModeNames.size else 5
                     DebugUsageRecords(
+                        bikeStatus = bikeStatus,
                         records = bikeStatus.unsortedUsageRecords,
                         sortedRecordsA = bikeStatus.sortedUsageRecordsA,
                         sortedRecordsB = bikeStatus.sortedUsageRecordsB,
@@ -204,6 +205,7 @@ fun LandscapeLayout(
             if (SHOW_DEBUG_UI) {
                 val expectedCount = if (bikeStatus.assistModeNames.isNotEmpty()) bikeStatus.assistModeNames.size else 5
                 DebugUsageRecords(
+                    bikeStatus = bikeStatus,
                     records = bikeStatus.unsortedUsageRecords,
                     sortedRecordsA = bikeStatus.sortedUsageRecordsA,
                     sortedRecordsB = bikeStatus.sortedUsageRecordsB,
@@ -537,6 +539,7 @@ fun DiscoveryNudge(
 
 @Composable
 fun DebugUsageRecords(
+    bikeStatus: BikeStatus,
     records: List<UsageRecord>,
     sortedRecordsA: List<UsageRecord>,
     sortedRecordsB: List<UsageRecord?>,
@@ -555,12 +558,51 @@ fun DebugUsageRecords(
 
                 // Version B
                 if (modeNames.isNotEmpty()) {
-                    Text(
-                        text = "V-B: Delta Discovery", 
-                        style = MaterialTheme.typography.labelMedium, 
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2196F3)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "V-B: Delta Discovery", 
+                            style = MaterialTheme.typography.labelMedium, 
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2196F3)
+                        )
+                        
+                        // Startup Diagnostics
+                        val status = bikeStatus.startupDecodingStatus ?: "PENDING"
+                        val statusColor = when (status) {
+                            "SUCCESS", "SUCCESS_ZERO_TRIP" -> Color(0xFF4CAF50)
+                            "AMBIGUOUS", "WAITING_FOR_TRIP_DATA" -> Color(0xFFFF9800)
+                            else -> Color(0xFFF44336)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = statusColor.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                text = status,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = statusColor,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    
+                    if (bikeStatus.startupError != null) {
+                        val errorText = buildString {
+                            append("Error: ${bikeStatus.startupError}m")
+                            bikeStatus.startupSecondaryError?.let { append(" (Sec: ${it}m)") }
+                        }
+                        Text(
+                            text = errorText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                    
                     Spacer(modifier = Modifier.height(4.dp))
                     modeNames.forEachIndexed { index, modeName ->
                         val isConfirmed = confirmedIndices.contains(index)
@@ -587,12 +629,25 @@ fun DebugUsageRecords(
 
                 // Persistent Baselines (Stored)
                 if (persistentBaselines != null) {
-                    Text(
-                        text = "Stored Baselines (from Phone)", 
-                        style = MaterialTheme.typography.labelMedium, 
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFF9800)
-                    )
+                    val hasTrip = bikeStatus.tripDistPerMode.isNotEmpty()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Stored Baselines (from Phone)", 
+                            style = MaterialTheme.typography.labelMedium, 
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFF9800)
+                        )
+                        Text(
+                            text = if (hasTrip) "TRIP OK" else "TRIP MISSING",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (hasTrip) Color(0xFF4CAF50) else Color.Gray
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     
                     val displayCount = if (modeNames.isNotEmpty()) modeNames.size else persistentBaselines.size

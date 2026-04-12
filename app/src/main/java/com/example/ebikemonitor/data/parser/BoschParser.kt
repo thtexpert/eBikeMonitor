@@ -234,17 +234,37 @@ object BoschParser {
     private const val MODE_MAPPING_TOLERANCE_METERS = 30
     private const val STARTUP_AMBIGUITY_THRESHOLD_METERS = 25
 
+    data class StartupDecodingResult(
+        val mapping: Map<Int, Int>? = null,
+        val status: String,
+        val bestError: Long? = null,
+        val secondaryError: Long? = null
+    )
+
     /**
      * Startup ritual: uses persistent baseline (Usage - Trip) to decode the very first unsorted batch.
-     * Returns a map of ModeIndex -> Index in newBatch, or null if ambiguous.
+     * Returns a StartupDecodingResult with mapping and diagnostic info.
      */
     fun findBestStartupMapping(
         newBatch: List<UsageRecord>,
         currentTrip: List<Int>,
         storedBaselines: List<Int> // B_i = U_old,i - T_old,i
-    ): Map<Int, Int>? {
-        val numModes = currentTrip.size
-        if (newBatch.size != numModes || storedBaselines.size != numModes) return null
+    ): StartupDecodingResult {
+        val numModes = storedBaselines.size
+        if (newBatch.size != numModes) {
+            return StartupDecodingResult(status = "COUNT_MISMATCH_BATCH")
+        }
+
+        // --- ZERO-TRIP FALLBACK ---
+        // If trip data (A252) is missing (empty), we attempt decoding assuming all trips are 0.
+        // We only accept this if the match is extremely good.
+        val tripToUse = if (currentTrip.isEmpty()) {
+            List(numModes) { 0 }
+        } else if (currentTrip.size != numModes) {
+            return StartupDecodingResult(status = "COUNT_MISMATCH_TRIP")
+        } else {
+            currentTrip
+        }
 
         val indices = (0 until numModes).toList()
         val allPermutations = mutableListOf<List<Int>>()
@@ -253,7 +273,7 @@ object BoschParser {
         var bestP: List<Int>? = null
         var minTotalError = Long.MAX_VALUE
         var secondaryMinError = Long.MAX_VALUE
-        val tolerance = 100 // 100 meters drift tolerance for Odometer vs Trip
+        val tolerance = 100 // 100 meters drift tolerance for Odometer vs Trip (Baseline Reset)
 
         for (p in allPermutations) {
             var totalError = 0L
@@ -261,7 +281,7 @@ object BoschParser {
             
             for (i in 0 until numModes) {
                 val record = newBatch[p[i]]
-                val currentBaseline = record.distance - currentTrip[i]
+                val currentBaseline = record.distance - tripToUse[i]
                 val storedBaseline = storedBaselines[i]
                 
                 // Odometer only increases. Baseline must be >= previous baseline.
@@ -283,15 +303,42 @@ object BoschParser {
             }
         }
 
+        if (bestP == null) {
+            return StartupDecodingResult(status = "NO_POSSIBLE_MAPPING", bestError = null)
+        }
+
         // Stability Check: Avoid incorrect matching if multiple permutations are similar
-        if (bestP != null && secondaryMinError != Long.MAX_VALUE) {
-            if (secondaryMinError - minTotalError < STARTUP_AMBIGUITY_THRESHOLD_METERS) {
-                Log.w("BoschParser", "Startup decoding ambiguous! Best Error: $minTotalError, Second Best: $secondaryMinError. Skipping.")
-                return null
+        if (secondaryMinError != Long.MAX_VALUE) {
+            val drift = secondaryMinError - minTotalError
+            if (drift < STARTUP_AMBIGUITY_THRESHOLD_METERS) {
+                // EXCEPTION: If the best match is near-perfect (total error < 5m) 
+                // and the "ambiguity" is just between identical odometer values, allow it.
+                if (minTotalError <= 5) {
+                    // Acceptable "ambiguity" (identical records)
+                } else {
+                    Log.w("BoschParser", "Startup decoding ambiguous! Best Error: $minTotalError, Second Best: $secondaryMinError. Skipping.")
+                    return StartupDecodingResult(status = "AMBIGUOUS", bestError = minTotalError, secondaryError = secondaryMinError)
+                }
             }
         }
 
-        return bestP?.mapIndexed { modeIdx, batchIdx -> modeIdx to batchIdx }?.toMap()
+        // Final validation for Zero-Trip Fallback: 
+        // If we assumed trip=0, we require a very low error (e.g. < 500m total across all modes)
+        val finalStatus = if (currentTrip.isEmpty()) {
+            if (minTotalError > 500) {
+                 return StartupDecodingResult(status = "WAITING_FOR_TRIP_DATA", bestError = minTotalError)
+            }
+            "SUCCESS_ZERO_TRIP"
+        } else {
+            "SUCCESS"
+        }
+
+        return StartupDecodingResult(
+            mapping = bestP.mapIndexed { modeIdx, batchIdx -> modeIdx to batchIdx }.toMap(),
+            status = finalStatus,
+            bestError = minTotalError,
+            secondaryError = if (secondaryMinError == Long.MAX_VALUE) null else secondaryMinError
+        )
     }
 
     private fun generatePermutations(list: List<Int>, start: Int, result: MutableList<List<Int>>) {

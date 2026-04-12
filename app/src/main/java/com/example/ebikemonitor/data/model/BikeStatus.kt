@@ -27,6 +27,9 @@ data class BikeStatus(
     val chargeCycles: Double? = null,
     val driveUnitHours: Int? = null,
     val persistentBaselines: List<Int>? = null,
+    val startupDecodingStatus: String? = null,
+    val startupError: Long? = null,
+    val startupSecondaryError: Long? = null,
     val lastUpdateTimestamp: Long = 0L
 )
 

@@ -173,21 +173,42 @@ class BleManager(private val context: Context) {
                             
                             // 1. Startup Decoding Ritual (Persistent Storage)
                             if (currentStatus.initialTripDistPerMode == null && currentStatus.persistentBaselines != null) {
-                                val startupMapping = BoschParser.findBestStartupMapping(
+                                val result = BoschParser.findBestStartupMapping(
                                     newBatch = unsortedModeUsageList,
                                     currentTrip = currentStatus.tripDistPerMode,
                                     storedBaselines = currentStatus.persistentBaselines!!
                                 )
                                 
-                                if (startupMapping != null) {
-                                    Log.d("BleManager", "Version B: Startup decoding successful! Initializing baseline from storage.")
+                                currentStatus = currentStatus.copy(
+                                    startupDecodingStatus = result.status,
+                                    startupError = result.bestError,
+                                    startupSecondaryError = result.secondaryError
+                                )
+
+                                if (result.mapping != null) {
+                                    Log.d("BleManager", "Version B: Startup decoding successful (${result.status})! Initializing baseline from storage. Error: ${result.bestError}")
+                                    
+                                    val newSortedRecords = ArrayList<UsageRecord?>(List(currentStatus.persistentBaselines!!.size) { null })
+                                    result.mapping.forEach { (modeIdx, batchIdx) ->
+                                        newSortedRecords[modeIdx] = unsortedModeUsageList[batchIdx]
+                                    }
+
                                     currentStatus = currentStatus.copy(
-                                        initialTripDistPerMode = currentStatus.tripDistPerMode.toList(),
+                                        initialTripDistPerMode = if (currentStatus.tripDistPerMode.isEmpty()) {
+                                            List(currentStatus.persistentBaselines!!.size) { 0 }
+                                        } else {
+                                            currentStatus.tripDistPerMode.toList()
+                                        },
                                         initialUnsortedUsageRecords = unsortedModeUsageList.toList(),
-                                        modeToInitialIndex = startupMapping,
-                                        confirmedModeIndices = startupMapping.keys
+                                        modeToInitialIndex = result.mapping,
+                                        confirmedModeIndices = result.mapping.keys,
+                                        sortedUsageRecordsB = newSortedRecords
                                     )
+                                } else {
+                                    Log.w("BleManager", "Version B: Startup decoding ritual did not succeed: ${result.status}")
                                 }
+                            } else if (currentStatus.persistentBaselines == null) {
+                                currentStatus = currentStatus.copy(startupDecodingStatus = "NO_STORED_BASELINES")
                             }
 
                             // 2. Normal Capture/Fallback: Session baseline if still not established
