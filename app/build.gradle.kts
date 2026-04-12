@@ -12,7 +12,7 @@ android {
         applicationId = "com.example.ebikemonitor"
         minSdk = 29
         targetSdk = 34
-        versionCode = 30
+        versionCode = 31
         versionName = "1.12.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -55,9 +55,11 @@ android {
     }
 
     applicationVariants.all {
+        val variant = this
         outputs.all {
             val output = this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
-            output.outputFileName = "eBikeMonitor-${name}.apk"
+            val version = variant.versionName?.replace(".", "_") ?: "unknown"
+            output.outputFileName = "eBikeMonitor-${version}.apk"
         }
     }
 }

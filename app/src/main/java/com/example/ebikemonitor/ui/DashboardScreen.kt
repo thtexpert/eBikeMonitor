@@ -1,8 +1,10 @@
 package com.example.ebikemonitor.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -117,6 +119,69 @@ fun DashboardScreen(
     }
 }
 
+
+@Composable
+fun AllSensorsDebugCard(
+    bikeStatus: BikeStatus,
+    isMqttConnected: Boolean,
+    isBleConnected: Boolean,
+    isFlowRunning: Boolean,
+    mqttConnectTime: String?
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = "All Sensors (Discovery Order / Alphabetical)",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Define sensor entries
+            val sensors = mutableListOf<Pair<String, String>>()
+            
+            // Standard Included
+            sensors.add("App Status" to if (isFlowRunning) "running" else "stopped")
+            sensors.add("Battery Serial Number" to (bikeStatus.batterySerialNumber ?: "--"))
+            sensors.add("BLE Status" to if (isBleConnected) "connected" else "disconnected")
+            sensors.add("Cadence" to (bikeStatus.cadence?.toString() ?: "--") + " rpm")
+            sensors.add("Charge Cycles" to (bikeStatus.chargeCycles?.toString() ?: "--"))
+            sensors.add("eBike LED Software Version" to (bikeStatus.ebikeLedSoftwareVersion ?: "--"))
+            sensors.add("last MQTT Connect Time" to (mqttConnectTime ?: "--"))
+            sensors.add("Total Hours" to (bikeStatus.driveUnitHours?.toString() ?: "--") + " h")
+
+            // Per-Mode
+            val modeNames = bikeStatus.assistModeNames
+            bikeStatus.sortedUsageRecordsB.forEachIndexed { index, record ->
+                val name = modeNames.getOrNull(index) ?: "Mode$index"
+                val dist = record?.let { "%.3f km".format(it.distance / 1000.0) } ?: "--"
+                val energy = record?.let { "%.3f kWh".format(it.energy / 1000.0) } ?: "--"
+                sensors.add("$name Distance" to dist)
+                sensors.add("$name Energy" to energy)
+            }
+
+            // Sort Alphabetically by Name
+            val sortedSensors = sensors.sortedBy { it.first }
+
+            // Display
+            sortedSensors.forEach { (name, value) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun PortraitLayout(
     viewModel: MainViewModel,
@@ -125,6 +190,9 @@ fun PortraitLayout(
     isBleConnected: Boolean,
     bluetoothEnableLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Intent, androidx.activity.result.ActivityResult>
 ) {
+    val isFlowRunning by viewModel.isFlowRunning.collectAsState()
+    val mqttConnectTime by viewModel.mqttSessionConnectTime.collectAsState()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -140,7 +208,7 @@ fun PortraitLayout(
         LazyColumn(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 32.dp)
+            contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item {
                 HomeAssistantCard(title = "Ride", icon = Icons.Default.DirectionsBike) {
@@ -150,6 +218,7 @@ fun PortraitLayout(
                     SensorRow("Motor Power", bikeStatus.motorPower?.toString() ?: "--", "W", Icons.Default.ElectricBolt, isMqttConnected && bikeStatus.motorPower != null)
                 }
             }
+
             item {
                 HomeAssistantCard(title = "Totals", icon = Icons.Default.Analytics) {
                     SensorRow("SoC", bikeStatus.batteryLevel?.toString() ?: "--", "%", getBatteryIcon(bikeStatus.batteryLevel ?: 0), isMqttConnected && (bikeStatus.batteryLevel ?: 0) > 0)
@@ -158,6 +227,7 @@ fun PortraitLayout(
                     SensorRow("Total Battery", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
                 }
             }
+
             if (SHOW_DEBUG_UI) {
                 item {
                     val expectedCount = if (bikeStatus.assistModeNames.isNotEmpty()) bikeStatus.assistModeNames.size else 5
@@ -172,11 +242,21 @@ fun PortraitLayout(
                         expectedCount = expectedCount
                     )
                 }
+                item {
+                    AllSensorsDebugCard(
+                        bikeStatus = bikeStatus,
+                        isMqttConnected = isMqttConnected,
+                        isBleConnected = isBleConnected,
+                        isFlowRunning = isFlowRunning,
+                        mqttConnectTime = mqttConnectTime
+                    )
+                }
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LandscapeLayout(
     viewModel: MainViewModel,
@@ -184,25 +264,41 @@ fun LandscapeLayout(
     isMqttConnected: Boolean,
     isBleConnected: Boolean
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    val isFlowRunning by viewModel.isFlowRunning.collectAsState()
+    val mqttConnectTime by viewModel.mqttSessionConnectTime.collectAsState()
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
     ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        item(span = { GridItemSpan(2) }) {
             UsageAccessWarning(viewModel)
+        }
+        item(span = { GridItemSpan(2) }) {
             DiscoveryUpdateNudges(viewModel)
+        }
+        item {
             HomeAssistantCard(title = "Totals", icon = Icons.Default.Analytics) {
                 SensorRow("SoC", bikeStatus.batteryLevel?.toString() ?: "--", "%", getBatteryIcon(bikeStatus.batteryLevel ?: 0), isMqttConnected && (bikeStatus.batteryLevel ?: 0) > 0)
                 SensorRow("Total Distance", bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
                 SensorRow("Total Energy", bikeStatus.totalEnergyFromMotor?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalEnergyFromMotor != null)
                 SensorRow("Total Battery", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
             }
-            if (SHOW_DEBUG_UI) {
+        }
+        item {
+            HomeAssistantCard(title = "Ride", icon = Icons.Default.DirectionsBike) {
+                SensorRow("Speed", bikeStatus.speed?.let { "%.1f".format(it) } ?: "--", "km/h", Icons.Default.Speed, isMqttConnected && bikeStatus.speed != null)
+                SensorRow("Assist Mode", getAssistModeName(bikeStatus.assistMode, bikeStatus.assistModeNames), "", Icons.Default.SettingsAccessibility, isMqttConnected && bikeStatus.assistMode != null)
+                SensorRow("Human Power", bikeStatus.humanPower?.toString() ?: "--", "W", Icons.Default.Bolt, isMqttConnected && bikeStatus.humanPower != null)
+                SensorRow("Motor Power", bikeStatus.motorPower?.toString() ?: "--", "W", Icons.Default.ElectricBolt, isMqttConnected && bikeStatus.motorPower != null)
+            }
+        }
+        
+        if (SHOW_DEBUG_UI) {
+            item {
                 val expectedCount = if (bikeStatus.assistModeNames.isNotEmpty()) bikeStatus.assistModeNames.size else 5
                 DebugUsageRecords(
                     bikeStatus = bikeStatus,
@@ -215,20 +311,14 @@ fun LandscapeLayout(
                     expectedCount = expectedCount
                 )
             }
-        }
-
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 24.dp)
-        ) {
             item {
-                HomeAssistantCard(title = "Ride", icon = Icons.Default.DirectionsBike) {
-                    SensorRow("Speed", bikeStatus.speed?.let { "%.1f".format(it) } ?: "--", "km/h", Icons.Default.Speed, isMqttConnected && bikeStatus.speed != null)
-                    SensorRow("Assist Mode", getAssistModeName(bikeStatus.assistMode, bikeStatus.assistModeNames), "", Icons.Default.SettingsAccessibility, isMqttConnected && bikeStatus.assistMode != null)
-                    SensorRow("Human Power", bikeStatus.humanPower?.toString() ?: "--", "W", Icons.Default.Bolt, isMqttConnected && bikeStatus.humanPower != null)
-                    SensorRow("Motor Power", bikeStatus.motorPower?.toString() ?: "--", "W", Icons.Default.ElectricBolt, isMqttConnected && bikeStatus.motorPower != null)
-                }
+                AllSensorsDebugCard(
+                    bikeStatus = bikeStatus,
+                    isMqttConnected = isMqttConnected,
+                    isBleConnected = isBleConnected,
+                    isFlowRunning = isFlowRunning,
+                    mqttConnectTime = mqttConnectTime
+                )
             }
         }
     }

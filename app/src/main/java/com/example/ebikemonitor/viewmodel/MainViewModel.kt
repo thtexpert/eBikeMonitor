@@ -57,7 +57,8 @@ class MainViewModel(
     private val _isFlowRunning = MutableStateFlow(false)
     val isFlowRunning = _isFlowRunning.asStateFlow()
     
-    private var mqttSessionConnectTime: String? = null
+    private val _mqttSessionConnectTime = MutableStateFlow<String?>(null)
+    val mqttSessionConnectTime = _mqttSessionConnectTime.asStateFlow()
     private var lastActiveBatterySerial: String? = null
 
     
@@ -129,12 +130,12 @@ class MainViewModel(
         viewModelScope.launch {
             mqttManager.isConnected.collect { connected ->
                 if (connected) {
-                    mqttSessionConnectTime = Instant.now().toString()
+                    _mqttSessionConnectTime.value = java.time.Instant.now().toString()
                     // Publish all current values
                     val status = bleManager.bikeStatus.value
                     publishFullStatus(status)
                 } else {
-                    mqttSessionConnectTime = null
+                    _mqttSessionConnectTime.value = null
                 }
             }
         }
@@ -277,7 +278,7 @@ class MainViewModel(
                          // --- SESSION METADATA ---
                          val bleConnected = bleManager.isConnected.value
                          mqttManager.publish("$bikeTopic/blestatus", if (bleConnected) "connected" else "disconnected")
-                         mqttSessionConnectTime?.let { mqttManager.publish("$bikeTopic/mqttconnecttimestamp", it, retained = true) }
+                         mqttSessionConnectTime.value?.let { mqttManager.publish("$bikeTopic/mqttconnecttimestamp", it, retained = true) }
                      }
 
                       // --- BATTERY TELEMETRY GATEKEEPER ---
