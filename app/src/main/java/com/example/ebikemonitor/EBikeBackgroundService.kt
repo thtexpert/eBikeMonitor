@@ -23,6 +23,7 @@ class EBikeBackgroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        FileLogger.log("EBikeBackgroundService: onCreate")
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification("Initializing..."))
         
@@ -30,7 +31,20 @@ class EBikeBackgroundService : Service() {
         val app = application as EBikeApplication
         serviceScope.launch {
             app.bleManager.isConnected.collect { connected ->
+                FileLogger.log("EBikeBackgroundService: BLE connection changed to: $connected")
                 updateNotification(if (connected) "Connected to eBike BLE" else "BLE disconnected")
+            }
+        }
+        
+        // Heartbeat for resource monitoring
+        serviceScope.launch {
+            while (true) {
+                val runtime = Runtime.getRuntime()
+                val usedMem = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024
+                val totalMem = runtime.totalMemory() / 1024 / 1024
+                
+                FileLogger.log("[HEARTBEAT] Mem: ${usedMem}MB / ${totalMem}MB, BLE: ${app.bleManager.isConnected.value}, MQTT: ${app.mqttManager.isConnected.value}")
+                kotlinx.coroutines.delay(60000) // 1 minute
             }
         }
     }
@@ -73,6 +87,7 @@ class EBikeBackgroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        FileLogger.log("EBikeBackgroundService: onDestroy")
         val app = application as EBikeApplication
         val topic = "ebikemonitor"
         
@@ -88,7 +103,7 @@ class EBikeBackgroundService : Service() {
         // Ensure the process is truly terminated after a tiny delay for cleanup
         // Note: Process.killProcess is very aggressive. We only use it if we really want to ensure nothing stays in memory.
         // However, it can cause issues during configuration changes if not handled carefully in the Activity.
-        android.util.Log.d("EBikeService", "Killing process as requested...")
+        FileLogger.log("EBikeService: Killing process as requested...")
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             val pid = android.os.Process.myPid()
             android.os.Process.killProcess(pid)

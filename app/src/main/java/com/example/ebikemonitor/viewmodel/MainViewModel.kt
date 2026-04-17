@@ -29,7 +29,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
+import com.example.ebikemonitor.FileLogger
 import java.time.Instant
 import java.util.Date
 import com.example.ebikemonitor.data.model.BikeProfile
@@ -60,6 +62,9 @@ class MainViewModel(
     private val _mqttSessionConnectTime = MutableStateFlow<String?>(null)
     val mqttSessionConnectTime = _mqttSessionConnectTime.asStateFlow()
     private var lastActiveBatterySerial: String? = null
+    
+    // Cache for MQTT Delta-Checking
+    private var lastPublishedStatus: BikeStatus? = null
 
     
     private val _isUsageAccessGranted = MutableStateFlow(false)
@@ -130,8 +135,10 @@ class MainViewModel(
         viewModelScope.launch {
             mqttManager.isConnected.collect { connected ->
                 if (connected) {
+                    FileLogger.log("MainViewModel: MQTT Connected. Performing Full Sync.")
                     _mqttSessionConnectTime.value = java.time.Instant.now().toString()
-                    // Publish all current values
+                    // Force a full publish and reset delta cache
+                    lastPublishedStatus = null 
                     val status = bleManager.bikeStatus.value
                     publishFullStatus(status)
                 } else {
@@ -224,96 +231,15 @@ class MainViewModel(
             }
         }
 
-        // MQTT Live Update logic
+        // MQTT Live Update logic (Throttled to 1Hz + Delta-checking)
         viewModelScope.launch {
-             bleManager.bikeStatus.collect { status ->
-                 if (mqttManager.isConnected.value) {
-                     val mac = activeBikeMac.value
-                     val profile = bikeProfiles.value.find { it.macAddress == mac }
-                     val bikeTopic = "ebikemonitor/${mac?.lowercase()?.replace(":", "") ?: "unknown"}"
-                     
-                     // --- BIKE TELEMETRY GATEKEEPER ---
-                     if (profile != null && profile.lastDiscoveryVersion >= CURRENT_BIKE_DISCOVERY_VERSION) {
-                         status.speed?.let { mqttManager.publish("$bikeTopic/speed", it.toString()) }
-                         status.cadence?.let { mqttManager.publish("$bikeTopic/cadence", it.toString()) }
-                         status.assistMode?.let { mqttManager.publish("$bikeTopic/assistmode", getAssistModeName(it, status.assistModeNames)) }
-                         status.humanPower?.let { mqttManager.publish("$bikeTopic/power", it.toString()) }
-                         status.motorPower?.let { mqttManager.publish("$bikeTopic/motorpower", it.toString()) }
-                         
-                         status.totalDistance?.let {
-                             if (it > 0) mqttManager.publish("$bikeTopic/totaldistance", it.toString(), retained = true)
-                         }
-                         
-                         // Mirror current battery data to bike topic (always reflects currently mounted pack)
-                         status.batteryLevel?.let { 
-                             if (it > 0) mqttManager.publish("$bikeTopic/stateofcharge", it.toString(), retained = true) 
-                         }
-                         status.totalBattery?.let {
-                             if (it > 0) mqttManager.publish("$bikeTopic/totalbattery", it.toString(), retained = true)
-                         }
-                         
-                         status.totalEnergyFromMotor?.let {
-                             if (it > 0) mqttManager.publish("$bikeTopic/totalenergy", it.toString(), retained = true)
-                         }
-                         
-                         status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$bikeTopic/ebikeledsoftwareversion", it, retained = true) }
-                         status.batterySerialNumber?.let { mqttManager.publish("$bikeTopic/batteryserialnumber", it, retained = true) }
-                         status.driveUnitHours?.let { mqttManager.publish("$bikeTopic/totalhours", it.toString(), retained = true) }
-
-                         // Per-Mode Metrics (New sensor names logic)
-                         status.sortedUsageRecordsB.forEachIndexed { index, record ->
-                             if (record != null) {
-                                 val modeName = status.assistModeNames.getOrNull(index) ?: return@forEachIndexed
-                                 val safeMode = sanitizeForMqtt(modeName)
-                                 
-                                 if (record.distance > 0) {
-                                     mqttManager.publish("$bikeTopic/${safeMode}distance", (record.distance / 1000.0).toString(), retained = true)
-                                 }
-                                 if (record.energy > 0) {
-                                     mqttManager.publish("$bikeTopic/${safeMode}energy", (record.energy / 1000.0).toString(), retained = true)
-                                 }
-                             }
-                         }
-
-                         // --- SESSION METADATA ---
-                         val bleConnected = bleManager.isConnected.value
-                         mqttManager.publish("$bikeTopic/blestatus", if (bleConnected) "connected" else "disconnected")
-                         mqttSessionConnectTime.value?.let { mqttManager.publish("$bikeTopic/mqttconnecttimestamp", it, retained = true) }
+             bleManager.bikeStatus
+                 .sample(1000) // Limit updates to 1 per second
+                 .collect { status ->
+                     if (mqttManager.isConnected.value) {
+                         publishThrottledStatus(status)
                      }
-
-                      // --- BATTERY TELEMETRY GATEKEEPER ---
-                      val currentSerial = status.batterySerialNumber
-                      if (!currentSerial.isNullOrEmpty()) {
-                          if (lastActiveBatterySerial != currentSerial) {
-                              Log.d("MainViewModel", "[Telemetry] Battery Serial detected: $currentSerial")
-                              lastActiveBatterySerial = currentSerial
-                          }
-                      } else if (lastActiveBatterySerial != null) {
-                          Log.v("MainViewModel", "[Telemetry] Current serial is null, using latched: $lastActiveBatterySerial")
-                      }
-
-                      val serialToUse = lastActiveBatterySerial
-                      if (serialToUse != null) {
-                          val battProfile = batteryProfiles.value.find { it.hardwareSerial == serialToUse }
-                          // Relaxed: Any discovered battery profile is allowed to send telemetry
-                          if (battProfile != null) {
-                              val battTopic = "powertube/$serialToUse"
-                              status.batteryLevel?.let { 
-                                  if (it > 0) mqttManager.publish("$battTopic/stateofcharge", it.toString(), retained = true) 
-                              }
-                              status.totalBattery?.let {
-                                  if (it > 0) mqttManager.publish("$battTopic/totalbattery", it.toString(), retained = true)
-                              }
-                              status.chargeCycles?.let {
-                                  mqttManager.publish("$battTopic/chargecycles", it.toString(), retained = true)
-                              }
-                              mqttManager.publish("$battTopic/serial", serialToUse, retained = true)
-                          } else {
-                               Log.v("MainViewModel", "[Telemetry] No profile found for serial: $serialToUse. Blocking PowerTube telemetry.")
-                          }
-                      }
                  }
-             }
         }
 
         // Auto-launch Flow App logic
@@ -429,65 +355,169 @@ class MainViewModel(
         return input.lowercase().replace(Regex("[^a-z0-9]"), "_")
     }
 
-    private suspend fun publishFullStatus(status: BikeStatus) {
-        val topic = mqttManager.baseTopic
+    private suspend fun publishThrottledStatus(status: BikeStatus) {
+        val mac = activeBikeMac.value
+        val profile = bikeProfiles.value.find { it.macAddress == mac }
+        if (profile == null || profile.lastDiscoveryVersion < CURRENT_BIKE_DISCOVERY_VERSION) return
+
+        val bikeTopic = "ebikemonitor/${mac?.lowercase()?.replace(":", "") ?: "unknown"}"
+        val last = lastPublishedStatus
+
+        // Helper to publish only if value changed OR if first time (last == null)
+        fun <T> pubIfDiff(topic: String, newValue: T?, lastValue: T?, retained: Boolean = false) {
+            if (newValue != null && newValue != lastValue) {
+                mqttManager.publish(topic, newValue.toString(), retained)
+            }
+        }
+
+        // --- BIKE TELEMETRY ---
+        pubIfDiff("$bikeTopic/speed", status.speed, last?.speed)
+        pubIfDiff("$bikeTopic/cadence", status.cadence, last?.cadence)
         
-        status.speed?.let { mqttManager.publish("$topic/speed", it.toString()) }
-        status.cadence?.let { mqttManager.publish("$topic/cadence", it.toString()) }
-        status.humanPower?.let { mqttManager.publish("$topic/power", it.toString()) }
+        val newMode = status.assistMode?.let { getAssistModeName(it, status.assistModeNames) }
+        val lastMode = last?.assistMode?.let { getAssistModeName(it, last.assistModeNames) }
+        pubIfDiff("$bikeTopic/assistmode", newMode, lastMode)
         
-        status.batteryLevel?.let {
-            if (it > 0) mqttManager.publish("$topic/stateofcharge", it.toString(), retained = true)
+        pubIfDiff("$bikeTopic/power", status.humanPower, last?.humanPower)
+        pubIfDiff("$bikeTopic/motorpower", status.motorPower, last?.motorPower)
+        
+        if (status.totalDistance != last?.totalDistance && (status.totalDistance ?: 0.0) > 0) {
+            mqttManager.publish("$bikeTopic/totaldistance", status.totalDistance.toString(), retained = true)
         }
         
-        status.assistMode?.let { mqttManager.publish("$topic/assistmode", getAssistModeName(it, status.assistModeNames)) }
+        if (status.batteryLevel != last?.batteryLevel && (status.batteryLevel ?: 0) > 0) {
+            mqttManager.publish("$bikeTopic/stateofcharge", status.batteryLevel.toString(), retained = true)
+        }
+
+        if (status.totalBattery != last?.totalBattery && (status.totalBattery ?: 0.0) > 0) {
+            mqttManager.publish("$bikeTopic/totalbattery", status.totalBattery.toString(), retained = true)
+        }
+
+        if (status.totalEnergyFromMotor != last?.totalEnergyFromMotor && (status.totalEnergyFromMotor ?: 0.0) > 0) {
+            mqttManager.publish("$bikeTopic/totalenergy", status.totalEnergyFromMotor.toString(), retained = true)
+        }
+
+        pubIfDiff("$bikeTopic/ebikeledsoftwareversion", status.ebikeLedSoftwareVersion, last?.ebikeLedSoftwareVersion, true)
+        pubIfDiff("$bikeTopic/batteryserialnumber", status.batterySerialNumber, last?.batterySerialNumber, true)
+        pubIfDiff("$bikeTopic/totalhours", status.driveUnitHours, last?.driveUnitHours, true)
+
+        // Per-Mode Metrics
+        status.sortedUsageRecordsB.forEachIndexed { index, record ->
+            if (record != null) {
+                val lastRecord = last?.sortedUsageRecordsB?.getOrNull(index)
+                val modeName = status.assistModeNames.getOrNull(index) ?: return@forEachIndexed
+                val safeMode = sanitizeForMqtt(modeName)
+                
+                if (record.distance != lastRecord?.distance && record.distance > 0) {
+                    mqttManager.publish("$bikeTopic/${safeMode}distance", (record.distance / 1000.0).toString(), retained = true)
+                }
+                if (record.energy != lastRecord?.energy && record.energy > 0) {
+                    mqttManager.publish("$bikeTopic/${safeMode}energy", (record.energy / 1000.0).toString(), retained = true)
+                }
+            }
+        }
+
+        // Session Metadata
+        val bleConnected = bleManager.isConnected.value
+        if (bleConnected != (last?.lastUpdateTimestamp ?: 0L > 0 && bleManager.isConnected.value)) { // Simple check for connection change
+             mqttManager.publish("$bikeTopic/blestatus", if (bleConnected) "connected" else "disconnected")
+        }
+
+        // --- POWERTUBE TELEMETRY ---
+        val currentSerial = status.batterySerialNumber
+        val lastSerial = last?.batterySerialNumber
+        
+        if (!currentSerial.isNullOrEmpty()) {
+            if (lastActiveBatterySerial != currentSerial) {
+                lastActiveBatterySerial = currentSerial
+            }
+            
+            val battProfile = batteryProfiles.value.find { it.hardwareSerial == currentSerial }
+            if (battProfile != null) {
+                val battTopic = "powertube/$currentSerial"
+                if (status.batteryLevel != last?.batteryLevel && (status.batteryLevel ?: 0) > 0) {
+                    mqttManager.publish("$battTopic/stateofcharge", status.batteryLevel.toString(), retained = true)
+                }
+                if (status.totalBattery != last?.totalBattery && (status.totalBattery ?: 0.0) > 0) {
+                    mqttManager.publish("$battTopic/totalbattery", status.totalBattery.toString(), retained = true)
+                }
+                pubIfDiff("$battTopic/chargecycles", status.chargeCycles, last?.chargeCycles, true)
+                pubIfDiff("$battTopic/serial", currentSerial, lastSerial, true)
+            }
+        }
+
+        lastPublishedStatus = status
+    }
+
+    private suspend fun publishFullStatus(status: BikeStatus) {
+        val mac = activeBikeMac.value
+        val deviceId = mac?.lowercase()?.replace(":", "") ?: "unknown"
+        val bikeTopic = "ebikemonitor/$deviceId"
+        
+        // Use FileLogger to record the sync
+        FileLogger.log("MainViewModel: Syncing full status for $deviceId")
+
+        status.speed?.let { mqttManager.publish("$bikeTopic/speed", it.toString()) }
+        status.cadence?.let { mqttManager.publish("$bikeTopic/cadence", it.toString()) }
+        status.humanPower?.let { mqttManager.publish("$bikeTopic/power", it.toString()) }
+        
+        status.batteryLevel?.let {
+            if (it > 0) mqttManager.publish("$bikeTopic/stateofcharge", it.toString(), retained = true)
+        }
+        
+        status.assistMode?.let { mqttManager.publish("$bikeTopic/assistmode", getAssistModeName(it, status.assistModeNames)) }
         
         status.totalDistance?.let {
-            if (it > 0) mqttManager.publish("$topic/totaldistance", it.toString(), retained = true)
+            if (it > 0) mqttManager.publish("$bikeTopic/totaldistance", it.toString(), retained = true)
         }
 
         status.totalBattery?.let {
-            if (it > 0) mqttManager.publish("$topic/totalbattery", it.toString(), retained = true)
+            if (it > 0) mqttManager.publish("$bikeTopic/totalbattery", it.toString(), retained = true)
         }
         
         status.totalEnergyFromMotor?.let {
-            if (it > 0) mqttManager.publish("$topic/totalenergy", it.toString(), retained = true)
+            if (it > 0) mqttManager.publish("$bikeTopic/totalenergy", it.toString(), retained = true)
         }
         
-        status.motorPower?.let { mqttManager.publish("$topic/motorpower", it.toString()) }
-        status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$topic/ebikeledsoftwareversion", it, retained = true) }
+        status.motorPower?.let { mqttManager.publish("$bikeTopic/motorpower", it.toString()) }
+        status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$bikeTopic/ebikeledsoftwareversion", it, retained = true) }
+        
         val serialToUse = status.batterySerialNumber ?: lastActiveBatterySerial
         serialToUse?.let { serial ->
-            mqttManager.publish("$topic/batteryserialnumber", serial, retained = true)
-            status.driveUnitHours?.let { mqttManager.publish("$topic/totalhours", it.toString(), retained = true) }
+            mqttManager.publish("$bikeTopic/batteryserialnumber", serial, retained = true)
+            status.driveUnitHours?.let { mqttManager.publish("$bikeTopic/totalhours", it.toString(), retained = true) }
             
             // Also sync battery-specific topics
+            val battTopic = "powertube/$serial"
             status.batteryLevel?.let {
-                if (it > 0) mqttManager.publish("powertube/$serial/stateofcharge", it.toString(), retained = true)
+                if (it > 0) mqttManager.publish("$battTopic/stateofcharge", it.toString(), retained = true)
             }
             status.totalBattery?.let {
-                if (it > 0) mqttManager.publish("powertube/$serial/totalbattery", it.toString(), retained = true)
+                if (it > 0) mqttManager.publish("$battTopic/totalbattery", it.toString(), retained = true)
             }
             status.chargeCycles?.let { 
-                mqttManager.publish("powertube/$serial/chargecycles", it.toString(), retained = true)
+                mqttManager.publish("$battTopic/chargecycles", it.toString(), retained = true)
             }
-            mqttManager.publish("powertube/$serial/serial", serial, retained = true)
+            mqttManager.publish("$battTopic/serial", serial, retained = true)
         }
 
-        // Per-Mode Metrics (New sensor names logic)
+        // Per-Mode Metrics
         status.sortedUsageRecordsB.forEachIndexed { index, record ->
             if (record != null) {
                 val modeName = status.assistModeNames.getOrNull(index) ?: return@forEachIndexed
                 val safeMode = sanitizeForMqtt(modeName)
                 
                 if (record.distance > 0) {
-                    mqttManager.publish("$topic/${safeMode}distance", (record.distance / 1000.0).toString(), retained = true)
+                    mqttManager.publish("$bikeTopic/${safeMode}distance", (record.distance / 1000.0).toString(), retained = true)
                 }
                 if (record.energy > 0) {
-                    mqttManager.publish("$topic/${safeMode}energy", (record.energy / 1000.0).toString(), retained = true)
+                    mqttManager.publish("$bikeTopic/${safeMode}energy", (record.energy / 1000.0).toString(), retained = true)
                 }
             }
         }
+        
+        // Update the cache after full sync
+        lastPublishedStatus = status
     }
 
     fun connectMqtt() {

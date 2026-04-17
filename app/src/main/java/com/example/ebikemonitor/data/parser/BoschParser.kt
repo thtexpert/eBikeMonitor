@@ -323,11 +323,9 @@ object BoschParser {
         }
 
         // Final validation for Zero-Trip Fallback: 
-        // If we assumed trip=0, we require a very low error (e.g. < 500m total across all modes)
+        // We previously required a low error (< 500m) for zero-trip fallback.
+        // As per user feedback, we now trust the ambiguity check regardless of odometer drift distance.
         val finalStatus = if (currentTrip.isEmpty()) {
-            if (minTotalError > 500) {
-                 return StartupDecodingResult(status = "WAITING_FOR_TRIP_DATA", bestError = minTotalError)
-            }
             "SUCCESS_ZERO_TRIP"
         } else {
             "SUCCESS"

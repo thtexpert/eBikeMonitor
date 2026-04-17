@@ -22,5 +22,7 @@ class EBikeApplication : Application() {
         super.onCreate()
         instance = this
         // Initialize managers if needed or just let them be lazy
+        FileLogger.init(this)
+        FileLogger.log("Application onCreate - Version ${BuildConfig.VERSION_NAME}")
     }
 }

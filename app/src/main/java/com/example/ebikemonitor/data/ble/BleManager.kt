@@ -16,6 +16,7 @@ import com.example.ebikemonitor.data.parser.BoschParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
+import com.example.ebikemonitor.FileLogger
 
 @SuppressLint("MissingPermission") // Permissions are checked in UI/ViewModel
 class BleManager(private val context: Context) {
@@ -54,7 +55,9 @@ class BleManager(private val context: Context) {
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                Log.e("BleManager", "GATT Error: $status")
+                val errorMsg = "BleManager: GATT Error: $status"
+                Log.e("BleManager", errorMsg)
+                FileLogger.log(errorMsg)
                 _isConnected.value = false
                 gatt.close()
                 bluetoothGatt = null
@@ -62,11 +65,11 @@ class BleManager(private val context: Context) {
             }
 
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Log.d("BleManager", "Connected to GATT")
+                FileLogger.log("BleManager: Connected to GATT")
                 _isConnected.value = true
                 gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                Log.d("BleManager", "Disconnected from GATT")
+                FileLogger.log("BleManager: Disconnected from GATT")
                 _isConnected.value = false
                 gatt.close()
                 bluetoothGatt = null

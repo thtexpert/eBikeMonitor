@@ -11,6 +11,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.eclipse.paho.client.mqttv3.*
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
+import com.example.ebikemonitor.FileLogger
 
 class MqttManager(private val context: Context) {
     
@@ -72,13 +73,16 @@ class MqttManager(private val context: Context) {
         try {
             client?.connect(options, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
+                    FileLogger.log("MqttManager: Connected to MQTT ($serverUri)")
                     Log.d(TAG, "Connected to MQTT")
                     _isConnected.value = true
                     startKeepAlive(topic)
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                    Log.e(TAG, "Failed to connect: ${exception?.message}")
+                    val errorMsg = "MqttManager: Failed to connect: ${exception?.message}"
+                    Log.e(TAG, errorMsg)
+                    FileLogger.log(errorMsg)
                     _isConnected.value = false
                      try {
                          _connectionError.tryEmit("MQTT Connection Failed: ${exception?.message}")
@@ -93,10 +97,12 @@ class MqttManager(private val context: Context) {
                      startKeepAlive(topic)
                 }
                 override fun connectionLost(cause: Throwable?) {
+                     val errorMsg = "MqttManager: Connection Lost: ${cause?.message}"
                      Log.d(TAG, "Connection Lost")
+                     FileLogger.log(errorMsg)
                      _isConnected.value = false
                      // stopKeepAlive()
-                     _connectionError.tryEmit("MQTT Connection Lost: ${cause?.message}")
+                     _connectionError.tryEmit(errorMsg)
                 }
                 override fun messageArrived(topic: String?, message: MqttMessage?) {}
                 override fun deliveryComplete(token: IMqttDeliveryToken?) {}
