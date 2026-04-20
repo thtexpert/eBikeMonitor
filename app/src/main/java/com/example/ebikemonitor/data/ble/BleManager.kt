@@ -175,7 +175,9 @@ class BleManager(private val context: Context) {
                                 null
                             }
 
-                            currentStatus = if (sumKWh != null) {
+                            val batchValid = sumKWh != null && isValidUsageBatch(unsortedModeUsageList, currentStatus.totalDistance, expectedCount)
+
+                            currentStatus = if (batchValid && sumKWh != null) {
                                 currentStatus.copy(
                                     unsortedUsageRecords = unsortedModeUsageList.toList(),
                                     totalEnergyFromMotor = sumKWh
@@ -286,6 +288,29 @@ class BleManager(private val context: Context) {
         _bikeStatus.value = currentStatus.copy(lastUpdateTimestamp = System.currentTimeMillis())
     }
 
+
+    private fun isValidUsageBatch(records: List<UsageRecord>, totalDistance: Double?, expectedCount: Int): Boolean {
+        if (records.size != expectedCount) return false
+        
+        // 1. Uniqueness check for non-zero distances
+        val nonZeroDistances = records.map { it.distance }.filter { it > 0 }
+        if (nonZeroDistances.distinct().size != nonZeroDistances.size) {
+            Log.w("BleManager", "Usage batch rejected: Duplicate non-zero distances found: $nonZeroDistances")
+            return false
+        }
+
+        // 2. Odometer cross-check
+        if (totalDistance != null && totalDistance > 0) {
+            val sumDistKm = records.sumOf { it.distance.toDouble() } / 1000.0
+            // Allow 1.0 km tolerance for sync delays
+            if (kotlin.math.abs(sumDistKm - totalDistance) > 1.0) {
+                Log.w("BleManager", "Usage batch rejected: Odometer mismatch. Batch Sum: ${sumDistKm}km, Bike Odo: ${totalDistance}km")
+                return false
+            }
+        }
+        
+        return true
+    }
 
     fun startScan() {
         if (bluetoothAdapter?.isEnabled == true) {
