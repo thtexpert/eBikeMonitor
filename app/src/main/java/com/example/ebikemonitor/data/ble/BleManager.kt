@@ -41,6 +41,8 @@ class BleManager(private val context: Context) {
     val bikeStatus = _bikeStatus.asStateFlow()
 
     private val unsortedModeUsageList = mutableListOf<UsageRecord>()
+    private var lastUsageRecordTimestamp: Long = 0L
+    private val BURST_TIMEOUT_MS = 2000L
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -147,31 +149,44 @@ class BleManager(private val context: Context) {
                 }
                 0x108C -> {
                     val record = msg.decodeUsageRecord()
-                    if (record != null) {
-                        val expectedCount = if (currentStatus.assistModeNames.isNotEmpty()) {
-                            currentStatus.assistModeNames.size
-                        } else {
-                            5
-                        }
+                        if (record != null) {
+                            val now = System.currentTimeMillis()
+                            if (now - lastUsageRecordTimestamp > BURST_TIMEOUT_MS && unsortedModeUsageList.isNotEmpty()) {
+                                Log.d("BleManager", "Usage burst timeout (${now - lastUsageRecordTimestamp}ms). Clearing stale records: ${unsortedModeUsageList.size}")
+                                unsortedModeUsageList.clear()
+                            }
+                            lastUsageRecordTimestamp = now
 
-                        // Start a new batch if we've already reached the expected count
-                        if (unsortedModeUsageList.size >= expectedCount) {
-                            unsortedModeUsageList.clear()
-                        }
-                        unsortedModeUsageList.add(record)
-                        
-                        val sumKWh = if (unsortedModeUsageList.size == expectedCount) {
-                            unsortedModeUsageList.sumOf { it.energy.toDouble() } / 1000.0
-                        } else {
-                            null
-                        }
+                            val expectedCount = if (currentStatus.assistModeNames.isNotEmpty()) {
+                                currentStatus.assistModeNames.size
+                            } else {
+                                5
+                            }
 
-                        currentStatus = currentStatus.copy(
-                            unsortedUsageRecords = unsortedModeUsageList.toList(),
-                            totalEnergyFromMotor = sumKWh
-                        )
-                        
-                        if (unsortedModeUsageList.size == expectedCount) {
+                            // Start a new batch if we've already reached the expected count
+                            if (unsortedModeUsageList.size >= expectedCount) {
+                                unsortedModeUsageList.clear()
+                            }
+                            unsortedModeUsageList.add(record)
+                            
+                            val sumKWh = if (unsortedModeUsageList.size == expectedCount) {
+                                unsortedModeUsageList.sumOf { it.energy.toDouble() } / 1000.0
+                            } else {
+                                null
+                            }
+
+                            currentStatus = if (sumKWh != null) {
+                                currentStatus.copy(
+                                    unsortedUsageRecords = unsortedModeUsageList.toList(),
+                                    totalEnergyFromMotor = sumKWh
+                                )
+                            } else {
+                                currentStatus.copy(
+                                    unsortedUsageRecords = unsortedModeUsageList.toList()
+                                )
+                            }
+                            
+                            if (unsortedModeUsageList.size == expectedCount) {
                             Log.d("BleManager", "Batch of $expectedCount usage records complete: $unsortedModeUsageList")
                             
                             // 1. Startup Decoding Ritual (Persistent Storage)

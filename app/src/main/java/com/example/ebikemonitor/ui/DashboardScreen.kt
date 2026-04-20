@@ -549,22 +549,31 @@ fun UsageAccessWarning(viewModel: MainViewModel) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
             shape = RoundedCornerShape(8.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Usage Access required ", 
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-                TextButton(
-                    onClick = { viewModel.openUsageAccessSettings() },
-                    contentPadding = PaddingValues(0.dp)
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("GRANT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Usage Access required", 
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    TextButton(
+                        onClick = { viewModel.openUsageAccessSettings() },
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Text("GRANT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
                 }
+                Text(
+                    "Restricted? / Eingeschränkt? -> Try GRANT once, then: App Info > 3 dots > Allow restricted settings / Eingeschränkte Einstellungen zulassen",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp
+                )
             }
         }
     }

@@ -17,6 +17,9 @@ object FileLogger {
     private const val LOG_FILE_NAME = "ebike_monitor_debug.txt"
     private const val MAX_FILE_SIZE = 1024 * 1024 // 1 MB
     
+    // Set to true only when troubleshooting is needed
+    private const val ENABLE_FILE_LOGGING = false
+    
     private val executor = Executors.newSingleThreadExecutor()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
     
@@ -24,12 +27,16 @@ object FileLogger {
 
     fun init(context: Context) {
         logFile = File(context.filesDir, LOG_FILE_NAME)
-        log("FileLogger initialized. File path: ${logFile?.absolutePath}")
+        if (ENABLE_FILE_LOGGING) {
+            log("FileLogger initialized. File path: ${logFile?.absolutePath}")
+        }
     }
 
     fun log(message: String) {
-        // Also log to regular Logcat
+        // Always log to regular Logcat for real-time debugging
         Log.d(TAG, message)
+        
+        if (!ENABLE_FILE_LOGGING) return
         
         executor.execute {
             try {
