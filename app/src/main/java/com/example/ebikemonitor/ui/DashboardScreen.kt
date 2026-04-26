@@ -23,6 +23,8 @@ import com.example.ebikemonitor.data.model.getAssistModeName
 import com.example.ebikemonitor.data.model.UsageRecord
 import com.example.ebikemonitor.viewmodel.MainViewModel
 import android.content.res.Configuration
+import androidx.compose.ui.res.stringResource
+import com.example.ebikemonitor.R
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -70,7 +72,7 @@ fun DashboardScreen(
             TopAppBar(
                 title = { 
                     Text(
-                        text = eBikeName.ifEmpty { "eBike Monitor" },
+                        text = eBikeName.ifEmpty { stringResource(R.string.dashboard_title_default) },
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     ) 
@@ -80,7 +82,7 @@ fun DashboardScreen(
                         CompactActionButtons(viewModel, isMqttConnected, isBleConnected, bluetoothEnableLauncher)
                     }
                     IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.content_desc_settings))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -104,8 +106,8 @@ fun DashboardScreen(
 
             // Version Info at Bottom
             val versionText = buildString {
-                append("V${com.example.ebikemonitor.BuildConfig.VERSION_NAME}")
-                bikeStatus.ebikeLedSoftwareVersion?.let { append(" | LED: $it") }
+                append(stringResource(R.string.text_version_format, com.example.ebikemonitor.BuildConfig.VERSION_NAME))
+                bikeStatus.ebikeLedSoftwareVersion?.let { append(stringResource(R.string.text_led_info_format, it)) }
             }
             Text(
                 text = versionText,
@@ -135,7 +137,7 @@ fun AllSensorsDebugCard(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = "All Sensors (Discovery Order / Alphabetical)",
+                text = stringResource(R.string.debug_header_all_sensors),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -146,14 +148,14 @@ fun AllSensorsDebugCard(
             val sensors = mutableListOf<Pair<String, String>>()
             
             // Standard Included
-            sensors.add("App Status" to if (isFlowRunning) "running" else "stopped")
-            sensors.add("Battery Serial Number" to (bikeStatus.batterySerialNumber ?: "--"))
-            sensors.add("BLE Status" to if (isBleConnected) "connected" else "disconnected")
-            sensors.add("Cadence" to (bikeStatus.cadence?.toString() ?: "--") + " rpm")
-            sensors.add("Charge Cycles" to (bikeStatus.chargeCycles?.toString() ?: "--"))
-            sensors.add("eBike LED Software Version" to (bikeStatus.ebikeLedSoftwareVersion ?: "--"))
-            sensors.add("last MQTT Connect Time" to (mqttConnectTime ?: "--"))
-            sensors.add("Total Hours" to (bikeStatus.driveUnitHours?.toString() ?: "--") + " h")
+            sensors.add(stringResource(R.string.debug_sensor_app_status) to if (isFlowRunning) "running" else "stopped")
+            sensors.add(stringResource(R.string.debug_sensor_battery_serial) to (bikeStatus.batterySerialNumber ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_ble_status) to if (isBleConnected) "connected" else "disconnected")
+            sensors.add(stringResource(R.string.debug_sensor_cadence) to (bikeStatus.cadence?.toString() ?: "--") + " rpm")
+            sensors.add(stringResource(R.string.debug_sensor_charge_cycles) to (bikeStatus.chargeCycles?.toString() ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_led_version) to (bikeStatus.ebikeLedSoftwareVersion ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_mqtt_time) to (mqttConnectTime ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_total_hours) to (bikeStatus.driveUnitHours?.toString() ?: "--") + " h")
 
             // Per-Mode
             val modeNames = bikeStatus.assistModeNames
@@ -211,20 +213,20 @@ fun PortraitLayout(
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item {
-                HomeAssistantCard(title = "Ride", icon = Icons.Default.DirectionsBike) {
-                    SensorRow("Speed", bikeStatus.speed?.let { "%.1f".format(it) } ?: "--", "km/h", Icons.Default.Speed, isMqttConnected && bikeStatus.speed != null)
-                    SensorRow("Assist Mode", getAssistModeName(bikeStatus.assistMode, bikeStatus.assistModeNames), "", Icons.Default.SettingsAccessibility, isMqttConnected && bikeStatus.assistMode != null)
-                    SensorRow("Human Power", bikeStatus.humanPower?.toString() ?: "--", "W", Icons.Default.Bolt, isMqttConnected && bikeStatus.humanPower != null)
-                    SensorRow("Motor Power", bikeStatus.motorPower?.toString() ?: "--", "W", Icons.Default.ElectricBolt, isMqttConnected && bikeStatus.motorPower != null)
+                HomeAssistantCard(title = stringResource(R.string.sensor_label_ride), icon = Icons.Default.DirectionsBike) {
+                    SensorRow(stringResource(R.string.sensor_name_speed), bikeStatus.speed?.let { "%.1f".format(it) } ?: "--", "km/h", Icons.Default.Speed, isMqttConnected && bikeStatus.speed != null)
+                    SensorRow(stringResource(R.string.sensor_name_assist_mode), getAssistModeName(bikeStatus.assistMode, bikeStatus.assistModeNames), "", Icons.Default.SettingsAccessibility, isMqttConnected && bikeStatus.assistMode != null)
+                    SensorRow(stringResource(R.string.sensor_name_human_power), bikeStatus.humanPower?.toString() ?: "--", "W", Icons.Default.Bolt, isMqttConnected && bikeStatus.humanPower != null)
+                    SensorRow(stringResource(R.string.sensor_name_motor_power), bikeStatus.motorPower?.toString() ?: "--", "W", Icons.Default.ElectricBolt, isMqttConnected && bikeStatus.motorPower != null)
                 }
             }
 
             item {
-                HomeAssistantCard(title = "Totals", icon = Icons.Default.Analytics) {
-                    SensorRow("SoC", bikeStatus.batteryLevel?.toString() ?: "--", "%", getBatteryIcon(bikeStatus.batteryLevel ?: 0), isMqttConnected && (bikeStatus.batteryLevel ?: 0) > 0)
-                    SensorRow("Total Distance", bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
-                    SensorRow("Total Energy", bikeStatus.totalEnergyFromMotor?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalEnergyFromMotor != null)
-                    SensorRow("Total Battery", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
+                HomeAssistantCard(title = stringResource(R.string.sensor_label_totals), icon = Icons.Default.Analytics) {
+                    SensorRow(stringResource(R.string.sensor_name_soc), bikeStatus.batteryLevel?.toString() ?: "--", "%", getBatteryIcon(bikeStatus.batteryLevel ?: 0), isMqttConnected && (bikeStatus.batteryLevel ?: 0) > 0)
+                    SensorRow(stringResource(R.string.sensor_name_total_distance), bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
+                    SensorRow(stringResource(R.string.sensor_name_total_energy), bikeStatus.totalEnergyFromMotor?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalEnergyFromMotor != null)
+                    SensorRow(stringResource(R.string.sensor_name_total_battery), bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
                 }
             }
 
@@ -281,19 +283,19 @@ fun LandscapeLayout(
             DiscoveryUpdateNudges(viewModel)
         }
         item {
-            HomeAssistantCard(title = "Totals", icon = Icons.Default.Analytics) {
-                SensorRow("SoC", bikeStatus.batteryLevel?.toString() ?: "--", "%", getBatteryIcon(bikeStatus.batteryLevel ?: 0), isMqttConnected && (bikeStatus.batteryLevel ?: 0) > 0)
-                SensorRow("Total Distance", bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
-                SensorRow("Total Energy", bikeStatus.totalEnergyFromMotor?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalEnergyFromMotor != null)
-                SensorRow("Total Battery", bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
+            HomeAssistantCard(title = stringResource(R.string.sensor_label_totals), icon = Icons.Default.Analytics) {
+                SensorRow(stringResource(R.string.sensor_name_soc), bikeStatus.batteryLevel?.toString() ?: "--", "%", getBatteryIcon(bikeStatus.batteryLevel ?: 0), isMqttConnected && (bikeStatus.batteryLevel ?: 0) > 0)
+                SensorRow(stringResource(R.string.sensor_name_total_distance), bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
+                SensorRow(stringResource(R.string.sensor_name_total_energy), bikeStatus.totalEnergyFromMotor?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalEnergyFromMotor != null)
+                SensorRow(stringResource(R.string.sensor_name_total_battery), bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
             }
         }
         item {
-            HomeAssistantCard(title = "Ride", icon = Icons.Default.DirectionsBike) {
-                SensorRow("Speed", bikeStatus.speed?.let { "%.1f".format(it) } ?: "--", "km/h", Icons.Default.Speed, isMqttConnected && bikeStatus.speed != null)
-                SensorRow("Assist Mode", getAssistModeName(bikeStatus.assistMode, bikeStatus.assistModeNames), "", Icons.Default.SettingsAccessibility, isMqttConnected && bikeStatus.assistMode != null)
-                SensorRow("Human Power", bikeStatus.humanPower?.toString() ?: "--", "W", Icons.Default.Bolt, isMqttConnected && bikeStatus.humanPower != null)
-                SensorRow("Motor Power", bikeStatus.motorPower?.toString() ?: "--", "W", Icons.Default.ElectricBolt, isMqttConnected && bikeStatus.motorPower != null)
+            HomeAssistantCard(title = stringResource(R.string.sensor_label_ride), icon = Icons.Default.DirectionsBike) {
+                SensorRow(stringResource(R.string.sensor_name_speed), bikeStatus.speed?.let { "%.1f".format(it) } ?: "--", "km/h", Icons.Default.Speed, isMqttConnected && bikeStatus.speed != null)
+                SensorRow(stringResource(R.string.sensor_name_assist_mode), getAssistModeName(bikeStatus.assistMode, bikeStatus.assistModeNames), "", Icons.Default.SettingsAccessibility, isMqttConnected && bikeStatus.assistMode != null)
+                SensorRow(stringResource(R.string.sensor_name_human_power), bikeStatus.humanPower?.toString() ?: "--", "W", Icons.Default.Bolt, isMqttConnected && bikeStatus.humanPower != null)
+                SensorRow(stringResource(R.string.sensor_name_motor_power), bikeStatus.motorPower?.toString() ?: "--", "W", Icons.Default.ElectricBolt, isMqttConnected && bikeStatus.motorPower != null)
             }
         }
         
@@ -420,7 +422,7 @@ fun ActionButtonsRow(
             shape = RoundedCornerShape(8.dp),
             contentPadding = PaddingValues(horizontal = 4.dp)
         ) {
-            Text("MQTT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
+            Text(stringResource(R.string.btn_mqtt), fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
         }
 
         // BLE Button
@@ -438,7 +440,7 @@ fun ActionButtonsRow(
             shape = RoundedCornerShape(8.dp),
             contentPadding = PaddingValues(horizontal = 4.dp)
         ) {
-            Text("BLE", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
+            Text(stringResource(R.string.btn_ble), fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
         }
 
         // FLOW App Button
@@ -465,7 +467,7 @@ fun ActionButtonsRow(
             shape = RoundedCornerShape(8.dp),
             contentPadding = PaddingValues(horizontal = 4.dp)
         ) {
-            Text("FLOW", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
+            Text(stringResource(R.string.btn_flow), fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
         }
     }
 }
@@ -484,8 +486,8 @@ fun CompactActionButtons(
         val mqttColor = if (isMqttConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
         val bleColor = if (isBleConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
         
-        StatusCapsule("MQTT", mqttColor) { viewModel.toggleMqttConnection() }
-        StatusCapsule("BLE", bleColor) { 
+        StatusCapsule(stringResource(R.string.btn_mqtt), mqttColor) { viewModel.toggleMqttConnection() }
+        StatusCapsule(stringResource(R.string.btn_ble), bleColor) { 
             if (!isBleConnected && !viewModel.isBluetoothEnabled()) {
                 bluetoothEnableLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
             } else {
@@ -504,7 +506,7 @@ fun CompactActionButtons(
             else -> MaterialTheme.colorScheme.primary
         }
         
-        StatusCapsule("FLOW", flowColor, enabled = isFlowInstalled) {
+        StatusCapsule(stringResource(R.string.btn_flow), flowColor, enabled = isFlowInstalled) {
             if (isFlowInstalled) {
                 if (isFlowRunning) viewModel.stopBoschApp() else viewModel.launchBoschApp()
             }
@@ -556,7 +558,7 @@ fun UsageAccessWarning(viewModel: MainViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Usage Access required", 
+                        stringResource(R.string.warning_usage_access_title), 
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
@@ -564,11 +566,11 @@ fun UsageAccessWarning(viewModel: MainViewModel) {
                         onClick = { viewModel.openUsageAccessSettings() },
                         contentPadding = PaddingValues(horizontal = 8.dp)
                     ) {
-                        Text("GRANT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.btn_grant), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     }
                 }
                 Text(
-                    "Restricted? / Eingeschränkt? -> Try GRANT once, then: App Info > 3 dots > Allow restricted settings / Eingeschränkte Einstellungen zulassen",
+                    stringResource(R.string.warning_usage_access_details),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
                     fontSize = 10.sp,
@@ -587,16 +589,16 @@ fun DiscoveryUpdateNudges(viewModel: MainViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (isBikeOutdated) {
             DiscoveryNudge(
-                message = "New eBike MQTT topics available",
-                buttonText = "UPDATE BIKE",
+                message = stringResource(R.string.nudge_bike_update),
+                buttonText = stringResource(R.string.btn_update_bike),
                 onUpdate = { viewModel.updateBikeDiscovery() }
             )
         }
         
         if (isBatteryOutdated) {
             DiscoveryNudge(
-                message = "Register this PowerTube in HA",
-                buttonText = "REGISTER BATTERY",
+                message = stringResource(R.string.nudge_battery_register),
+                buttonText = stringResource(R.string.btn_register_battery),
                 onUpdate = { viewModel.updateBatteryDiscovery() }
             )
         }
@@ -663,7 +665,7 @@ fun DebugUsageRecords(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "V-B: Delta Discovery", 
+                            text = stringResource(R.string.debug_header_delta_discovery), 
                             style = MaterialTheme.typography.labelMedium, 
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2196F3)
@@ -708,7 +710,7 @@ fun DebugUsageRecords(
                         val record = if (index < sortedRecordsB.size) sortedRecordsB[index] else null
                         
                         val textColor = if (isConfirmed) Color(0xFF4CAF50) else Color.Gray
-                        val label = if (isConfirmed) "[OK]" else "[Pending]"
+                        val label = if (isConfirmed) "[OK]" else stringResource(R.string.debug_text_pending)
                         
                         Text(
                             text = if (record != null) {
@@ -735,13 +737,13 @@ fun DebugUsageRecords(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Stored Baselines (from Phone)", 
+                            text = stringResource(R.string.debug_header_stored_baselines), 
                             style = MaterialTheme.typography.labelMedium, 
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFFF9800)
                         )
                         Text(
-                            text = if (hasTrip) "TRIP OK" else "TRIP MISSING",
+                            text = if (hasTrip) stringResource(R.string.debug_text_trip_ok) else stringResource(R.string.debug_text_trip_missing),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = if (hasTrip) Color(0xFF4CAF50) else Color.Gray
@@ -768,7 +770,7 @@ fun DebugUsageRecords(
                 }
 
                 Text(
-                    text = "Debug: Unsorted Incoming (${records.size}/$expectedCount)", 
+                    text = stringResource(R.string.debug_header_unsorted_incoming, records.size, expectedCount), 
                     style = MaterialTheme.typography.labelMedium, 
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary

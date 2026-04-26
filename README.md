@@ -39,6 +39,9 @@ For decoding see [BLE TOPICS](BLE_TOPICS.md).
    - **Preferences**: Toggle auto-connect for BLE and MQTT, and auto-launch for the Flow app as desired.
 4. **Initial Connection**: For the first-time setup, ensure the Flow app is not connected to the eBike before eBikeMonitor establishes its BLE connection. This allows the app to correctly capture the assist mode names from the system.
 
+### Privacy & Permissions Note
+To detect if the Bosch Flow app is running, this app requires the **Usage Access** (`PACKAGE_USAGE_STATS`) permission. Additionally, it uses the **Query All Packages** (`QUERY_ALL_PACKAGES`) permission to locate the Flow app on your device. These permissions are used exclusively for local state detection and automation (auto-launching/stopping). No personal browsing data or package lists are transmitted or collected.
+
 ### 2. First Ride
 
 As soon as BLE connects to the eBike, the latest active data is updated on the screen.

@@ -1,3 +1,86 @@
 <resources>
     <string name="app_name">eBikeMonitor</string>
+    
+    <!-- General UI -->
+    <string name="btn_back">Back</string>
+    <string name="title_settings">Settings</string>
+    <string name="header_general">General</string>
+    <string name="label_ebike_name">eBike Name</string>
+    <string name="header_launch">Launch</string>
+    <string name="switch_auto_connect_mqtt">Auto-Connect MQTT</string>
+    <string name="switch_auto_connect_ble">Auto-Connect BLE</string>
+    <string name="switch_auto_launch_flow">Auto-Launch Flow App</string>
+    
+    <!-- Bluetooth Settings -->
+    <string name="header_bluetooth">Bluetooth</string>
+    <string name="text_target_mac">Target MAC: %1$s</string>
+    <string name="text_not_set">Not Set</string>
+    <string name="btn_select_bonded_device">Select Bonded Device</string>
+    <string name="dialog_title_select_ebike">Select eBike</string>
+    <string name="dialog_label_bonded_devices">Bonded Devices</string>
+    <string name="dialog_label_scanned_devices">Scanned Devices</string>
+    <string name="dialog_text_scanning">Scanning...</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="text_unknown_device">Unknown</string>
+    
+    <!-- MQTT Settings -->
+    <string name="header_mqtt">MQTT</string>
+    <string name="label_broker_uri">Broker URI</string>
+    <string name="label_mqtt_user">User (Optional)</string>
+    <string name="label_mqtt_password">Password (Optional)</string>
+    <string name="btn_save_mqtt_config">Save MQTT Config</string>
+    <string name="text_discovery_prefix">Discovery (homeassistant)</string>
+    <string name="btn_send_discovery">Send</string>
+    <string name="error_mqtt_failed">MQTT Connection Failed: %1$s</string>
+    
+    <!-- Dashboard Titles -->
+    <string name="dashboard_title_default">eBike Monitor</string>
+    <string name="content_desc_settings">Settings</string>
+    <string name="text_version_format">V%1$s</string>
+    <string name="text_led_info_format"> | LED: %1$s</string>
+    
+    <!-- Sensor Labels -->
+    <string name="sensor_label_ride">Ride</string>
+    <string name="sensor_label_totals">Totals</string>
+    <string name="sensor_name_speed">Speed</string>
+    <string name="sensor_name_assist_mode">Assist Mode</string>
+    <string name="sensor_name_human_power">Human Power</string>
+    <string name="sensor_name_motor_power">Motor Power</string>
+    <string name="sensor_name_soc">SoC</string>
+    <string name="sensor_name_total_distance">Total Distance</string>
+    <string name="sensor_name_total_energy">Total Energy</string>
+    <string name="sensor_name_total_battery">Total Battery</string>
+    
+    <!-- Action Button Labels -->
+    <string name="btn_mqtt">MQTT</string>
+    <string name="btn_ble">BLE</string>
+    <string name="btn_flow">FLOW</string>
+    
+    <!-- Permissions & Warnings -->
+    <string name="warning_usage_access_title">Usage Access required</string>
+    <string name="btn_grant">GRANT</string>
+    <string name="warning_usage_access_details">Restricted? / Eingeschränkt? -> Try GRANT once, then: App Info > 3 dots > Allow restricted settings / Eingeschränkte Einstellungen zulassen</string>
+    
+    <!-- Discovery Nudges -->
+    <string name="nudge_bike_update">New eBike MQTT topics available</string>
+    <string name="btn_update_bike">UPDATE BIKE</string>
+    <string name="nudge_battery_register">Register this PowerTube in HA</string>
+    <string name="btn_register_battery">REGISTER BATTERY</string>
+    
+    <!-- Debug UI -->
+    <string name="debug_header_all_sensors">All Sensors (Discovery Order / Alphabetical)</string>
+    <string name="debug_sensor_app_status">App Status</string>
+    <string name="debug_sensor_battery_serial">Battery Serial Number</string>
+    <string name="debug_sensor_ble_status">BLE Status</string>
+    <string name="debug_sensor_cadence">Cadence</string>
+    <string name="debug_sensor_charge_cycles">Charge Cycles</string>
+    <string name="debug_sensor_led_version">eBike LED Software Version</string>
+    <string name="debug_sensor_mqtt_time">last MQTT Connect Time</string>
+    <string name="debug_sensor_total_hours">Total Hours</string>
+    <string name="debug_header_delta_discovery">V-B: Delta Discovery</string>
+    <string name="debug_header_stored_baselines">Stored Baselines (from Phone)</string>
+    <string name="debug_text_trip_ok">TRIP OK</string>
+    <string name="debug_text_trip_missing">TRIP MISSING</string>
+    <string name="debug_header_unsorted_incoming">Debug: Unsorted Incoming (%1$d/%2$d)</string>
+    <string name="debug_text_pending">[Pending]</string>
 </resources>

@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.ebikemonitor.viewmodel.MainViewModel
+import androidx.compose.ui.res.stringResource
+import com.example.ebikemonitor.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,9 +60,9 @@ fun SettingsScreen(
                 onClick = onNavigateBack,
                 modifier = Modifier.height(38.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
-            ) { Text("Back") }
+            ) { Text(stringResource(R.string.btn_back)) }
             Spacer(modifier = Modifier.width(16.dp))
-            Text("Settings", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.title_settings), style = MaterialTheme.typography.titleMedium)
         }
         
         Spacer(modifier = Modifier.height(8.dp))
@@ -70,7 +72,7 @@ fun SettingsScreen(
         ) {
              // General
              item {
-                 Text("General", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                 Text(stringResource(R.string.header_general), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                  
                  var localName by remember { mutableStateOf(eBikeName) }
                  LaunchedEffect(eBikeName) { localName = eBikeName }
@@ -81,38 +83,38 @@ fun SettingsScreen(
                         localName = it
                         viewModel.updateEBikeName(it) 
                     },
-                    label = { Text("eBike Name", style = MaterialTheme.typography.labelSmall) },
+                    label = { Text(stringResource(R.string.label_ebike_name), style = MaterialTheme.typography.labelSmall) },
                     modifier = Modifier.fillMaxWidth().height(62.dp),
                     textStyle = MaterialTheme.typography.bodyMedium
                 )
              }
              // Auto launch
              item {
-                 Text("Launch", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                 Text(stringResource(R.string.header_launch), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                  Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                     Switch(checked = autoMqtt, onCheckedChange = { viewModel.updateAutoConnectMqtt(it) })
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Auto-Connect MQTT", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.switch_auto_connect_mqtt), style = MaterialTheme.typography.bodyMedium)
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                     Switch(checked = autoBle, onCheckedChange = { viewModel.updateAutoConnectBle(it) })
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Auto-Connect BLE", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.switch_auto_connect_ble), style = MaterialTheme.typography.bodyMedium)
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                     Switch(checked = autoLaunch, onCheckedChange = { viewModel.updateAutoLaunchFlow(it) })
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Auto-Launch Flow App", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.switch_auto_launch_flow), style = MaterialTheme.typography.bodyMedium)
                 }
              }
 
              // Bluetooth
              item {
-                 Text("Bluetooth", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                 Text(stringResource(R.string.header_bluetooth), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                  
-                 Text(text = "Target MAC: ${bleMac ?: "Not Set"}", style = MaterialTheme.typography.bodyMedium)
+                 Text(text = stringResource(R.string.text_target_mac, bleMac ?: stringResource(R.string.text_not_set)), style = MaterialTheme.typography.bodyMedium)
                 Button(
                     onClick = { 
                         viewModel.bleManager.startScan()
@@ -121,13 +123,13 @@ fun SettingsScreen(
                     modifier = Modifier.height(38.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
                 ) {
-                    Text("Select Bonded Device")
+                    Text(stringResource(R.string.btn_select_bonded_device))
                 }
              }
              
              // MQTT
              item {
-                 Text("MQTT", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                 Text(stringResource(R.string.header_mqtt), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                  
                  var uri by remember { mutableStateOf(mqttUri) }
                  var user by remember { mutableStateOf(mqttUser) }
@@ -142,7 +144,7 @@ fun SettingsScreen(
                  OutlinedTextField(
                     value = uri, 
                     onValueChange = { uri = it }, 
-                    label = { Text("Broker URI", style = MaterialTheme.typography.labelSmall) }, 
+                    label = { Text(stringResource(R.string.label_broker_uri), style = MaterialTheme.typography.labelSmall) }, 
                     modifier = Modifier.fillMaxWidth().height(62.dp),
                     textStyle = MaterialTheme.typography.bodyMedium
                 )
@@ -152,7 +154,7 @@ fun SettingsScreen(
                 OutlinedTextField(
                     value = user, 
                     onValueChange = { user = it }, 
-                    label = { Text("User (Optional)", style = MaterialTheme.typography.labelSmall) }, 
+                    label = { Text(stringResource(R.string.label_mqtt_user), style = MaterialTheme.typography.labelSmall) }, 
                     modifier = Modifier.fillMaxWidth().height(62.dp),
                     textStyle = MaterialTheme.typography.bodyMedium
                 )
@@ -162,7 +164,7 @@ fun SettingsScreen(
                 OutlinedTextField(
                     value = pass, 
                     onValueChange = { pass = it }, 
-                    label = { Text("Password (Optional)", style = MaterialTheme.typography.labelSmall) }, 
+                    label = { Text(stringResource(R.string.label_mqtt_password), style = MaterialTheme.typography.labelSmall) }, 
                     modifier = Modifier.fillMaxWidth().height(62.dp),
                     visualTransformation = if (passVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
                     trailingIcon = {
@@ -181,7 +183,7 @@ fun SettingsScreen(
                      modifier = Modifier.height(38.dp),
                      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
                  ) {
-                     Text("Save MQTT Config")
+                     Text(stringResource(R.string.btn_save_mqtt_config))
                  }
 
                  Spacer(modifier = Modifier.height(4.dp))
@@ -190,13 +192,13 @@ fun SettingsScreen(
                      verticalAlignment = Alignment.CenterVertically,
                      modifier = Modifier.fillMaxWidth()
                  ) {
-                     Text("Discovery (homeassistant)", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                     Text(stringResource(R.string.text_discovery_prefix), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                      OutlinedButton(
                          onClick = { viewModel.sendHomeAssistantDiscovery() },
                          modifier = Modifier.height(38.dp),
                          contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
                      ) {
-                         Text("Send")
+                         Text(stringResource(R.string.btn_send_discovery))
                      }
                  }
              }
@@ -234,19 +236,19 @@ fun DeviceSelectionDialog(
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select eBike") },
+        title = { Text(stringResource(R.string.dialog_title_select_ebike)) },
         text = {
             LazyColumn {
-                item { Text("Bonded Devices", style = MaterialTheme.typography.titleSmall) }
+                item { Text(stringResource(R.string.dialog_label_bonded_devices), style = MaterialTheme.typography.titleSmall) }
                 items(bondedDevices) { device ->
                     DeviceItem(device, onDeviceSelected)
                 }
                 
                 item { Spacer(modifier = Modifier.height(8.dp)) }
                 
-                item { Text("Scanned Devices", style = MaterialTheme.typography.titleSmall) }
+                item { Text(stringResource(R.string.dialog_label_scanned_devices), style = MaterialTheme.typography.titleSmall) }
                 if (scannedDevices.isEmpty()) {
-                    item { Text("Scanning...", style = MaterialTheme.typography.bodySmall) }
+                    item { Text(stringResource(R.string.dialog_text_scanning), style = MaterialTheme.typography.bodySmall) }
                 }
                 items(scannedDevices) { device ->
                     DeviceItem(device, onDeviceSelected)
@@ -258,7 +260,7 @@ fun DeviceSelectionDialog(
                 onClick = onDismiss,
                 modifier = Modifier.height(38.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
-            ) { Text("Cancel") }
+            ) { Text(stringResource(R.string.btn_cancel)) }
         }
     )
 }
@@ -273,7 +275,7 @@ fun DeviceItem(device: android.bluetooth.BluetoothDevice, onClick: (android.blue
             .padding(8.dp)
     ) {
         Column {
-            Text(text = device.name ?: "Unknown", style = MaterialTheme.typography.bodyMedium)
+            Text(text = device.name ?: stringResource(R.string.text_unknown_device), style = MaterialTheme.typography.bodyMedium)
             Text(text = device.address, style = MaterialTheme.typography.bodySmall)
         }
     }
