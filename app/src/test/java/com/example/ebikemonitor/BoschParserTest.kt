@@ -53,7 +53,7 @@ class BoschParserTest {
         // So byte[1] should be 5.
         payload[1] = 0x05.toByte()
         
-        val messages = BoschParser.parse(payload)
+        val (messages, _) = BoschParser.parse(payload)
         assertEquals(1, messages.size)
         assertEquals(0x982D, messages[0].messageId)
         assertEquals(2500, messages[0].value)
@@ -73,7 +73,7 @@ class BoschParserTest {
             0x55.toByte()
         )
         
-        val messages = BoschParser.parse(payload)
+        val (messages, _) = BoschParser.parse(payload)
         assertEquals(1, messages.size)
         assertEquals(0x80BC, messages[0].messageId)
         assertEquals(85, messages[0].value)

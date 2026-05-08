@@ -118,13 +118,13 @@ data class BoschMessage(
 object BoschParser {
     private const val TAG = "BoschParser"
 
-    fun parse(bytes: ByteArray): List<BoschMessage> {
+    fun parse(bytes: ByteArray): Pair<List<BoschMessage>, Int> {
         val messages = mutableListOf<BoschMessage>()
         var index = 0
 
         while (index < bytes.size) {
             // Basic validation for header
-            if (index + 2 >= bytes.size) break
+            if (index + 2 > bytes.size) break
 
             val startByte = bytes[index]
             val messageLength = bytes[index + 1].toInt() and 0xFF
@@ -141,11 +141,13 @@ object BoschParser {
                 break
             }
 
-            if (index + 4 >= bytes.size) break
+            if (index + 4 > bytes.size) {
+               // Too short for a real message with ID, but technically valid per length.
+               // However, Bosch messages need 2 bytes length/id etc.
+               // We should probably consume it if it's considered "complete" by totalMessageSize
+            }
 
-            // Message ID is 2 bytes (Big Endian based on reference logic shift)
-            // Reference: (bytes[index + 2] shl 8) or bytes[index + 3]
-            // Note: Kotlin bytes are signed, need to mask
+            // Message ID is 2 bytes (Big Endian)
             val messageId = ((bytes[index + 2].toInt() and 0xFF) shl 8) or (bytes[index + 3].toInt() and 0xFF)
             
             // Extract body
@@ -174,7 +176,6 @@ object BoschParser {
                                  dataValue = messageBytes[dataStartIndex].toInt() and 0xFF
                              }
                              else -> {
-                                 // Default fallback
                                  dataValue = 0
                              }
                          }
@@ -186,7 +187,7 @@ object BoschParser {
             index += totalMessageSize
         }
 
-        return messages
+        return Pair(messages, index)
     }
 
     fun decodeVarint(bytes: List<Byte>): Pair<Int, Int> {
@@ -430,6 +431,25 @@ object BoschParser {
                     newSortedList[modeIdx] = newBatch[newIdx]
                     newConfirmedIndices.add(modeIdx)
                 }
+            }
+        }
+        
+        // --- NEW: Process of Elimination ---
+        // If we have discovered all but one mode, we can logically deduce the last one.
+        if (newConfirmedIndices.size == numModes - 1) {
+            val missingModeIdx = (0 until numModes).find { !newConfirmedIndices.contains(it) }
+            val usedInitialIndices = newModeToInitialIndex.values.toSet()
+            val missingInitialIdx = (0 until numModes).find { !usedInitialIndices.contains(it) }
+            
+            // We also need to find which record in the current batch isn't used yet in newSortedList
+            val usedBatchRecords = newSortedList.filterNotNull().toSet()
+            val missingBatchRecord = newBatch.find { !usedBatchRecords.contains(it) }
+
+            if (missingModeIdx != null && missingInitialIdx != null && missingBatchRecord != null) {
+                Log.d("BoschParser", "Process of Elimination: Deducing mode $missingModeIdx belongs to initial slot $missingInitialIdx")
+                newModeToInitialIndex[missingModeIdx] = missingInitialIdx
+                newSortedList[missingModeIdx] = missingBatchRecord
+                newConfirmedIndices.add(missingModeIdx)
             }
         }
         

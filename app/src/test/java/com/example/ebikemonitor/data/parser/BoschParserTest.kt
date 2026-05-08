@@ -13,7 +13,7 @@ class BoschParserTest {
     fun testParse180cAssistModes() {
         val hexString = "3024180CC080110A034F46460A0345434F0A05544F55522B0A0553504F52540A05545552424F"
         val bytes = hexString.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        val messages = BoschParser.parse(bytes)
+        val (messages, _) = BoschParser.parse(bytes)
         
         val msg180c = messages.find { it.messageId == 0x180C }
         assert(msg180c != null) { "Message 0x180C not found" }
@@ -34,7 +34,7 @@ class BoschParserTest {
 
         for ((hex, expected) in testData) {
             val bytes = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-            val messages = BoschParser.parse(bytes)
+            val (messages, _) = BoschParser.parse(bytes)
             val msg = messages.find { it.messageId == 0x108C }
             assert(msg != null) { "Message 0x108C not found for $hex" }
             val record = msg!!.decodeUsageRecord()
@@ -70,7 +70,7 @@ class BoschParserTest {
         // 30-0D-A2-52-0A-09-B2-08-A0-13-F5-10-E4-02-00
         val hex = "300DA2520A09B208A013F510E40200"
         val bytes = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        val messages = BoschParser.parse(bytes)
+        val (messages, _) = BoschParser.parse(bytes)
         val msg = messages.find { it.messageId == 0xA252 }
         
         assert(msg != null) { "Message 0xA252 not found" }
@@ -281,11 +281,64 @@ class BoschParserTest {
     fun testParse0081BatterySerial() {
         val hex = "30200081C080110A1933373333302D303038322D33332D4130312D30312D30303230"
         val bytes = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        val messages = BoschParser.parse(bytes)
+        val (messages, _) = BoschParser.parse(bytes)
         val msg = messages.find { it.messageId == 0x0081 }
         
         assertNotNull("Message 0x0081 not found", msg)
         val serial = msg!!.decodeStringField()
         assertEquals("37330-0082-33-A01-01-0020", serial)
+    }
+
+    @Test
+    fun testProcessVersionBWithElimination() {
+        // 1. BASELINE: Start of trip with 5 modes
+        val modeNames = listOf("OFF", "ECO", "TOUR", "SPORT", "TURBO")
+        val initialTrip = listOf(10, 20, 30, 40, 50)
+        val initialBatch = listOf(
+            UsageRecord(1000, 10), // OFF
+            UsageRecord(2000, 20), // ECO
+            UsageRecord(3000, 30), // TOUR
+            UsageRecord(4000, 40), // SPORT
+            UsageRecord(5000, 50)  // TURBO
+        )
+        
+        var status = com.example.ebikemonitor.data.model.BikeStatus(
+            assistModeNames = modeNames,
+            tripDistPerMode = initialTrip,
+            initialTripDistPerMode = initialTrip,
+            initialUnsortedUsageRecords = initialBatch,
+            sortedUsageRecordsB = ArrayList<UsageRecord?>(List(5) { null }),
+            confirmedModeIndices = emptySet(),
+            modeToInitialIndex = emptyMap()
+        )
+
+        // 2. SCENARIO: 4 modes move, TURBO (index 4) STAYS AT ZERO
+        // OFF +100, ECO +200, TOUR +300, SPORT +400, TURBO +0
+        val trip1 = listOf(10 + 100, 20 + 200, 30 + 300, 40 + 400, 50 + 0)
+        val batch1 = listOf(
+            UsageRecord(1100, 15), // OFF (+100) - Slotted at 0
+            UsageRecord(2200, 25), // ECO (+200) - Slotted at 1
+            UsageRecord(3300, 35), // TOUR (+300) - Slotted at 2
+            UsageRecord(4400, 45), // SPORT (+400) - Slotted at 3
+            UsageRecord(5000, 50)  // TURBO (+0)   - Slotted at 4
+        ).shuffled()
+        
+        status = status.copy(tripDistPerMode = trip1)
+        val res1 = BoschParser.processVersionBWithDiscovery(batch1, status)
+        
+        assertNotNull("Result should not be null", res1)
+        val confirmed = res1!!.second
+        
+        // Before elimination fixes, this would be size 4.
+        // With elimination, it should be size 5!
+        assertEquals("Should have deduced the 5th mode (TURBO)", 5, confirmed.size)
+        assertTrue("OFF confirmed", confirmed.contains(0))
+        assertTrue("ECO confirmed", confirmed.contains(1))
+        assertTrue("TOUR confirmed", confirmed.contains(2))
+        assertTrue("SPORT confirmed", confirmed.contains(3))
+        assertTrue("TURBO confirmed (via elimination!)", confirmed.contains(4))
+        
+        assertEquals("TURBO record should match the initial one", 5000, res1.first[4]?.distance)
+        assertEquals("TURBO mapping should exist", 4, res1.third[4])
     }
 }

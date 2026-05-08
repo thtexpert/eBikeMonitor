@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.ebikemonitor"
         minSdk = 29
         targetSdk = 34
-        versionCode = 35
-        versionName = "1.14.0"
+        versionCode = 38
+        versionName = "1.14.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -61,6 +61,10 @@ android {
             val version = variant.versionName?.replace(".", "_") ?: "unknown"
             output.outputFileName = "eBikeMonitor-${version}.apk"
         }
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 

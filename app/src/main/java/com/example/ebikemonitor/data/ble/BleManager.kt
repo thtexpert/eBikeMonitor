@@ -26,7 +26,6 @@ class BleManager(private val context: Context) {
 
     private var bluetoothGatt: BluetoothGatt? = null
     
-    // UUIDs
     private val BOSCH_SERVICE_UUID = UUID.fromString("00000010-eaa2-11e9-81b4-2a2ae2dbcce4")
     private val BOSCH_CHAR_UUID = UUID.fromString("00000011-eaa2-11e9-81b4-2a2ae2dbcce4")
     private val CLIENT_CHARACTERISTIC_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
@@ -43,6 +42,8 @@ class BleManager(private val context: Context) {
     private val unsortedModeUsageList = mutableListOf<UsageRecord>()
     private var lastUsageRecordTimestamp: Long = 0L
     private val BURST_TIMEOUT_MS = 2000L
+    private val DISCOVERY_INTERVAL_MS = 150L
+    private var bleBuffer = ByteArray(0)
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -91,10 +92,36 @@ class BleManager(private val context: Context) {
             }
         }
 
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS && descriptor.uuid == CLIENT_CHARACTERISTIC_CONFIG_UUID) {
+                Log.d("BleManager", "Notifications enabled. Ready for passive sync.")
+            }
+        }
+
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
             if (characteristic.uuid == BOSCH_CHAR_UUID) {
-                val messages = BoschParser.parse(characteristic.value)
-                updateBikeStatus(messages)
+                val newData = characteristic.value ?: return
+                
+                // 1. Add new fragments to the buffer
+                bleBuffer = bleBuffer + newData
+                
+                // 2. Try to parse the combined data
+                val (messages, consumed) = BoschParser.parse(bleBuffer)
+                
+                if (messages.isNotEmpty()) {
+                    updateBikeStatus(messages)
+                }
+                
+                // 3. Keep only the remaining bytes if the last message was parsed partially
+                if (consumed > 0) {
+                    bleBuffer = bleBuffer.drop(consumed).toByteArray()
+                }
+
+                if (bleBuffer.size > 200) {
+                    // Buffer safety valve
+                    Log.w("BleManager", "Buffer overflow, clearing ${bleBuffer.size} bytes")
+                    bleBuffer = ByteArray(0)
+                }
             }
         }
     }
@@ -104,10 +131,26 @@ class BleManager(private val context: Context) {
         
         for (msg in messages) {
             when (msg.messageId) {
-                0x982D -> currentStatus = currentStatus.copy(speed = msg.value / 100.0)
-                0x985A -> currentStatus = currentStatus.copy(cadence = msg.value / 2)
-                0x985B -> currentStatus = currentStatus.copy(humanPower = msg.value)
-                0x985D -> currentStatus = currentStatus.copy(motorPower = msg.value)
+                0x982D -> {
+                    val speed = msg.value / 100.0
+                    currentStatus = currentStatus.copy(speed = speed)
+                    // Log.v("BleManager", "Speed update: $speed")
+                }
+                0x985A -> {
+                    val cadence = msg.value / 2
+                    currentStatus = currentStatus.copy(cadence = cadence)
+                    Log.d("BleManager", "Cadence update: $cadence (raw: ${msg.value})")
+                }
+                0x985B -> {
+                    val power = msg.value
+                    currentStatus = currentStatus.copy(humanPower = power)
+                    Log.d("BleManager", "Human power update: $power")
+                }
+                0x985D -> {
+                    val motorPower = msg.value
+                    currentStatus = currentStatus.copy(motorPower = motorPower)
+                    Log.d("BleManager", "Motor power update: $motorPower")
+                }
                 0x80BC -> currentStatus = currentStatus.copy(batteryLevel = msg.value)
                 0x9809 -> currentStatus = currentStatus.copy(assistMode = msg.value)
                 0x9818 -> currentStatus = currentStatus.copy(totalDistance = msg.value / 1000.0)
@@ -357,6 +400,6 @@ class BleManager(private val context: Context) {
         if (_bikeStatus.value.persistentBaselines == null) {
             _bikeStatus.value = _bikeStatus.value.copy(persistentBaselines = baselines)
             Log.d("BleManager", "Persistent baselines loaded: $baselines")
-        }
+    }
     }
 }

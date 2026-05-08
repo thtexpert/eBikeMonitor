@@ -65,6 +65,7 @@ class MainViewModel(
     
     // Cache for MQTT Delta-Checking
     private var lastPublishedStatus: BikeStatus? = null
+    private var lastPublishedMqttConnectTime: String? = null
 
     
     private val _isUsageAccessGranted = MutableStateFlow(false)
@@ -94,7 +95,7 @@ class MainViewModel(
         // Auto-connect logic
         viewModelScope.launch {
             // Wait for settings to load
-            delay(1000) 
+            delay(500) 
             
             val autoBle = settingsRepository.autoConnectBle.first()
             val mac = settingsRepository.bleMacAddress.first()
@@ -249,7 +250,7 @@ class MainViewModel(
                     val autoLaunch = settingsRepository.autoLaunchFlow.first()
                     // Only auto-launch if NOT already running
                     if (autoLaunch && !_isFlowRunning.value) {
-                        delay(1000)
+                        delay(200)
                         launchBoschApp()
                     }
                 }
@@ -423,6 +424,13 @@ class MainViewModel(
              mqttManager.publish("$bikeTopic/blestatus", if (bleConnected) "connected" else "disconnected")
         }
 
+        if (mqttSessionConnectTime.value != lastPublishedMqttConnectTime) {
+            mqttSessionConnectTime.value?.let { 
+                mqttManager.publish("$bikeTopic/mqttconnecttimestamp", it, retained = true) 
+                lastPublishedMqttConnectTime = it
+            }
+        }
+        
         // --- POWERTUBE TELEMETRY ---
         val currentSerial = status.batterySerialNumber
         val lastSerial = last?.batterySerialNumber
@@ -499,6 +507,10 @@ class MainViewModel(
                 mqttManager.publish("$battTopic/chargecycles", it.toString(), retained = true)
             }
             mqttManager.publish("$battTopic/serial", serial, retained = true)
+        }
+
+        mqttSessionConnectTime.value?.let { 
+            mqttManager.publish("$bikeTopic/mqttconnecttimestamp", it, retained = true)
         }
 
         // Per-Mode Metrics
