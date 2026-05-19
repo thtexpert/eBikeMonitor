@@ -117,7 +117,7 @@ class BleManager(private val context: Context) {
                     bleBuffer = bleBuffer.drop(consumed).toByteArray()
                 }
 
-                if (bleBuffer.size > 200) {
+                if (bleBuffer.size > 2048) {
                     // Buffer safety valve
                     Log.w("BleManager", "Buffer overflow, clearing ${bleBuffer.size} bytes")
                     bleBuffer = ByteArray(0)

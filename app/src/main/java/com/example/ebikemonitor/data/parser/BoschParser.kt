@@ -130,7 +130,7 @@ object BoschParser {
             val messageLength = bytes[index + 1].toInt() and 0xFF
             val totalMessageSize = messageLength + 2
 
-            if (messageLength < 2 || messageLength > 50) {
+            if (messageLength < 2 || messageLength > 255) {
                 // Invalid or padding, skip byte
                 index++
                 continue
