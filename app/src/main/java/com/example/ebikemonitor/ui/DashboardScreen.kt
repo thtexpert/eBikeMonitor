@@ -151,11 +151,21 @@ fun AllSensorsDebugCard(
             sensors.add(stringResource(R.string.debug_sensor_app_status) to if (isFlowRunning) "running" else "stopped")
             sensors.add(stringResource(R.string.debug_sensor_battery_serial) to (bikeStatus.batterySerialNumber ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_ble_status) to if (isBleConnected) "connected" else "disconnected")
+            sensors.add(stringResource(R.string.debug_sensor_human_calories) to (bikeStatus.tripPedalEnergy?.let { "$it kcal" } ?: "--"))
+            sensors.add("Unknown kcal (0xA243)" to (bikeStatus.humanCalories?.let { "%.1f kcal".format(it) } ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_cadence) to (bikeStatus.cadence?.toString() ?: "--") + " rpm")
             sensors.add(stringResource(R.string.debug_sensor_charge_cycles) to (bikeStatus.chargeCycles?.toString() ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_led_version) to (bikeStatus.ebikeLedSoftwareVersion ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_mqtt_time) to (mqttConnectTime ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_total_hours) to (bikeStatus.driveUnitHours?.toString() ?: "--") + " h")
+            
+            // New Trip Sensors
+            sensors.add("Trip Speed" to (bikeStatus.tripSpeed?.let { "%.1f km/h".format(it) } ?: "--"))
+            sensors.add("Trip Max Speed" to (bikeStatus.tripMaxSpeed?.let { "%.1f km/h".format(it) } ?: "--"))
+            sensors.add("Trip Cadence" to (bikeStatus.tripCadence?.let { "$it rpm" } ?: "--"))
+            sensors.add("Trip Max Cadence" to (bikeStatus.tripMaxCadence?.let { "$it rpm" } ?: "--"))
+            sensors.add("Trip Human Power" to (bikeStatus.tripHumanPower?.let { "$it W" } ?: "--"))
+            sensors.add("Trip Max Human Power" to (bikeStatus.tripMaxHumanPower?.let { "$it W" } ?: "--"))
 
             // Per-Mode
             val modeNames = bikeStatus.assistModeNames

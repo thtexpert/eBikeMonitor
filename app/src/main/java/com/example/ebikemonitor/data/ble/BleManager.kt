@@ -154,9 +154,20 @@ class BleManager(private val context: Context) {
                 0x80BC -> currentStatus = currentStatus.copy(batteryLevel = msg.value)
                 0x9809 -> currentStatus = currentStatus.copy(assistMode = msg.value)
                 0x9818 -> currentStatus = currentStatus.copy(totalDistance = msg.value / 1000.0)
+                0x8096 -> currentStatus = currentStatus.copy(chargeCycles = msg.value / 10.0)
+                0xA243 -> currentStatus = currentStatus.copy(humanCalories = msg.value / 10.0)
+                0xA246 -> currentStatus = currentStatus.copy(tripSpeed = msg.value / 100.0)
+                0xA247 -> currentStatus = currentStatus.copy(tripMaxSpeed = msg.value / 100.0)
+                0xA248 -> currentStatus = currentStatus.copy(tripCadence = msg.value / 2)
+                0xA249 -> currentStatus = currentStatus.copy(tripMaxCadence = msg.value / 2)
+                0xA24A -> currentStatus = currentStatus.copy(tripHumanPower = msg.value)
+                0xA24B -> currentStatus = currentStatus.copy(tripMaxHumanPower = msg.value)
+                0xA251 -> {
+                    currentStatus = currentStatus.copy(tripPedalEnergy = msg.value)
+                    Log.d("BleManager", "Trip Pedal Energy updated: ${msg.value} kcal")
+                }
                 0x9819 -> currentStatus = currentStatus.copy(driveUnitHours = msg.value)
                 0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
-                0x8096 -> currentStatus = currentStatus.copy(chargeCycles = msg.value / 10.0)
                 0x206B -> {
                     val softwareVersion = msg.decodeStringField()
                     if (softwareVersion != null) {

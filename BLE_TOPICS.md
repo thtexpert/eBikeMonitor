@@ -28,6 +28,14 @@ All messages received from the Bosch BLE characteristic (`00000011-eaa2-11e9-81b
 | `0x985A` | Cadence | `Int` / 2 (rpm) | Pedal rotations per minute. |
 | `0x985B` | Human Power | `Int` (W) | Rider's power input. |
 | `0x985D` | Motor Power | `Int` (W) | Electrical power output from the motor. |
+| `0xA243` | Unknown Energy? | `Int` / 10.0 (kcal) | Does NOT match Bosch FLOW values. Rationale unknown. |
+| `0xA246` | Trip Speed | `Int` / 100.0 (km/h) | Average speed for the current trip. |
+| `0xA247` | Trip Max Speed | `Int` / 100.0 (km/h) | Maximum speed reached in the current trip. |
+| `0xA248` | Trip Cadence | `Int` / 2 (rpm) | Average cadence for the current trip. |
+| `0xA249` | Trip Max Cadence | `Int` / 2 (rpm) | Maximum cadence reached in the current trip. |
+| `0xA24A` | Trip Human Power | `Int` (W) | Average human power for the current trip. |
+| `0xA24B` | Trip Max Human Power | `Int` (W) | Maximum human power reached in the current trip. |
+| `0xA251` | Trip Pedal Energy | `Int` (kcal) | Pedal energy in kcal, matches FLOW and KIOX display. |
 | `0xA252` | Trip Dist per Mode | List of Varints (`decodeTripDistPerMode`) | List of distances traveled in each assist mode for the current trip. |
 
 ## Specialized Decoding Details

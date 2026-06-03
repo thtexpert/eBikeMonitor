@@ -72,6 +72,7 @@
     <string name="debug_sensor_app_status">App Status</string>
     <string name="debug_sensor_battery_serial">Battery Serial Number</string>
     <string name="debug_sensor_ble_status">BLE Status</string>
+    <string name="debug_sensor_human_calories">TripPedalEnergy (kcal)</string>
     <string name="debug_sensor_cadence">Cadence</string>
     <string name="debug_sensor_charge_cycles">Charge Cycles</string>
     <string name="debug_sensor_led_version">eBike LED Software Version</string>
