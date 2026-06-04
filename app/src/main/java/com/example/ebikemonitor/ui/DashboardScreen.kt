@@ -1,10 +1,12 @@
 package com.example.ebikemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -79,7 +81,7 @@ fun DashboardScreen(
                 },
                 actions = {
                     if (isLandscape) {
-                        CompactActionButtons(viewModel, isMqttConnected, isBleConnected, bluetoothEnableLauncher)
+                        CompactActionButtons(viewModel, isMqttConnected, isBleConnected)
                     }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.content_desc_settings))
@@ -127,7 +129,6 @@ fun AllSensorsDebugCard(
     bikeStatus: BikeStatus,
     isMqttConnected: Boolean,
     isBleConnected: Boolean,
-    isFlowRunning: Boolean,
     mqttConnectTime: String?
 ) {
     Card(
@@ -148,7 +149,6 @@ fun AllSensorsDebugCard(
             val sensors = mutableListOf<Pair<String, String>>()
             
             // Standard Included
-            sensors.add(stringResource(R.string.debug_sensor_app_status) to if (isFlowRunning) "running" else "stopped")
             sensors.add(stringResource(R.string.debug_sensor_battery_serial) to (bikeStatus.batterySerialNumber ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_ble_status) to if (isBleConnected) "connected" else "disconnected")
             sensors.add(stringResource(R.string.debug_sensor_human_calories) to (bikeStatus.tripPedalEnergy?.let { "$it kcal" } ?: "--"))
@@ -202,7 +202,6 @@ fun PortraitLayout(
     isBleConnected: Boolean,
     bluetoothEnableLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Intent, androidx.activity.result.ActivityResult>
 ) {
-    val isFlowRunning by viewModel.isFlowRunning.collectAsState()
     val mqttConnectTime by viewModel.mqttSessionConnectTime.collectAsState()
 
     Column(
@@ -211,9 +210,7 @@ fun PortraitLayout(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ActionButtonsRow(viewModel, isMqttConnected, isBleConnected, bluetoothEnableLauncher)
-        
-        UsageAccessWarning(viewModel)
+        ActionButtonsRow(viewModel, isMqttConnected, isBleConnected)
         
         DiscoveryUpdateNudges(viewModel)
 
@@ -259,7 +256,6 @@ fun PortraitLayout(
                         bikeStatus = bikeStatus,
                         isMqttConnected = isMqttConnected,
                         isBleConnected = isBleConnected,
-                        isFlowRunning = isFlowRunning,
                         mqttConnectTime = mqttConnectTime
                     )
                 }
@@ -276,7 +272,6 @@ fun LandscapeLayout(
     isMqttConnected: Boolean,
     isBleConnected: Boolean
 ) {
-    val isFlowRunning by viewModel.isFlowRunning.collectAsState()
     val mqttConnectTime by viewModel.mqttSessionConnectTime.collectAsState()
 
     LazyVerticalGrid(
@@ -286,9 +281,6 @@ fun LandscapeLayout(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
     ) {
-        item(span = { GridItemSpan(2) }) {
-            UsageAccessWarning(viewModel)
-        }
         item(span = { GridItemSpan(2) }) {
             DiscoveryUpdateNudges(viewModel)
         }
@@ -328,7 +320,6 @@ fun LandscapeLayout(
                     bikeStatus = bikeStatus,
                     isMqttConnected = isMqttConnected,
                     isBleConnected = isBleConnected,
-                    isFlowRunning = isFlowRunning,
                     mqttConnectTime = mqttConnectTime
                 )
             }
@@ -417,67 +408,84 @@ fun ActionButtonsRow(
     viewModel: MainViewModel,
     isMqttConnected: Boolean,
     isBleConnected: Boolean,
-    bluetoothEnableLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Intent, androidx.activity.result.ActivityResult>
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // MQTT Button
-        val mqttColor = if (isMqttConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
-        Button(
-            onClick = { viewModel.toggleMqttConnection() },
-            modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.buttonColors(containerColor = mqttColor),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 4.dp)
-        ) {
-            Text(stringResource(R.string.btn_mqtt), fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
+    val isNotificationAccessGranted by viewModel.isNotificationAccessGranted.collectAsState()
+    
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Notification Access Nudge
+        if (!isNotificationAccessGranted) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(12.dp),
+                onClick = { viewModel.openNotificationAccessSettings() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Background Startup Limited", 
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            "Tap here to grant Notification Access. This allows the app to wake up automatically when Bosch Flow connects.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
         }
 
-        // BLE Button
-        val bleColor = if (isBleConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
-        Button(
-            onClick = { 
-                if (!isBleConnected && !viewModel.isBluetoothEnabled()) {
-                    bluetoothEnableLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                } else {
-                    viewModel.toggleBleConnection()
-                }
-            },
-            modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.buttonColors(containerColor = bleColor),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 4.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(stringResource(R.string.btn_ble), fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
-        }
+            // Background Monitoring Status
+            Surface(
+                modifier = Modifier.weight(2f),
+                color = if (isBleConnected) Color(0xFF4CAF50).copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, if (isBleConnected) Color(0xFF4CAF50) else Color.Transparent)
+            ) {
+                Row(
+                    modifier = Modifier.padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    val statusColor = if (isBleConnected) Color(0xFF4CAF50) else Color.Gray
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(statusColor, CircleShape)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (isBleConnected) "Monitoring Active" else "Waiting for Bosch Flow connect",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp,
+                        color = if (isBleConnected) Color(0xFF4CAF50) else Color.Gray
+                    )
+                }
+            }
 
-        // FLOW App Button
-        val flowContext = androidx.compose.ui.platform.LocalContext.current
-        val isFlowRunning by viewModel.isFlowRunning.collectAsState()
-        val flowIntent = remember { flowContext.packageManager.getLaunchIntentForPackage("com.bosch.ebike.onebikeapp") }
-        val isFlowInstalled = flowIntent != null
-        
-        Button(
-            onClick = { 
-                if (isFlowInstalled) {
-                    if (isFlowRunning) viewModel.stopBoschApp() else viewModel.launchBoschApp()
-                }
-            },
-            modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = when {
-                    !isFlowInstalled -> Color.Gray
-                    isFlowRunning -> Color(0xFF4CAF50) 
-                    else -> MaterialTheme.colorScheme.primary
-                }
-            ),
-            enabled = isFlowInstalled,
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 4.dp)
-        ) {
-            Text(stringResource(R.string.btn_flow), fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
+            // MQTT Button (kept for diagnostics)
+            val mqttColor = if (isMqttConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
+            Button(
+                onClick = { viewModel.toggleMqttConnection() },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = mqttColor),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp)
+            ) {
+                Text(stringResource(R.string.btn_mqtt), fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
+            }
         }
     }
 }
@@ -487,40 +495,16 @@ fun CompactActionButtons(
     viewModel: MainViewModel,
     isMqttConnected: Boolean,
     isBleConnected: Boolean,
-    bluetoothEnableLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Intent, androidx.activity.result.ActivityResult>
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         val mqttColor = if (isMqttConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
-        val bleColor = if (isBleConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
+        val bleColor = if (isBleConnected) Color(0xFF4CAF50) else Color.Gray
         
         StatusCapsule(stringResource(R.string.btn_mqtt), mqttColor) { viewModel.toggleMqttConnection() }
-        StatusCapsule(stringResource(R.string.btn_ble), bleColor) { 
-            if (!isBleConnected && !viewModel.isBluetoothEnabled()) {
-                bluetoothEnableLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-            } else {
-                viewModel.toggleBleConnection() 
-            }
-        }
-        
-        val isFlowRunning by viewModel.isFlowRunning.collectAsState()
-        val flowContext = androidx.compose.ui.platform.LocalContext.current
-        val flowIntent = remember { flowContext.packageManager.getLaunchIntentForPackage("com.bosch.ebike.onebikeapp") }
-        val isFlowInstalled = flowIntent != null
-        
-        val flowColor = when {
-            !isFlowInstalled -> Color.Gray
-            isFlowRunning -> Color(0xFF4CAF50)
-            else -> MaterialTheme.colorScheme.primary
-        }
-        
-        StatusCapsule(stringResource(R.string.btn_flow), flowColor, enabled = isFlowInstalled) {
-            if (isFlowInstalled) {
-                if (isFlowRunning) viewModel.stopBoschApp() else viewModel.launchBoschApp()
-            }
-        }
+        StatusCapsule("BLE", bleColor, enabled = false) { }
     }
 }
 
@@ -548,45 +532,6 @@ fun StatusCapsule(
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
-        }
-    }
-}
-
-@Composable
-fun UsageAccessWarning(viewModel: MainViewModel) {
-    val isUsageAccessGranted by viewModel.isUsageAccessGranted.collectAsState()
-    if (!isUsageAccessGranted) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        stringResource(R.string.warning_usage_access_title), 
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    TextButton(
-                        onClick = { viewModel.openUsageAccessSettings() },
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) {
-                        Text(stringResource(R.string.btn_grant), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                    }
-                }
-                Text(
-                    stringResource(R.string.warning_usage_access_details),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp
-                )
-            }
         }
     }
 }

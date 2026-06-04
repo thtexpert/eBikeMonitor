@@ -23,6 +23,9 @@ class MqttManager(private val context: Context) {
     private val _isConnected = MutableStateFlow(false)
     val isConnected = _isConnected.asStateFlow()
 
+    private val _isConnecting = MutableStateFlow(false)
+    val isConnecting = _isConnecting.asStateFlow()
+
     private val _connectionError = MutableSharedFlow<String>()
     val connectionError = _connectionError.asSharedFlow()
 
@@ -37,27 +40,28 @@ class MqttManager(private val context: Context) {
         val serverUri = "$brokerUrl"
 
         if (client != null) {
-            if (client!!.isConnected) return
+            if (_isConnected.value || _isConnecting.value) {
+                Log.d(TAG, "Already connected or connecting. Ignoring request.")
+                return
+            }
             
             if (client!!.serverURI == serverUri && client!!.clientId == clientId) {
-                try {
-                    Log.d(TAG, "Forcing existing client to reconnect")
-                    client!!.reconnect()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error forcing reconnect: ${e.message}")
-                }
-                return
+                Log.d(TAG, "Reusing existing client for $serverUri")
             } else {
+                Log.d(TAG, "Parameters changed, closing old client")
                 try {
                     client!!.disconnectForcibly(0, 500)
                     client!!.close()
                 } catch (e: Exception) {}
+                client = null
             }
         }
         
         this.baseTopic = topic
 
-        client = MqttAsyncClient(serverUri, clientId, MemoryPersistence())
+        if (client == null) {
+            client = MqttAsyncClient(serverUri, clientId, MemoryPersistence())
+        }
         
         val options = MqttConnectOptions().apply {
             userName = user
@@ -71,11 +75,13 @@ class MqttManager(private val context: Context) {
         options.setWill("$topic/status", "offline".toByteArray(), 0, true);
 
         try {
+            _isConnecting.value = true
             client?.connect(options, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
                     FileLogger.log("MqttManager: Connected to MQTT ($serverUri)")
                     Log.d(TAG, "Connected to MQTT")
                     _isConnected.value = true
+                    _isConnecting.value = false
                     startKeepAlive(topic)
                 }
 
@@ -84,6 +90,7 @@ class MqttManager(private val context: Context) {
                     Log.e(TAG, errorMsg)
                     FileLogger.log(errorMsg)
                     _isConnected.value = false
+                    _isConnecting.value = false
                      try {
                          _connectionError.tryEmit("MQTT Connection Failed: ${exception?.message}")
                      } catch (e: Exception) {}
@@ -92,8 +99,11 @@ class MqttManager(private val context: Context) {
             
             client?.setCallback(object : MqttCallbackExtended {
                 override fun connectComplete(reconnect: Boolean, serverURI: String?) {
-                     Log.d(TAG, "Connection Complete. Reconnect=$reconnect")
+                     val logMsg = "MqttManager: Connection Complete (reconnect=$reconnect, uri=$serverURI)"
+                     Log.d(TAG, logMsg)
+                     FileLogger.log(logMsg)
                      _isConnected.value = true
+                     _isConnecting.value = false
                      startKeepAlive(topic)
                 }
                 override fun connectionLost(cause: Throwable?) {
@@ -101,6 +111,7 @@ class MqttManager(private val context: Context) {
                      Log.d(TAG, "Connection Lost")
                      FileLogger.log(errorMsg)
                      _isConnected.value = false
+                     _isConnecting.value = false
                      // stopKeepAlive()
                      _connectionError.tryEmit(errorMsg)
                 }

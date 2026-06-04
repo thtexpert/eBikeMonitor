@@ -29,9 +29,7 @@ fun SettingsScreen(
     val mqttUser by viewModel.settingsRepository.mqttUser.collectAsState("")
     val mqttPass by viewModel.settingsRepository.mqttPassword.collectAsState("")
     
-    val autoBle by viewModel.autoConnectBle.collectAsState()
     val autoMqtt by viewModel.settingsRepository.autoConnectMqtt.collectAsState(true)
-    val autoLaunch by viewModel.settingsRepository.autoLaunchFlow.collectAsState(false)
 
     var showDeviceDialog by remember { mutableStateOf(false) }
 
@@ -88,9 +86,12 @@ fun SettingsScreen(
                     textStyle = MaterialTheme.typography.bodyMedium
                 )
              }
-             // Auto launch
+             // Automation
              item {
-                 Text(stringResource(R.string.header_launch), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                 Text("Automation", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                 
+                 val backgroundStartup by viewModel.backgroundStartup.collectAsState()
+                 
                  Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                     Switch(checked = autoMqtt, onCheckedChange = { viewModel.updateAutoConnectMqtt(it) })
                     Spacer(modifier = Modifier.width(8.dp))
@@ -98,15 +99,9 @@ fun SettingsScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                    Switch(checked = autoBle, onCheckedChange = { viewModel.updateAutoConnectBle(it) })
+                    Switch(checked = backgroundStartup, onCheckedChange = { viewModel.updateBackgroundStartup(it) })
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(R.string.switch_auto_connect_ble), style = MaterialTheme.typography.bodyMedium)
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                    Switch(checked = autoLaunch, onCheckedChange = { viewModel.updateAutoLaunchFlow(it) })
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(R.string.switch_auto_launch_flow), style = MaterialTheme.typography.bodyMedium)
+                    Text("Background Startup (via Flow Notification)", style = MaterialTheme.typography.bodyMedium)
                 }
              }
 

@@ -29,6 +29,7 @@ class SettingsRepository(private val context: Context) {
         val AUTO_CONNECT_BLE = booleanPreferencesKey("auto_connect_ble")
         val AUTO_CONNECT_MQTT = booleanPreferencesKey("auto_connect_mqtt")
         val AUTO_LAUNCH_FLOW = booleanPreferencesKey("auto_launch_flow")
+        val BACKGROUND_STARTUP = booleanPreferencesKey("background_startup")
         
         val MQTT_BROKER_URI = stringPreferencesKey("mqtt_broker_uri")
         val MQTT_USER = stringPreferencesKey("mqtt_user")
@@ -48,6 +49,7 @@ class SettingsRepository(private val context: Context) {
     val autoConnectBle: Flow<Boolean> = context.dataStore.data.map { it[AUTO_CONNECT_BLE] ?: true }
     val autoConnectMqtt: Flow<Boolean> = context.dataStore.data.map { it[AUTO_CONNECT_MQTT] ?: true }
     val autoLaunchFlow: Flow<Boolean> = context.dataStore.data.map { it[AUTO_LAUNCH_FLOW] ?: false }
+    val backgroundStartup: Flow<Boolean> = context.dataStore.data.map { it[BACKGROUND_STARTUP] ?: true }
     
     val mqttBrokerUri: Flow<String> = context.dataStore.data.map { it[MQTT_BROKER_URI] ?: "" }
     val mqttUser: Flow<String> = context.dataStore.data.map { it[MQTT_USER] ?: "" }
@@ -88,6 +90,10 @@ class SettingsRepository(private val context: Context) {
     
     suspend fun saveAutoLaunchFlow(enabled: Boolean) {
         context.dataStore.edit { it[AUTO_LAUNCH_FLOW] = enabled }
+    }
+
+    suspend fun saveBackgroundStartup(enabled: Boolean) {
+        context.dataStore.edit { it[BACKGROUND_STARTUP] = enabled }
     }
     
     suspend fun saveMqttConfig(uri: String, user: String, pass: String) {

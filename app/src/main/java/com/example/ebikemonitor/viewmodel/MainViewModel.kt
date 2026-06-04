@@ -56,25 +56,17 @@ class MainViewModel(
     private val _mqttErrorText = MutableStateFlow("")
     val mqttErrorText = _mqttErrorText.asStateFlow()
     
-    private val _isFlowRunning = MutableStateFlow(false)
-    val isFlowRunning = _isFlowRunning.asStateFlow()
-    
     private val _mqttSessionConnectTime = MutableStateFlow<String?>(null)
     val mqttSessionConnectTime = _mqttSessionConnectTime.asStateFlow()
     private var lastActiveBatterySerial: String? = null
     
-    // Cache for MQTT Delta-Checking
-    private var lastPublishedStatus: BikeStatus? = null
-    private var lastPublishedMqttConnectTime: String? = null
-
-    
-    private val _isUsageAccessGranted = MutableStateFlow(false)
-    val isUsageAccessGranted = _isUsageAccessGranted.asStateFlow()
+    private val _isNotificationAccessGranted = MutableStateFlow(false)
+    val isNotificationAccessGranted = _isNotificationAccessGranted.asStateFlow()
     
     // Combining settings for UI
     val savedBleMac = settingsRepository.bleMacAddress.stateIn(viewModelScope, SharingStarted.Lazily, null)
     val savedEBikeName = settingsRepository.eBikeName.stateIn(viewModelScope, SharingStarted.Lazily, "")
-    val autoConnectBle = settingsRepository.autoConnectBle.stateIn(viewModelScope, SharingStarted.Lazily, true)
+    val backgroundStartup = settingsRepository.backgroundStartup.stateIn(viewModelScope, SharingStarted.Lazily, true)
     
     val bikeProfiles = settingsRepository.bikeProfiles.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     val batteryProfiles = settingsRepository.batteryProfiles.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -92,20 +84,13 @@ class MainViewModel(
             settingsRepository.migrateLegacySettings()
         }
 
-        // Auto-connect logic
+        // Auto-connect MQTT logic (Triggered by UI only if needed, Service handles background auto-connect)
         viewModelScope.launch {
             // Wait for settings to load
             delay(500) 
             
-            val autoBle = settingsRepository.autoConnectBle.first()
-            val mac = settingsRepository.bleMacAddress.first()
-            
-            if (autoBle && !mac.isNullOrEmpty()) {
-                bleManager.connect(mac)
-            }
-            
             val autoMqtt = settingsRepository.autoConnectMqtt.first()
-            if (autoMqtt) {
+            if (autoMqtt && !mqttManager.isConnected.value && !mqttManager.isConnecting.value) {
                 connectMqtt()
             }
         }
@@ -132,33 +117,13 @@ class MainViewModel(
             }
         }
 
-        // MQTT Re-sync logic
+        // MQTT Session Tracking for UI
         viewModelScope.launch {
             mqttManager.isConnected.collect { connected ->
                 if (connected) {
-                    FileLogger.log("MainViewModel: MQTT Connected. Performing Full Sync.")
                     _mqttSessionConnectTime.value = java.time.Instant.now().toString()
-                    // Force a full publish and reset delta cache
-                    lastPublishedStatus = null 
-                    val status = bleManager.bikeStatus.value
-                    publishFullStatus(status)
                 } else {
                     _mqttSessionConnectTime.value = null
-                }
-            }
-        }
-        
-        // BLE Status Reporting to MQTT
-        viewModelScope.launch {
-            bleManager.isConnected.collect { bleConnected ->
-                if (mqttManager.isConnected.value) {
-                     val mac = activeBikeMac.value
-                     val profile = bikeProfiles.value.find { it.macAddress == mac }
-                     if (profile != null && profile.lastDiscoveryVersion >= CURRENT_BIKE_DISCOVERY_VERSION) {
-                         val bikeTopic = "ebikemonitor/${mac?.lowercase()?.replace(":", "") ?: "unknown"}"
-                         val statusPayload = if (bleConnected) "connected" else "disconnected"
-                         mqttManager.publish("$bikeTopic/blestatus", statusPayload)
-                     }
                 }
             }
         }
@@ -232,304 +197,35 @@ class MainViewModel(
             }
         }
 
-        // MQTT Live Update logic (Throttled to 1Hz + Delta-checking)
-        viewModelScope.launch {
-             bleManager.bikeStatus
-                 .sample(1000) // Limit updates to 1 per second
-                 .collect { status ->
-                     if (mqttManager.isConnected.value) {
-                         publishThrottledStatus(status)
-                     }
-                 }
-        }
-
-        // Auto-launch Flow App logic
-        viewModelScope.launch {
-            bleManager.isConnected.collect { connected ->
-                if (connected) {
-                    val autoLaunch = settingsRepository.autoLaunchFlow.first()
-                    // Only auto-launch if NOT already running
-                    if (autoLaunch && !_isFlowRunning.value) {
-                        delay(200)
-                        launchBoschApp()
-                    }
-                }
-            }
-        }
-
-        // Periodic Flow App Running Check
+        // Periodic Permission Check
         viewModelScope.launch {
             while (true) {
-                checkFlowAppState()
-                delay(1000) // 1-second interval as requested
+                checkPermissions()
+                delay(2000)
             }
         }
     }
 
-    private fun checkFlowAppState() {
+    private fun checkPermissions() {
         val context = getApplication<Application>()
-        val packageName = "com.bosch.ebike.onebikeapp"
-        
-        // 1. Check if permission is granted
-        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        val mode = appOps.unsafeCheckOpNoThrow(
-            AppOpsManager.OPSTR_GET_USAGE_STATS,
-            Process.myUid(),
-            context.packageName
-        )
-        val granted = mode == AppOpsManager.MODE_ALLOWED
-        _isUsageAccessGranted.value = granted
-
-        if (!granted) {
-            _isFlowRunning.value = false
-            return
-        }
-
-        // 2. Check if running using UsageStatsManager Events (more stable)
-        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val endTime = System.currentTimeMillis()
-        val startTime = endTime - 2000 // Look back 1 minute for events
-        
-        val events = usageStatsManager.queryEvents(startTime, endTime)
-        val event = UsageEvents.Event()
-        
-        var isRunning = _isFlowRunning.value // Keep previous state as fallback
-        
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event)
-            if (event.packageName == packageName) {
-                when (event.eventType) {
-                    UsageEvents.Event.ACTIVITY_RESUMED,
-                    UsageEvents.Event.ACTIVITY_PAUSED -> {
-                        isRunning = true
-                    }
-                    UsageEvents.Event.ACTIVITY_STOPPED -> {
-                        isRunning = false
-                    }
-                    // Foreground Service events (API 29+)
-                    19 -> isRunning = true // UsageEvents.Event.FOREGROUND_SERVICE_START
-                    20 -> isRunning = false // UsageEvents.Event.FOREGROUND_SERVICE_STOP
-                }
-            }
-        }
-        
-        // Fallback: If no events in the last minute, check aggregate stats
-        if (startTime > endTime - 60000 && !isRunning) {
-            val stats = usageStatsManager.queryAndAggregateUsageStats(endTime - 300000, endTime)
-            val flowStats = stats[packageName]
-            if (flowStats != null) {
-                isRunning = (endTime - flowStats.lastTimeUsed) < 15000 
-            }
-        }
-
-        _isFlowRunning.value = isRunning
+        val enabledListeners = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+        val packageName = context.packageName
+        val isGranted = enabledListeners != null && enabledListeners.contains(packageName)
+        _isNotificationAccessGranted.value = isGranted
     }
 
-    fun openUsageAccessSettings() {
+    fun openNotificationAccessSettings() {
         try {
-            val intent = Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)
+            val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             getApplication<Application>().startActivity(intent)
         } catch (e: Exception) {
-            Log.e("MainViewModel", "Error opening usage access settings: ${e.message}")
-        }
-    }
-
-    fun stopBoschApp() {
-        val packageName = "com.bosch.ebike.onebikeapp"
-        try {
-            // 1. Try to kill background processes
-            val am = getApplication<Application>().getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            am.killBackgroundProcesses(packageName)
-            
-            // 2. Open App Info screen as fallback/helper for manual Force Stop
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-            intent.data = Uri.parse("package:$packageName")
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            getApplication<Application>().startActivity(intent)
-        } catch (e: Exception) {
-            Log.e("MainViewModel", "Error stopping Bosch app: ${e.message}")
+            Log.e("MainViewModel", "Error opening notification access settings: ${e.message}")
         }
     }
     
     private fun sanitizeForMqtt(input: String): String {
         return input.lowercase().replace(Regex("[^a-z0-9]"), "_")
-    }
-
-    private suspend fun publishThrottledStatus(status: BikeStatus) {
-        val mac = activeBikeMac.value
-        val profile = bikeProfiles.value.find { it.macAddress == mac }
-        if (profile == null || profile.lastDiscoveryVersion < CURRENT_BIKE_DISCOVERY_VERSION) return
-
-        val bikeTopic = "ebikemonitor/${mac?.lowercase()?.replace(":", "") ?: "unknown"}"
-        val last = lastPublishedStatus
-
-        // Helper to publish only if value changed OR if first time (last == null)
-        fun <T> pubIfDiff(topic: String, newValue: T?, lastValue: T?, retained: Boolean = false) {
-            if (newValue != null && newValue != lastValue) {
-                mqttManager.publish(topic, newValue.toString(), retained)
-            }
-        }
-
-        // --- BIKE TELEMETRY ---
-        pubIfDiff("$bikeTopic/speed", status.speed, last?.speed)
-        pubIfDiff("$bikeTopic/cadence", status.cadence, last?.cadence)
-        
-        val newMode = status.assistMode?.let { getAssistModeName(it, status.assistModeNames) }
-        val lastMode = last?.assistMode?.let { getAssistModeName(it, last.assistModeNames) }
-        pubIfDiff("$bikeTopic/assistmode", newMode, lastMode)
-        
-        pubIfDiff("$bikeTopic/power", status.humanPower, last?.humanPower)
-        pubIfDiff("$bikeTopic/motorpower", status.motorPower, last?.motorPower)
-        
-        if (status.totalDistance != last?.totalDistance && (status.totalDistance ?: 0.0) > 0) {
-            mqttManager.publish("$bikeTopic/totaldistance", status.totalDistance.toString(), retained = true)
-        }
-        
-        if (status.batteryLevel != last?.batteryLevel && (status.batteryLevel ?: 0) > 0) {
-            mqttManager.publish("$bikeTopic/stateofcharge", status.batteryLevel.toString(), retained = true)
-        }
-
-        if (status.totalBattery != last?.totalBattery && (status.totalBattery ?: 0.0) > 0) {
-            mqttManager.publish("$bikeTopic/totalbattery", status.totalBattery.toString(), retained = true)
-        }
-
-        if (status.totalEnergyFromMotor != last?.totalEnergyFromMotor && (status.totalEnergyFromMotor ?: 0.0) > 0) {
-            mqttManager.publish("$bikeTopic/totalenergy", status.totalEnergyFromMotor.toString(), retained = true)
-        }
-
-        pubIfDiff("$bikeTopic/ebikeledsoftwareversion", status.ebikeLedSoftwareVersion, last?.ebikeLedSoftwareVersion, true)
-        pubIfDiff("$bikeTopic/batteryserialnumber", status.batterySerialNumber, last?.batterySerialNumber, true)
-        pubIfDiff("$bikeTopic/totalhours", status.driveUnitHours, last?.driveUnitHours, true)
-
-        // Per-Mode Metrics
-        status.sortedUsageRecordsB.forEachIndexed { index, record ->
-            if (record != null) {
-                val lastRecord = last?.sortedUsageRecordsB?.getOrNull(index)
-                val modeName = status.assistModeNames.getOrNull(index) ?: return@forEachIndexed
-                val safeMode = sanitizeForMqtt(modeName)
-                
-                if (record.distance != lastRecord?.distance && record.distance > 0) {
-                    mqttManager.publish("$bikeTopic/${safeMode}distance", (record.distance / 1000.0).toString(), retained = true)
-                }
-                if (record.energy != lastRecord?.energy && record.energy > 0) {
-                    mqttManager.publish("$bikeTopic/${safeMode}energy", (record.energy / 1000.0).toString(), retained = true)
-                }
-            }
-        }
-
-        // Session Metadata
-        val bleConnected = bleManager.isConnected.value
-        if (bleConnected != (last?.lastUpdateTimestamp ?: 0L > 0 && bleManager.isConnected.value)) { // Simple check for connection change
-             mqttManager.publish("$bikeTopic/blestatus", if (bleConnected) "connected" else "disconnected")
-        }
-
-        if (mqttSessionConnectTime.value != lastPublishedMqttConnectTime) {
-            mqttSessionConnectTime.value?.let { 
-                mqttManager.publish("$bikeTopic/mqttconnecttimestamp", it, retained = true) 
-                lastPublishedMqttConnectTime = it
-            }
-        }
-        
-        // --- POWERTUBE TELEMETRY ---
-        val currentSerial = status.batterySerialNumber
-        val lastSerial = last?.batterySerialNumber
-        
-        if (!currentSerial.isNullOrEmpty()) {
-            if (lastActiveBatterySerial != currentSerial) {
-                lastActiveBatterySerial = currentSerial
-            }
-            
-            val battProfile = batteryProfiles.value.find { it.hardwareSerial == currentSerial }
-            if (battProfile != null) {
-                val battTopic = "powertube/$currentSerial"
-                if (status.batteryLevel != last?.batteryLevel && (status.batteryLevel ?: 0) > 0) {
-                    mqttManager.publish("$battTopic/stateofcharge", status.batteryLevel.toString(), retained = true)
-                }
-                if (status.totalBattery != last?.totalBattery && (status.totalBattery ?: 0.0) > 0) {
-                    mqttManager.publish("$battTopic/totalbattery", status.totalBattery.toString(), retained = true)
-                }
-                pubIfDiff("$battTopic/chargecycles", status.chargeCycles, last?.chargeCycles, true)
-                pubIfDiff("$battTopic/serial", currentSerial, lastSerial, true)
-            }
-        }
-
-        lastPublishedStatus = status
-    }
-
-    private suspend fun publishFullStatus(status: BikeStatus) {
-        val mac = activeBikeMac.value
-        val deviceId = mac?.lowercase()?.replace(":", "") ?: "unknown"
-        val bikeTopic = "ebikemonitor/$deviceId"
-        
-        // Use FileLogger to record the sync
-        FileLogger.log("MainViewModel: Syncing full status for $deviceId")
-
-        status.speed?.let { mqttManager.publish("$bikeTopic/speed", it.toString()) }
-        status.cadence?.let { mqttManager.publish("$bikeTopic/cadence", it.toString()) }
-        status.humanPower?.let { mqttManager.publish("$bikeTopic/power", it.toString()) }
-        
-        status.batteryLevel?.let {
-            if (it > 0) mqttManager.publish("$bikeTopic/stateofcharge", it.toString(), retained = true)
-        }
-        
-        status.assistMode?.let { mqttManager.publish("$bikeTopic/assistmode", getAssistModeName(it, status.assistModeNames)) }
-        
-        status.totalDistance?.let {
-            if (it > 0) mqttManager.publish("$bikeTopic/totaldistance", it.toString(), retained = true)
-        }
-
-        status.totalBattery?.let {
-            if (it > 0) mqttManager.publish("$bikeTopic/totalbattery", it.toString(), retained = true)
-        }
-        
-        status.totalEnergyFromMotor?.let {
-            if (it > 0) mqttManager.publish("$bikeTopic/totalenergy", it.toString(), retained = true)
-        }
-        
-        status.motorPower?.let { mqttManager.publish("$bikeTopic/motorpower", it.toString()) }
-        status.ebikeLedSoftwareVersion?.let { mqttManager.publish("$bikeTopic/ebikeledsoftwareversion", it, retained = true) }
-        
-        val serialToUse = status.batterySerialNumber ?: lastActiveBatterySerial
-        serialToUse?.let { serial ->
-            mqttManager.publish("$bikeTopic/batteryserialnumber", serial, retained = true)
-            status.driveUnitHours?.let { mqttManager.publish("$bikeTopic/totalhours", it.toString(), retained = true) }
-            
-            // Also sync battery-specific topics
-            val battTopic = "powertube/$serial"
-            status.batteryLevel?.let {
-                if (it > 0) mqttManager.publish("$battTopic/stateofcharge", it.toString(), retained = true)
-            }
-            status.totalBattery?.let {
-                if (it > 0) mqttManager.publish("$battTopic/totalbattery", it.toString(), retained = true)
-            }
-            status.chargeCycles?.let { 
-                mqttManager.publish("$battTopic/chargecycles", it.toString(), retained = true)
-            }
-            mqttManager.publish("$battTopic/serial", serial, retained = true)
-        }
-
-        mqttSessionConnectTime.value?.let { 
-            mqttManager.publish("$bikeTopic/mqttconnecttimestamp", it, retained = true)
-        }
-
-        // Per-Mode Metrics
-        status.sortedUsageRecordsB.forEachIndexed { index, record ->
-            if (record != null) {
-                val modeName = status.assistModeNames.getOrNull(index) ?: return@forEachIndexed
-                val safeMode = sanitizeForMqtt(modeName)
-                
-                if (record.distance > 0) {
-                    mqttManager.publish("$bikeTopic/${safeMode}distance", (record.distance / 1000.0).toString(), retained = true)
-                }
-                if (record.energy > 0) {
-                    mqttManager.publish("$bikeTopic/${safeMode}energy", (record.energy / 1000.0).toString(), retained = true)
-                }
-            }
-        }
-        
-        // Update the cache after full sync
-        lastPublishedStatus = status
     }
 
     fun connectMqtt() {
@@ -602,20 +298,6 @@ class MainViewModel(
         }
     }
 
-    fun launchBoschApp() {
-        try {
-            val packageName = "com.bosch.ebike.onebikeapp"
-            val intent = getApplication<Application>().packageManager.getLaunchIntentForPackage(packageName)
-            if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                getApplication<Application>().startActivity(intent)
-            } else {
-                Log.e("MainViewModel", "Bosch Flow app not installed")
-            }
-        } catch (e: Exception) {
-            Log.e("MainViewModel", "Error launching Bosch app: ${e.message}")
-        }
-    }
 
     fun updateBikeDiscovery() {
         viewModelScope.launch {
@@ -627,9 +309,6 @@ class MainViewModel(
             mqttManager.sendBikeDiscovery(deviceId, name, uiState.value.assistModeNames)
             
             settingsRepository.updateBikeDiscoveryVersion(mac, CURRENT_BIKE_DISCOVERY_VERSION)
-            
-            // Re-sync after discovery update to unblock telemetry
-            publishFullStatus(uiState.value)
         }
     }
 
@@ -663,16 +342,16 @@ class MainViewModel(
         }
     }
     
-    fun updateAutoConnectBle(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.saveAutoConnectBle(enabled) }
-    }
-    
     fun updateAutoConnectMqtt(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.saveAutoConnectMqtt(enabled) }
+        viewModelScope.launch {
+            settingsRepository.saveAutoConnectMqtt(enabled)
+        }
     }
-    
-    fun updateAutoLaunchFlow(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.saveAutoLaunchFlow(enabled) }
+
+    fun updateBackgroundStartup(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.saveBackgroundStartup(enabled)
+        }
     }
 
     override fun onCleared() {

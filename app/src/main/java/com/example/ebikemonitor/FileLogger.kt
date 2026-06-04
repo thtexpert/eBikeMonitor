@@ -18,7 +18,7 @@ object FileLogger {
     private const val MAX_FILE_SIZE = 1024 * 1024 // 1 MB
     
     // Set to true only when troubleshooting is needed
-    private const val ENABLE_FILE_LOGGING = false
+    private const val ENABLE_FILE_LOGGING = true
     
     private val executor = Executors.newSingleThreadExecutor()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
@@ -26,7 +26,7 @@ object FileLogger {
     private var logFile: File? = null
 
     fun init(context: Context) {
-        logFile = File(context.filesDir, LOG_FILE_NAME)
+        logFile = File(context.getExternalFilesDir(null), LOG_FILE_NAME)
         if (ENABLE_FILE_LOGGING) {
             log("FileLogger initialized. File path: ${logFile?.absolutePath}")
         }
