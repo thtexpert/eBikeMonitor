@@ -83,6 +83,7 @@ class MqttManager(private val context: Context) {
                     _isConnected.value = true
                     _isConnecting.value = false
                     startKeepAlive(topic)
+                    publish("$topic/mqttconnecttimestamp", java.time.Instant.now().toString(), retained = true)
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
@@ -105,6 +106,7 @@ class MqttManager(private val context: Context) {
                      _isConnected.value = true
                      _isConnecting.value = false
                      startKeepAlive(topic)
+                     publish("$topic/mqttconnecttimestamp", java.time.Instant.now().toString(), retained = true)
                 }
                 override fun connectionLost(cause: Throwable?) {
                      val errorMsg = "MqttManager: Connection Lost: ${cause?.message}"
