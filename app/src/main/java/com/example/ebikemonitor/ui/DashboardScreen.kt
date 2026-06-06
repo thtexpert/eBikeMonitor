@@ -80,9 +80,6 @@ fun DashboardScreen(
                     ) 
                 },
                 actions = {
-                    if (isLandscape) {
-                        CompactActionButtons(viewModel, isMqttConnected, isBleConnected)
-                    }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.content_desc_settings))
                     }
@@ -281,6 +278,9 @@ fun LandscapeLayout(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
     ) {
+        item(span = { GridItemSpan(2) }) {
+            ActionButtonsRow(viewModel, isMqttConnected, isBleConnected)
+        }
         item(span = { GridItemSpan(2) }) {
             DiscoveryUpdateNudges(viewModel)
         }

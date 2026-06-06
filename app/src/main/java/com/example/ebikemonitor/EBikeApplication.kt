@@ -4,6 +4,8 @@ import android.app.Application
 import com.example.ebikemonitor.data.ble.BleManager
 import com.example.ebikemonitor.data.datasource.SettingsRepository
 import com.example.ebikemonitor.data.mqtt.MqttManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class EBikeApplication : Application() {
     
@@ -11,6 +13,16 @@ class EBikeApplication : Application() {
     val settingsRepository by lazy { SettingsRepository(this) }
     val bleManager by lazy { BleManager(this) }
     val mqttManager by lazy { MqttManager(this) }
+    
+    private val _isUiActive = MutableStateFlow(false)
+    val isUiActive = _isUiActive.asStateFlow()
+    
+    fun setUiActive(active: Boolean) {
+        if (_isUiActive.value != active) {
+            _isUiActive.value = active
+            FileLogger.log("EBikeApplication: UI active status changed to: $active")
+        }
+    }
     
     companion object {
         // Simple way to access instance if needed, though usually passed via Context

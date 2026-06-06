@@ -383,8 +383,15 @@ class BleManager(private val context: Context) {
         return bluetoothAdapter?.bondedDevices?.toList() ?: emptyList()
     }
 
+    val isConnectingOrConnected: Boolean
+        get() = bluetoothGatt != null
+
     fun connect(macAddress: String) {
         if (bluetoothAdapter == null) return
+        if (_isConnected.value || bluetoothGatt != null) {
+            Log.d("BleManager", "Already connected or connecting. Ignoring request.")
+            return
+        }
         val device = bluetoothAdapter.getRemoteDevice(macAddress)
         bluetoothGatt = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
@@ -395,6 +402,9 @@ class BleManager(private val context: Context) {
 
     fun disconnect() {
         bluetoothGatt?.disconnect()
+        bluetoothGatt?.close()
+        bluetoothGatt = null
+        _isConnected.value = false
     }
 
     fun isBluetoothEnabled(): Boolean {

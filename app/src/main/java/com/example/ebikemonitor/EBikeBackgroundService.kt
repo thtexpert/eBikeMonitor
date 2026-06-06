@@ -14,8 +14,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import com.example.ebikemonitor.service.EBikeNotificationListener
 
 class EBikeBackgroundService : Service() {
 
@@ -64,11 +68,20 @@ class EBikeBackgroundService : Service() {
             }
         }
 
-        // 3. Observe connection state to update notification
+        // 3. Observe connection states to update notification
         serviceScope.launch {
-            bleManager.isConnected.collect { connected ->
-                FileLogger.log("EBikeBackgroundService: BLE connection changed to: $connected")
-                updateNotification(if (connected) "Connected to eBike BLE" else "BLE disconnected")
+            combine(
+                bleManager.isConnected,
+                mqttManager.isConnected,
+                settings.autoConnectMqtt
+            ) { bleConnected, mqttConnected, autoMqtt ->
+                Triple(bleConnected, mqttConnected, autoMqtt)
+            }.distinctUntilChanged()
+             .collect { (bleConnected, mqttConnected, autoMqtt) ->
+                val bleStr = if (bleConnected) "Connected" else "Reconnecting..."
+                val mqttStr = if (mqttConnected) "Connected" else if (autoMqtt) "Reconnecting..." else "Disconnected"
+                FileLogger.log("EBikeBackgroundService: Connection status update - BLE: $bleStr, MQTT: $mqttStr")
+                updateNotification("BLE: $bleStr | MQTT: $mqttStr")
             }
         }
 
@@ -93,43 +106,41 @@ class EBikeBackgroundService : Service() {
                 }
         }
 
-        // 5. Connect!
+        // 5. Connection Gate Logic
+        var lastFlowConnected: Boolean? = null
         serviceScope.launch {
-            try {
-                val savedMac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first()
-                if (!savedMac.isNullOrEmpty()) {
-                    FileLogger.log("EBikeBackgroundService: Starting auto-connect to $savedMac")
-                    bleManager.connect(savedMac)
-                } else {
-                    FileLogger.log("EBikeBackgroundService: No saved MAC found.")
-                }
-            } catch (e: Exception) {
-                FileLogger.log("EBikeBackgroundService: Connection error: ${e.message}")
-            }
-        }
-
-        // Auto-connect to MQTT if enabled
-        serviceScope.launch {
-            try {
-                val autoMqtt = settings.autoConnectMqtt.first()
-                if (autoMqtt) {
-                    val uri = settings.mqttBrokerUri.first()
-                    val user = settings.mqttUser.first()
-                    val pass = settings.mqttPassword.first()
-                    val eBikeName = settings.eBikeName.first()
-                    val mac = settings.bleMacAddress.first()
-                    
-                    if (uri.isNotEmpty()) {
-                        val clientId = if (eBikeName.isNotEmpty()) eBikeName else "MyEbike"
-                        val deviceId = mac?.lowercase()?.replace(":", "") ?: "unknown"
-                        val topic = "ebikemonitor/$deviceId"
-                        
-                        FileLogger.log("EBikeBackgroundService: Attempting MQTT auto-connect to $uri")
-                        app.mqttManager.connect(uri, clientId, user, pass, topic)
+            combine(
+                EBikeNotificationListener.flowConnectedState,
+                settings.backgroundStartup,
+                app.isUiActive
+            ) { flowConnected, bgStartup, uiActive ->
+                Triple(flowConnected, bgStartup, uiActive)
+            }.distinctUntilChanged()
+             .collect { (flowConnected, bgStartup, uiActive) ->
+                val shouldMonitor = flowConnected && bgStartup
+                val shouldServiceRun = uiActive || shouldMonitor
+                
+                FileLogger.log("EBikeBackgroundService: State updated: flowConnected=$flowConnected, bgStartup=$bgStartup, uiActive=$uiActive -> shouldMonitor=$shouldMonitor, shouldServiceRun=$shouldServiceRun")
+                
+                if (shouldServiceRun) {
+                    if (shouldMonitor) {
+                        startReconnectionLoop()
+                    } else {
+                        stopReconnectionLoop()
+                        // Disconnect if Flow was connected and now it disconnected (transition from true to false)
+                        if (lastFlowConnected == true && !flowConnected) {
+                            FileLogger.log("EBikeBackgroundService: Flow disconnected. Disconnecting BLE and MQTT.")
+                            bleManager.disconnect()
+                            mqttManager.disconnect()
+                        }
                     }
+                } else {
+                    stopReconnectionLoop()
+                    FileLogger.log("EBikeBackgroundService: Stopping service reactively (UI inactive & Flow disconnected).")
+                    stopSelf()
                 }
-            } catch (e: Exception) {
-                FileLogger.log("EBikeBackgroundService: MQTT auto-connect error: ${e.message}")
+                
+                lastFlowConnected = flowConnected
             }
         }
 
@@ -258,8 +269,18 @@ class EBikeBackgroundService : Service() {
     
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // This is called when the app is swiped away from the recent apps list
-        stopSelf()
+        // Only stop if we shouldn't be monitoring in the background
+        serviceScope.launch {
+            val app = application as EBikeApplication
+            val flowConnected = EBikeNotificationListener.flowConnectedState.value
+            val bgStartup = app.settingsRepository.backgroundStartup.first()
+            if (!(flowConnected && bgStartup)) {
+                FileLogger.log("EBikeBackgroundService: onTaskRemoved: No active background monitoring. Stopping service.")
+                stopSelf()
+            } else {
+                FileLogger.log("EBikeBackgroundService: onTaskRemoved: Background monitoring active. Keeping service running.")
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -272,7 +293,8 @@ class EBikeBackgroundService : Service() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(NOTIFICATION_ID)
         
-        // Disconnect MQTT (best effort)
+        // Disconnect BLE and MQTT
+        app.bleManager.disconnect()
         app.mqttManager.disconnect()
         serviceScope.cancel() 
         
@@ -300,14 +322,62 @@ class EBikeBackgroundService : Service() {
 
     @android.annotation.SuppressLint("MissingPermission")
     private fun updateNotification(text: String) {
-        // Don't show 'disconnected' notification as a persistent one if we are cleaning up
-        if (text.contains("disconnected", ignoreCase = true)) {
-             // Let onDestroy handle it, or just don't update to a negative state
-             return
-        }
-        
         val notification = createNotification(text)
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, notification)
+    }
+
+    private var reconnectionJob: kotlinx.coroutines.Job? = null
+
+    private fun startReconnectionLoop() {
+        if (reconnectionJob != null && reconnectionJob!!.isActive) return
+        
+        FileLogger.log("EBikeBackgroundService: Starting reconnection loop")
+        reconnectionJob = serviceScope.launch {
+            val app = application as EBikeApplication
+            val settings = app.settingsRepository
+            val bleManager = app.bleManager
+            val mqttManager = app.mqttManager
+            
+            while (isActive) {
+                // 1. Maintain BLE Connection
+                if (!bleManager.isConnected.value && !bleManager.isConnectingOrConnected) {
+                    val savedMac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first()
+                    if (!savedMac.isNullOrEmpty()) {
+                        FileLogger.log("EBikeBackgroundService: Reconnection Loop: Connecting BLE to $savedMac")
+                        bleManager.connect(savedMac)
+                    }
+                }
+                
+                // 2. Maintain MQTT Connection
+                val autoMqtt = settings.autoConnectMqtt.first()
+                if (autoMqtt && !mqttManager.isConnected.value && !mqttManager.isConnecting.value) {
+                    val uri = settings.mqttBrokerUri.first()
+                    val user = settings.mqttUser.first()
+                    val pass = settings.mqttPassword.first()
+                    val eBikeName = settings.eBikeName.first()
+                    val mac = settings.bleMacAddress.first()
+                    
+                    if (uri.isNotEmpty()) {
+                        val clientId = if (eBikeName.isNotEmpty()) eBikeName else "MyEbike"
+                        val deviceId = mac?.lowercase()?.replace(":", "") ?: "unknown"
+                        val topic = "ebikemonitor/$deviceId"
+                        
+                        FileLogger.log("EBikeBackgroundService: Reconnection Loop: Connecting MQTT to $uri")
+                        mqttManager.connect(uri, clientId, user, pass, topic)
+                    }
+                }
+                
+                kotlinx.coroutines.delay(10000)
+            }
+        }
+    }
+
+    private fun stopReconnectionLoop() {
+        if (reconnectionJob != null) {
+            FileLogger.log("EBikeBackgroundService: Stopping reconnection loop")
+            reconnectionJob?.cancel()
+            reconnectionJob = null
+        }
     }
 }

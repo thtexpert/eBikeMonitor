@@ -35,12 +35,18 @@ class MainActivity : ComponentActivity() {
         // If critical are missing, we might show a dialog.
     }
 
+    override fun onStart() {
+        super.onStart()
+        (application as EBikeApplication).setUiActive(true)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        (application as EBikeApplication).setUiActive(false)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        if (!isChangingConfigurations) {
-            val serviceIntent = android.content.Intent(this, EBikeBackgroundService::class.java)
-            stopService(serviceIntent)
-        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
