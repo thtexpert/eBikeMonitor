@@ -132,7 +132,7 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                     Switch(checked = useDirectDetection, onCheckedChange = { viewModel.toggleDirectDetection(it, context) })
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Direct eBike Detection (Experimental)", style = MaterialTheme.typography.bodyMedium)
+                    Text("Direct eBike Detection (Fallback)", style = MaterialTheme.typography.bodyMedium)
                 }
              }
 
