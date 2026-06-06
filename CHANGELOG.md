@@ -2,6 +2,19 @@
 
 All notable changes to the **eBikeMonitor** project will be documented in this file.
 
+## [1.15.0] - 2026-06-06
+### Added
+- Hardware-level Direct eBike Detection using Android `CompanionDeviceManager` as a fallback.
+- Background Startup mechanism using Notification Listener to detect when Bosch Flow connects.
+
+### Fixed
+- Persistent session tracking bug across power cycles (multi-ride corruption).
+- Reduced MQTT broker spam by adding a 30-second connection debounce.
+- Cleaned up MQTT Reconnection loop to prevent connection collisions.
+
+### Changed
+- Reverted mutual exclusivity of detection settings, allowing both Notification and Direct Detection to run in tandem.
+
 ## [1.14.0] - 2026-04-26
 ### Added
 - Comprehensive Bosch BLE decoding for `0x108C` (Usage Records) and `0xA252` (Trip Distance).
