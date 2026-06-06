@@ -467,7 +467,7 @@ fun ActionButtonsRow(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        if (isBleConnected) "Monitoring Active" else "Waiting for Bosch Flow connect",
+                        if (isBleConnected) "Monitoring Active" else "Waiting for eBike connection...",
                         fontWeight = FontWeight.Medium,
                         fontSize = 12.sp,
                         color = if (isBleConnected) Color(0xFF4CAF50) else Color.Gray

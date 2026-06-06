@@ -172,6 +172,8 @@ class BleManager(private val context: Context) {
                     val softwareVersion = msg.decodeStringField()
                     if (softwareVersion != null) {
                         currentStatus = currentStatus.copy(ebikeLedSoftwareVersion = softwareVersion)
+                        Log.d("BleManager", "LED Software Version decoded: $softwareVersion")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: LED Software Version decoded: $softwareVersion")
                     }
                 }
                 0x0081 -> {
@@ -405,6 +407,19 @@ class BleManager(private val context: Context) {
         bluetoothGatt?.close()
         bluetoothGatt = null
         _isConnected.value = false
+        
+        // Clear session tracking variables so the next connection starts fresh
+        _bikeStatus.value = _bikeStatus.value.copy(
+            initialTripDistPerMode = null,
+            initialUnsortedUsageRecords = null,
+            modeToInitialIndex = emptyMap(),
+            confirmedModeIndices = emptySet(),
+            startupDecodingStatus = null,
+            startupError = null,
+            startupSecondaryError = null,
+            prevTripDistPerMode = null,
+            prevUnsortedUsageRecords = null
+        )
     }
 
     fun isBluetoothEnabled(): Boolean {

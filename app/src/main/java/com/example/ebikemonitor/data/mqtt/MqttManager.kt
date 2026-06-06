@@ -35,6 +35,7 @@ class MqttManager(private val context: Context) {
 
     private var keepAliveJob: kotlinx.coroutines.Job? = null
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+    private var lastConnectTimestamp = 0L
 
     fun connect(brokerUrl: String, clientId: String, user: String, pass: String, topic: String) {
         val serverUri = "$brokerUrl"
@@ -83,7 +84,12 @@ class MqttManager(private val context: Context) {
                     _isConnected.value = true
                     _isConnecting.value = false
                     startKeepAlive(topic)
-                    publish("$topic/mqttconnecttimestamp", java.time.Instant.now().toString(), retained = true)
+                    
+                    val now = System.currentTimeMillis()
+                    if (now - lastConnectTimestamp >= 30000) {
+                        publish("$topic/mqttconnecttimestamp", java.time.Instant.now().toString(), retained = true)
+                        lastConnectTimestamp = now
+                    }
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
@@ -106,7 +112,12 @@ class MqttManager(private val context: Context) {
                      _isConnected.value = true
                      _isConnecting.value = false
                      startKeepAlive(topic)
-                     publish("$topic/mqttconnecttimestamp", java.time.Instant.now().toString(), retained = true)
+                     
+                     val now = System.currentTimeMillis()
+                     if (now - lastConnectTimestamp >= 30000) {
+                         publish("$topic/mqttconnecttimestamp", java.time.Instant.now().toString(), retained = true)
+                         lastConnectTimestamp = now
+                     }
                 }
                 override fun connectionLost(cause: Throwable?) {
                      val errorMsg = "MqttManager: Connection Lost: ${cause?.message}"

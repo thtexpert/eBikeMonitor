@@ -22,6 +22,11 @@
     <!-- Android 13+ Notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     
+    <!-- Companion Device Manager -->
+    <uses-feature android:name="android.software.companion_device_setup" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
+    
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" 
         tools:ignore="QueryAllPackagesPermission" />
     
@@ -52,6 +57,15 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <service android:name=".service.EBikeCompanionService"
+            android:label="eBike Companion Service"
+            android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.companion.CompanionDeviceService" />
             </intent-filter>
         </service>
             
