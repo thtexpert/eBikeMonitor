@@ -68,6 +68,15 @@ fun DashboardScreen(
         }
     }
 
+    val onBleClick = {
+        if (!viewModel.isBluetoothEnabled()) {
+            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            bluetoothEnableLauncher.launch(enableBtIntent)
+        } else {
+            viewModel.toggleBleConnection()
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -81,7 +90,7 @@ fun DashboardScreen(
                 },
                 actions = {
                     if (isLandscape) {
-                        CompactActionButtons(viewModel, isMqttConnected, isBleConnected)
+                        CompactActionButtons(viewModel, isMqttConnected, isBleConnected, onBleClick)
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                     IconButton(onClick = onNavigateToSettings) {
@@ -102,9 +111,9 @@ fun DashboardScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             if (isLandscape) {
-                LandscapeLayout(viewModel, bikeStatus, isMqttConnected, isBleConnected)
+                LandscapeLayout(viewModel, bikeStatus, isMqttConnected, isBleConnected, onBleClick)
             } else {
-                PortraitLayout(viewModel, bikeStatus, isMqttConnected, isBleConnected, bluetoothEnableLauncher)
+                PortraitLayout(viewModel, bikeStatus, isMqttConnected, isBleConnected, onBleClick)
             }
 
             // Version Info at Bottom
@@ -201,7 +210,7 @@ fun PortraitLayout(
     bikeStatus: BikeStatus,
     isMqttConnected: Boolean,
     isBleConnected: Boolean,
-    bluetoothEnableLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Intent, androidx.activity.result.ActivityResult>
+    onBleClick: () -> Unit
 ) {
     val mqttConnectTime by viewModel.mqttSessionConnectTime.collectAsState()
 
@@ -211,7 +220,7 @@ fun PortraitLayout(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ActionButtonsRow(viewModel, isMqttConnected, isBleConnected)
+        ActionButtonsRow(viewModel, isMqttConnected, isBleConnected, onBleClick)
         
         DiscoveryUpdateNudges(viewModel)
 
@@ -271,7 +280,8 @@ fun LandscapeLayout(
     viewModel: MainViewModel,
     bikeStatus: BikeStatus,
     isMqttConnected: Boolean,
-    isBleConnected: Boolean
+    isBleConnected: Boolean,
+    onBleClick: () -> Unit
 ) {
     val mqttConnectTime by viewModel.mqttSessionConnectTime.collectAsState()
 
@@ -412,6 +422,7 @@ fun ActionButtonsRow(
     viewModel: MainViewModel,
     isMqttConnected: Boolean,
     isBleConnected: Boolean,
+    onBleClick: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         NotificationAccessNudge(viewModel)
@@ -426,7 +437,8 @@ fun ActionButtonsRow(
                 modifier = Modifier.weight(2f),
                 color = if (isBleConnected) Color(0xFF4CAF50).copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, if (isBleConnected) Color(0xFF4CAF50) else Color.Transparent)
+                border = BorderStroke(1.dp, if (isBleConnected) Color(0xFF4CAF50) else Color.Transparent),
+                onClick = onBleClick
             ) {
                 Row(
                     modifier = Modifier.padding(8.dp),
@@ -502,6 +514,7 @@ fun CompactActionButtons(
     viewModel: MainViewModel,
     isMqttConnected: Boolean,
     isBleConnected: Boolean,
+    onBleClick: () -> Unit
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -510,7 +523,7 @@ fun CompactActionButtons(
         val bleColor = if (isBleConnected) Color(0xFF4CAF50) else Color.Gray
         val mqttColor = if (isMqttConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
         
-        StatusCapsule(if (isBleConnected) "BLE: OK" else "BLE: Wait", bleColor) { }
+        StatusCapsule(if (isBleConnected) "BLE: OK" else "BLE: Wait", bleColor) { onBleClick() }
         StatusCapsule(stringResource(R.string.btn_mqtt), mqttColor) { viewModel.toggleMqttConnection() }
     }
 }
