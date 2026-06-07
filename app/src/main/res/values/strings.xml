@@ -31,6 +31,7 @@
     <string name="btn_save_mqtt_config">Save MQTT Config</string>
     <string name="text_discovery_prefix">Discovery (homeassistant)</string>
     <string name="btn_send_discovery">Send</string>
+    <string name="notice_discovery_requires_connection">Connect to your eBike to send discovery.</string>
     <string name="error_mqtt_failed">MQTT Connection Failed: %1$s</string>
     
     <!-- Dashboard Titles -->

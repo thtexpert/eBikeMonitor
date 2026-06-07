@@ -37,8 +37,26 @@ class MqttManager(private val context: Context) {
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
     private var lastConnectTimestamp = 0L
 
+    private fun normalizeBrokerUri(input: String): String {
+        var uri = input.trim()
+        if (uri.isEmpty()) return uri
+        // Paho requires an explicit scheme (tcp://, ssl://, ws://, wss://)
+        if (!uri.contains("://")) {
+            uri = "tcp://$uri"
+        }
+        // Add default MQTT port if the authority has none
+        val schemeEnd = uri.indexOf("://") + 3
+        val rest = uri.substring(schemeEnd)
+        val authority = rest.substringBefore("/")
+        if (authority.isNotEmpty() && !authority.contains(":")) {
+            val path = if (rest.contains("/")) "/" + rest.substringAfter("/") else ""
+            uri = uri.substring(0, schemeEnd) + authority + ":1883" + path
+        }
+        return uri
+    }
+
     fun connect(brokerUrl: String, clientId: String, user: String, pass: String, topic: String) {
-        val serverUri = "$brokerUrl"
+        val serverUri = normalizeBrokerUri(brokerUrl)
 
         if (client != null) {
             if (_isConnected.value || _isConnecting.value) {
@@ -61,7 +79,16 @@ class MqttManager(private val context: Context) {
         this.baseTopic = topic
 
         if (client == null) {
-            client = MqttAsyncClient(serverUri, clientId, MemoryPersistence())
+            try {
+                client = MqttAsyncClient(serverUri, clientId, MemoryPersistence())
+            } catch (e: Exception) {
+                val msg = "Invalid MQTT broker URI '$serverUri': ${e.message}"
+                Log.e(TAG, msg)
+                FileLogger.log("MqttManager: $msg")
+                _isConnecting.value = false
+                _connectionError.tryEmit(msg)
+                return
+            }
         }
         
         val options = MqttConnectOptions().apply {
