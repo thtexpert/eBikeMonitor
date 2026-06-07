@@ -68,6 +68,15 @@ fun DashboardScreen(
         }
     }
 
+    val onBleClick = {
+        if (!viewModel.isBluetoothEnabled()) {
+            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            bluetoothEnableLauncher.launch(enableBtIntent)
+        } else {
+            viewModel.toggleBleConnection()
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -80,6 +89,10 @@ fun DashboardScreen(
                     ) 
                 },
                 actions = {
+                    if (isLandscape) {
+                        CompactActionButtons(viewModel, isMqttConnected, isBleConnected, onBleClick)
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.content_desc_settings))
                     }
@@ -98,9 +111,9 @@ fun DashboardScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             if (isLandscape) {
-                LandscapeLayout(viewModel, bikeStatus, isMqttConnected, isBleConnected)
+                LandscapeLayout(viewModel, bikeStatus, isMqttConnected, isBleConnected, onBleClick)
             } else {
-                PortraitLayout(viewModel, bikeStatus, isMqttConnected, isBleConnected, bluetoothEnableLauncher)
+                PortraitLayout(viewModel, bikeStatus, isMqttConnected, isBleConnected, onBleClick)
             }
 
             // Version Info at Bottom
@@ -197,7 +210,7 @@ fun PortraitLayout(
     bikeStatus: BikeStatus,
     isMqttConnected: Boolean,
     isBleConnected: Boolean,
-    bluetoothEnableLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Intent, androidx.activity.result.ActivityResult>
+    onBleClick: () -> Unit
 ) {
     val mqttConnectTime by viewModel.mqttSessionConnectTime.collectAsState()
 
@@ -207,7 +220,7 @@ fun PortraitLayout(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ActionButtonsRow(viewModel, isMqttConnected, isBleConnected)
+        ActionButtonsRow(viewModel, isMqttConnected, isBleConnected, onBleClick)
         
         DiscoveryUpdateNudges(viewModel)
 
@@ -267,7 +280,8 @@ fun LandscapeLayout(
     viewModel: MainViewModel,
     bikeStatus: BikeStatus,
     isMqttConnected: Boolean,
-    isBleConnected: Boolean
+    isBleConnected: Boolean,
+    onBleClick: () -> Unit
 ) {
     val mqttConnectTime by viewModel.mqttSessionConnectTime.collectAsState()
 
@@ -279,7 +293,7 @@ fun LandscapeLayout(
         contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
     ) {
         item(span = { GridItemSpan(2) }) {
-            ActionButtonsRow(viewModel, isMqttConnected, isBleConnected)
+            NotificationAccessNudge(viewModel)
         }
         item(span = { GridItemSpan(2) }) {
             DiscoveryUpdateNudges(viewModel)
@@ -408,39 +422,10 @@ fun ActionButtonsRow(
     viewModel: MainViewModel,
     isMqttConnected: Boolean,
     isBleConnected: Boolean,
+    onBleClick: () -> Unit
 ) {
-    val isNotificationAccessGranted by viewModel.isNotificationAccessGranted.collectAsState()
-    
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Notification Access Nudge
-        if (!isNotificationAccessGranted) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.errorContainer,
-                shape = RoundedCornerShape(12.dp),
-                onClick = { viewModel.openNotificationAccessSettings() }
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Background Startup Limited", 
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            "Tap here to grant Notification Access. This allows the app to wake up automatically when Bosch Flow connects.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-        }
+        NotificationAccessNudge(viewModel)
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -452,7 +437,8 @@ fun ActionButtonsRow(
                 modifier = Modifier.weight(2f),
                 color = if (isBleConnected) Color(0xFF4CAF50).copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, if (isBleConnected) Color(0xFF4CAF50) else Color.Transparent)
+                border = BorderStroke(1.dp, if (isBleConnected) Color(0xFF4CAF50) else Color.Transparent),
+                onClick = onBleClick
             ) {
                 Row(
                     modifier = Modifier.padding(8.dp),
@@ -467,7 +453,7 @@ fun ActionButtonsRow(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        if (isBleConnected) "Monitoring Active" else "Waiting for Bosch Flow connect",
+                        if (isBleConnected) "Monitoring Active" else "Waiting for eBike connection...",
                         fontWeight = FontWeight.Medium,
                         fontSize = 12.sp,
                         color = if (isBleConnected) Color(0xFF4CAF50) else Color.Gray
@@ -491,20 +477,54 @@ fun ActionButtonsRow(
 }
 
 @Composable
+fun NotificationAccessNudge(viewModel: MainViewModel) {
+    val isNotificationAccessGranted by viewModel.isNotificationAccessGranted.collectAsState()
+    if (!isNotificationAccessGranted) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.errorContainer,
+            shape = RoundedCornerShape(12.dp),
+            onClick = { viewModel.openNotificationAccessSettings() }
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Background Startup Limited", 
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        "Tap here to grant Notification Access. This allows the app to wake up automatically when Bosch Flow connects.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun CompactActionButtons(
     viewModel: MainViewModel,
     isMqttConnected: Boolean,
     isBleConnected: Boolean,
+    onBleClick: () -> Unit
 ) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val mqttColor = if (isMqttConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
         val bleColor = if (isBleConnected) Color(0xFF4CAF50) else Color.Gray
+        val mqttColor = if (isMqttConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
         
+        StatusCapsule(if (isBleConnected) "BLE: OK" else "BLE: Wait", bleColor) { onBleClick() }
         StatusCapsule(stringResource(R.string.btn_mqtt), mqttColor) { viewModel.toggleMqttConnection() }
-        StatusCapsule("BLE", bleColor, enabled = false) { }
     }
 }
 

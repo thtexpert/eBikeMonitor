@@ -107,20 +107,26 @@ class EBikeBackgroundService : Service() {
         }
 
         // 5. Connection Gate Logic
-        var lastFlowConnected: Boolean? = null
+        var lastBikePresent: Boolean? = null
         serviceScope.launch {
             combine(
-                EBikeNotificationListener.flowConnectedState,
+                BikePresenceManager.isBikePresent,
                 settings.backgroundStartup,
+                settings.useDirectDetection,
                 app.isUiActive
-            ) { flowConnected, bgStartup, uiActive ->
-                Triple(flowConnected, bgStartup, uiActive)
+            ) { bikePresent, bgStartup, directDetection, uiActive ->
+                listOf(bikePresent, bgStartup, directDetection, uiActive)
             }.distinctUntilChanged()
-             .collect { (flowConnected, bgStartup, uiActive) ->
-                val shouldMonitor = flowConnected && bgStartup
+             .collect { states ->
+                val bikePresent = states[0] as Boolean
+                val bgStartup = states[1] as Boolean
+                val directDetection = states[2] as Boolean
+                val uiActive = states[3] as Boolean
+
+                val shouldMonitor = bikePresent && (bgStartup || directDetection)
                 val shouldServiceRun = uiActive || shouldMonitor
                 
-                FileLogger.log("EBikeBackgroundService: State updated: flowConnected=$flowConnected, bgStartup=$bgStartup, uiActive=$uiActive -> shouldMonitor=$shouldMonitor, shouldServiceRun=$shouldServiceRun")
+                FileLogger.log("EBikeBackgroundService: State updated: bikePresent=$bikePresent, bgStartup=$bgStartup, directDetection=$directDetection, uiActive=$uiActive -> shouldMonitor=$shouldMonitor, shouldServiceRun=$shouldServiceRun")
                 
                 if (shouldServiceRun) {
                     if (shouldMonitor) {
@@ -128,19 +134,19 @@ class EBikeBackgroundService : Service() {
                     } else {
                         stopReconnectionLoop()
                         // Disconnect if Flow was connected and now it disconnected (transition from true to false)
-                        if (lastFlowConnected == true && !flowConnected) {
-                            FileLogger.log("EBikeBackgroundService: Flow disconnected. Disconnecting BLE and MQTT.")
+                        if (lastBikePresent == true && !bikePresent) {
+                            FileLogger.log("EBikeBackgroundService: Bike disconnected. Disconnecting BLE and MQTT.")
                             bleManager.disconnect()
                             mqttManager.disconnect()
                         }
                     }
                 } else {
                     stopReconnectionLoop()
-                    FileLogger.log("EBikeBackgroundService: Stopping service reactively (UI inactive & Flow disconnected).")
+                    FileLogger.log("EBikeBackgroundService: Stopping service reactively (UI inactive & Bike disconnected).")
                     stopSelf()
                 }
                 
-                lastFlowConnected = flowConnected
+                lastBikePresent = bikePresent
             }
         }
 
@@ -272,9 +278,10 @@ class EBikeBackgroundService : Service() {
         // Only stop if we shouldn't be monitoring in the background
         serviceScope.launch {
             val app = application as EBikeApplication
-            val flowConnected = EBikeNotificationListener.flowConnectedState.value
+            val bikePresent = BikePresenceManager.isBikePresent.value
             val bgStartup = app.settingsRepository.backgroundStartup.first()
-            if (!(flowConnected && bgStartup)) {
+            val directDetection = app.settingsRepository.useDirectDetection.first()
+            if (!(bikePresent && (bgStartup || directDetection))) {
                 FileLogger.log("EBikeBackgroundService: onTaskRemoved: No active background monitoring. Stopping service.")
                 stopSelf()
             } else {

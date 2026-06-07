@@ -62,6 +62,9 @@ class MainViewModel(
     
     private val _isNotificationAccessGranted = MutableStateFlow(false)
     val isNotificationAccessGranted = _isNotificationAccessGranted.asStateFlow()
+
+    private val _companionDeviceIntentSender = kotlinx.coroutines.flow.MutableSharedFlow<android.content.IntentSender>()
+    val companionDeviceIntentSender: kotlinx.coroutines.flow.SharedFlow<android.content.IntentSender> = _companionDeviceIntentSender
     
     // Combining settings for UI
     val savedBleMac = settingsRepository.bleMacAddress.stateIn(viewModelScope, SharingStarted.Lazily, null)
@@ -351,6 +354,45 @@ class MainViewModel(
     fun updateBackgroundStartup(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.saveBackgroundStartup(enabled)
+        }
+    }
+
+    fun toggleDirectDetection(enabled: Boolean, context: Context) {
+        viewModelScope.launch {
+            settingsRepository.saveUseDirectDetection(enabled)
+            if (enabled) {
+                val deviceManager = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as android.companion.CompanionDeviceManager
+                val mac = activeBikeMac.value ?: settingsRepository.bleMacAddress.first()
+                
+                val filterBuilder = android.companion.BluetoothDeviceFilter.Builder()
+                if (mac != null) {
+                    filterBuilder.setAddress(mac)
+                }
+                
+                val associationRequest = android.companion.AssociationRequest.Builder()
+                    .addDeviceFilter(filterBuilder.build())
+                    .setSingleDevice(true)
+                    .build()
+
+                deviceManager.associate(associationRequest, object : android.companion.CompanionDeviceManager.Callback() {
+                    override fun onDeviceFound(chooserLauncher: android.content.IntentSender) {
+                        viewModelScope.launch {
+                            _companionDeviceIntentSender.emit(chooserLauncher)
+                        }
+                    }
+                    override fun onFailure(error: CharSequence?) {
+                        Log.e("MainViewModel", "CDM Association Failed: $error")
+                    }
+                }, null)
+            } else {
+                val deviceManager = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as android.companion.CompanionDeviceManager
+                val mac = activeBikeMac.value ?: settingsRepository.bleMacAddress.first()
+                if (mac != null) {
+                    try {
+                        deviceManager.stopObservingDevicePresence(mac)
+                    } catch (e: Exception) {}
+                }
+            }
         }
     }
 

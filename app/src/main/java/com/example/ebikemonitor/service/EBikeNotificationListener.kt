@@ -19,14 +19,8 @@ class EBikeNotificationListener : NotificationListenerService() {
     private val scope = CoroutineScope(Dispatchers.IO)
 
     companion object {
-        private val _flowConnectedState = MutableStateFlow(false)
-        val flowConnectedState = _flowConnectedState.asStateFlow()
-
         fun updateFlowConnected(connected: Boolean) {
-            if (_flowConnectedState.value != connected) {
-                _flowConnectedState.value = connected
-                FileLogger.log("EBikeNotificationListener: Flow connection state updated to: $connected")
-            }
+            com.example.ebikemonitor.BikePresenceManager.updatePresence(connected, "NotificationListener")
         }
     }
 

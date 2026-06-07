@@ -42,6 +42,30 @@ fun SettingsScreen(
         }
     }
 
+    val companionIntentSender by viewModel.companionDeviceIntentSender.collectAsState(initial = null as android.content.IntentSender?)
+    val cdmLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val deviceManager = context.getSystemService(android.content.Context.COMPANION_DEVICE_SERVICE) as android.companion.CompanionDeviceManager
+            val mac = viewModel.savedBleMac.value // or activeBikeMac
+            if (mac != null) {
+                try {
+                    deviceManager.startObservingDevicePresence(mac)
+                    Toast.makeText(context, "Direct Detection Enabled!", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Failed to start observation", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(companionIntentSender) {
+        companionIntentSender?.let { intentSender ->
+            cdmLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(intentSender as android.content.IntentSender).build())
+        }
+    }
+
     CompositionLocalProvider(
         LocalMinimumInteractiveComponentEnforcement provides false
     ) {
@@ -98,10 +122,17 @@ fun SettingsScreen(
                     Text(stringResource(R.string.switch_auto_connect_mqtt), style = MaterialTheme.typography.bodyMedium)
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                     Switch(checked = backgroundStartup, onCheckedChange = { viewModel.updateBackgroundStartup(it) })
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Background Startup (via Flow Notification)", style = MaterialTheme.typography.bodyMedium)
+                }
+
+                val useDirectDetection by viewModel.settingsRepository.useDirectDetection.collectAsState(false)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                    Switch(checked = useDirectDetection, onCheckedChange = { viewModel.toggleDirectDetection(it, context) })
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Direct eBike Detection (Fallback)", style = MaterialTheme.typography.bodyMedium)
                 }
              }
 
