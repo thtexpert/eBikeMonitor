@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.ebikemonitor"
         minSdk = 29
         targetSdk = 34
-        versionCode = 41
-        versionName = "1.15.0"
+        versionCode = 42
+        versionName = "1.15.0_1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
