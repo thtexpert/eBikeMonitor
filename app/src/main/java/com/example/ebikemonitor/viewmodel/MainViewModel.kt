@@ -305,9 +305,10 @@ class MainViewModel(
     fun updateBikeDiscovery() {
         viewModelScope.launch {
             val mac = activeBikeMac.value ?: return@launch
-            val profile = bikeProfiles.value.find { it.macAddress == mac } ?: return@launch
-            val name = profile.name
-            
+            // Use the user-editable eBike Name (Settings) for the HA device label,
+            // not BikeProfile.name which is never set from the UI.
+            val name = settingsRepository.eBikeName.first()
+
             val deviceId = mac.lowercase().replace(":", "")
             mqttManager.sendBikeDiscovery(deviceId, name, uiState.value.assistModeNames)
             

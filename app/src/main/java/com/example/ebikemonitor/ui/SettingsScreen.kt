@@ -24,6 +24,7 @@ fun SettingsScreen(
 ) {
     val bleMac by viewModel.savedBleMac.collectAsState()
     val eBikeName by viewModel.savedEBikeName.collectAsState()
+    val isBleConnected by viewModel.isBleConnected.collectAsState()
     
     val mqttUri by viewModel.settingsRepository.mqttBrokerUri.collectAsState("")
     val mqttUser by viewModel.settingsRepository.mqttUser.collectAsState("")
@@ -221,11 +222,20 @@ fun SettingsScreen(
                      Text(stringResource(R.string.text_discovery_prefix), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                      OutlinedButton(
                          onClick = { viewModel.sendHomeAssistantDiscovery() },
+                         enabled = isBleConnected,
                          modifier = Modifier.height(38.dp),
                          contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
                      ) {
                          Text(stringResource(R.string.btn_send_discovery))
                      }
+                 }
+
+                 if (!isBleConnected) {
+                     Text(
+                         stringResource(R.string.notice_discovery_requires_connection),
+                         style = MaterialTheme.typography.bodySmall,
+                         color = MaterialTheme.colorScheme.error
+                     )
                  }
              }
         }
