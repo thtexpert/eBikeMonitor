@@ -41,6 +41,7 @@ class SettingsRepository(private val context: Context) {
         val BIKE_PROFILES = stringPreferencesKey("bike_profiles")
         val BATTERY_PROFILES = stringPreferencesKey("battery_profiles")
         val ACTIVE_BIKE_MAC = stringPreferencesKey("active_bike_mac")
+        val HOME_SYNC_DURATION_MINS = intPreferencesKey("home_sync_duration_mins")
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -74,6 +75,9 @@ class SettingsRepository(private val context: Context) {
 
     val activeBikeMac: Flow<String?> = context.dataStore.data.map { it[ACTIVE_BIKE_MAC] }
 
+    // Home Sync Window: 0 = disabled, 1-10 = minutes, default 2
+    val homeSyncDurationMins: Flow<Int> = context.dataStore.data.map { it[HOME_SYNC_DURATION_MINS] ?: 2 }
+
     suspend fun saveBleMacAddress(mac: String) {
         context.dataStore.edit { it[BLE_MAC_ADDRESS] = mac }
     }
@@ -100,6 +104,10 @@ class SettingsRepository(private val context: Context) {
     
     suspend fun saveUseDirectDetection(enabled: Boolean) {
         context.dataStore.edit { it[USE_DIRECT_DETECTION] = enabled }
+    }
+
+    suspend fun saveHomeSyncDuration(mins: Int) {
+        context.dataStore.edit { it[HOME_SYNC_DURATION_MINS] = mins.coerceIn(0, 10) }
     }
     
     suspend fun saveMqttConfig(uri: String, user: String, pass: String) {

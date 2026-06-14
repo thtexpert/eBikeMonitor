@@ -36,7 +36,7 @@ For decoding see [BLE TOPICS](BLE_TOPICS.md).
    - **eBike Name**: Enter a name for your eBike. This name will be used for the MQTT device in Home Assistant.
    - **Select eBike**: Choose your paired eBike from the Bluetooth devices list so the app knows which hardware to track.
    - **MQTT Setup**: Enter your MQTT broker URI (e.g., `tcp://192.168.1.10:1883`), username, and password.
-   - **Automation**: Configure "Auto-Connect MQTT", "Background Startup", and "Direct eBike Detection (Fallback)" to manage how the app runs automatically in the background.
+   - **Automation**: Configure "Auto-Connect MQTT", "Background Startup", "Direct eBike Detection (Fallback)", and **"Home Sync Window"** to manage how the app runs automatically in the background.
 
 ### Privacy & Permissions Note
 To detect if the Bosch Flow app is running, this app requires the **Usage Access** (`PACKAGE_USAGE_STATS`) permission. Additionally, it uses the **Query All Packages** (`QUERY_ALL_PACKAGES`) permission to locate the Flow app on your device. For background automation, the app requires **Notification Access** to read when the Flow app connects to your eBike. It also utilizes the Android **Companion Device Manager** to directly detect your eBike's Bluetooth hardware presence. These permissions are used exclusively for local state detection and automation (auto-launching/stopping). No personal browsing data or package lists are transmitted or collected.
@@ -59,13 +59,13 @@ With background automation enabled, the sequence is completely hands-off:
 If you prefer not to use background automation:
 1. Turn on your eBike.
 2. Launch the eBikeMonitor app. It will automatically connect (if auto-connect is enabled) and pull in data.
-**Automatic MQTT Reconnection**: 
-You can start your ride even if you are away from home. The app will securely hold onto your final ride session, and as soon as your phone reaches your local home network (or becomes able to reach your MQTT broker), it will automatically establish the connection and transmit your latest sensor data.
+**Automatic MQTT Reconnection & Home Sync Window**: 
+You can start your ride even if you are away from home. Once your eBike turns off, the app continues trying to reach the MQTT broker for a configurable **Home Sync Window** (default: 2 minutes). When your phone reconnects to your home network, the app automatically transmits your latest ride data — so nothing is ever lost, even if you rode away from home WiFi.
 
 ### 4. Monitoring UI & Features
 - **Status Dashboard**: The top row displays an active status indicator showing whether the background monitoring is actively connected to your eBike or waiting for a connection. It also includes an **MQTT** diagnostic button (Green = Connected, Red = Disconnected) that you can tap to manually restart the MQTT connection if needed.
 - **Charging**: To monitor charging, follow the startup sequence above, then connect the charger to the bike. The battery must be charged while mounted in the eBike, and the smartphone must maintain a BLE connection to the eBike throughout the process.
-- **Debug Info**: Swiping up (scrolling down) on the main dashboard reveals detailed diagnostic and debugging information, including raw sensor payloads, BLE characteristics, and assist mode discovery metrics.
+- **Debug Info**: Swiping up (scrolling down) on the main dashboard reveals detailed diagnostic and debugging information, including raw sensor payloads, BLE characteristics, and assist mode discovery metrics. A persistent debug log file is written to the device storage — see [LOG REFERENCE](LOG_REFERENCE.md) for a full description of all log entries and states.
 - **Versions**: The lower-left corner of the UI displays the eBikeMonitor version and the LED remote software version.
 
 Charging curve example:

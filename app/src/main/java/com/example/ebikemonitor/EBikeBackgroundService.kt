@@ -26,6 +26,10 @@ class EBikeBackgroundService : Service() {
     // Cache for delta-publishing
     private var lastPublishedStatus: com.example.ebikemonitor.data.model.BikeStatus? = null
 
+    // Home Sync Window — keeps MQTT alive after bike-off to push end-of-ride data
+    private var homeSyncJob: kotlinx.coroutines.Job? = null
+    private var endOfRideSnapshot: com.example.ebikemonitor.data.model.BikeStatus? = null
+
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val CHANNEL_ID = "EBikeMonitorChannel"
     private val NOTIFICATION_ID = 1
@@ -68,21 +72,45 @@ class EBikeBackgroundService : Service() {
             }
         }
 
-        // 3. Observe connection states to update notification
+        // 3. Observe all key states → emit a single [STATUS] summary line on any change
         serviceScope.launch {
             combine(
                 bleManager.isConnected,
                 mqttManager.isConnected,
-                settings.autoConnectMqtt
-            ) { bleConnected, mqttConnected, autoMqtt ->
-                Triple(bleConnected, mqttConnected, autoMqtt)
+                mqttManager.isConnecting,
+                settings.autoConnectMqtt,
+                BikePresenceManager.isBikePresent
+            ) { arr ->
+                // arr: [bleConn, mqttConn, mqttConnecting, autoMqtt, bikePresent]
+                arr.toList()
+            }.combine(app.isUiActive) { stateArr, uiActive ->
+                stateArr + uiActive
             }.distinctUntilChanged()
-             .collect { (bleConnected, mqttConnected, autoMqtt) ->
-                val bleStr = if (bleConnected) "Connected" else "Reconnecting..."
-                val mqttStr = if (mqttConnected) "Connected" else if (autoMqtt) "Reconnecting..." else "Disconnected"
-                FileLogger.log("EBikeBackgroundService: Connection status update - BLE: $bleStr, MQTT: $mqttStr")
-                updateNotification("BLE: $bleStr | MQTT: $mqttStr")
-            }
+             .collect { states ->
+                val bleConnected     = states[0] as Boolean
+                val mqttConnected    = states[1] as Boolean
+                val mqttConnecting   = states[2] as Boolean
+                val autoMqtt         = states[3] as Boolean
+                val bikePresent      = states[4] as Boolean
+                val uiActive         = states[5] as Boolean
+
+                val bleStr  = if (bleConnected) "Connected"
+                              else if (bleManager.isConnectingOrConnected) "Connecting"
+                              else "Disconnected"
+                val mqttStr = if (mqttConnected) "Connected"
+                              else if (mqttConnecting) "Connecting"
+                              else if (autoMqtt) "Disconnected(auto)"
+                              else "Off"
+                val appStr  = if (uiActive) "Foreground" else "Background"
+                val flowStr = if (bikePresent) "Present" else "Absent"
+                val monStr  = if (reconnectionJob?.isActive == true) "ON" else "OFF"
+
+                FileLogger.log("[STATUS] APP:$appStr | Flow:$flowStr | BLE:$bleStr | MQTT:$mqttStr | Monitor:$monStr")
+                // Update the persistent notification with the core connection states
+                val notifBle  = if (bleConnected) "Connected" else if (autoMqtt) "Reconnecting..." else "Disconnected"
+                val notifMqtt = if (mqttConnected) "Connected" else if (autoMqtt) "Reconnecting..." else "Disconnected"
+                updateNotification("BLE: $notifBle | MQTT: $notifMqtt")
+             }
         }
 
         // 4. Monitoring and Publishing Logic
@@ -130,50 +158,82 @@ class EBikeBackgroundService : Service() {
                 
                 if (shouldServiceRun) {
                     if (shouldMonitor) {
+                        cancelHomeSyncWindow()  // bike is back on — main loop takes over
                         startReconnectionLoop()
                     } else {
                         stopReconnectionLoop()
-                        // Disconnect if Flow was connected and now it disconnected (transition from true to false)
+                        // Bike just turned off: take snapshot and start Home Sync Window
                         if (lastBikePresent == true && !bikePresent) {
-                            FileLogger.log("EBikeBackgroundService: Bike disconnected. Disconnecting BLE and MQTT.")
+                            val snapshot = app.bleManager.bikeStatus.value
+                            FileLogger.log("EBikeBackgroundService: Bike disconnected. Disconnecting BLE.")
                             bleManager.disconnect()
-                            mqttManager.disconnect()
+                            val homeSyncMins = settings.homeSyncDurationMins.first()
+                            if (homeSyncMins > 0 && snapshot.lastUpdateTimestamp > 0) {
+                                // Don't disconnect MQTT yet — Home Sync Window handles it
+                                startHomeSyncWindow(snapshot, homeSyncMins * 60_000L)
+                            } else {
+                                FileLogger.log("EBikeBackgroundService: Home Sync Window disabled or no BLE data. Disconnecting MQTT.")
+                                mqttManager.disconnect()
+                            }
                         }
                     }
                 } else {
-                    stopReconnectionLoop()
-                    FileLogger.log("EBikeBackgroundService: Stopping service reactively (UI inactive & Bike disconnected).")
-                    stopSelf()
+                    if (homeSyncJob?.isActive == true) {
+                        // Home Sync Window keeps the service alive — let it finish
+                        FileLogger.log("EBikeBackgroundService: [HOME SYNC] shouldServiceRun=false but home sync active — keeping service alive")
+                    } else {
+                        stopReconnectionLoop()
+                        FileLogger.log("EBikeBackgroundService: Stopping service reactively (UI inactive & Bike disconnected).")
+                        stopSelf()
+                    }
                 }
                 
                 lastBikePresent = bikePresent
             }
         }
 
-        // MQTT Re-sync logic: Trigger full sync when connection established
+        // MQTT Re-sync logic: Trigger full sync or Home Sync Window snapshot push when connected
         serviceScope.launch {
             app.mqttManager.isConnected.collect { connected ->
                 if (connected) {
-                    FileLogger.log("EBikeBackgroundService: MQTT Connected. Flagging for full sync.")
-                    // Resetting lastPublishedStatus triggers a full sync on the next BLE update
-                    lastPublishedStatus = null
-                    // If we already have a status, sync it immediately
-                    val currentStatus = app.bleManager.bikeStatus.value
-                    if (currentStatus.lastUpdateTimestamp > 0) {
-                        syncToMqtt(currentStatus)
+                    val snapshot = endOfRideSnapshot
+                    if (snapshot != null) {
+                        // Home Sync Window path: push end-of-ride snapshot to MQTT
+                        FileLogger.log("EBikeBackgroundService: [HOME SYNC] MQTT connected — pushing end-of-ride snapshot")
+                        syncToMqtt(snapshot)
+                        cancelHomeSyncWindow()
+                        stopSelf()
+                    } else {
+                        // Normal path: full sync of current BLE data
+                        FileLogger.log("EBikeBackgroundService: MQTT Connected. Flagging for full sync.")
+                        lastPublishedStatus = null
+                        val currentStatus = app.bleManager.bikeStatus.value
+                        if (currentStatus.lastUpdateTimestamp > 0) {
+                            syncToMqtt(currentStatus)
+                        }
                     }
                 }
             }
         }
         
-        // Heartbeat for resource monitoring
+        // Heartbeat for resource monitoring — includes all key states
         serviceScope.launch {
             while (true) {
                 val runtime = Runtime.getRuntime()
                 val usedMem = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024
                 val totalMem = runtime.totalMemory() / 1024 / 1024
-                
-                FileLogger.log("[HEARTBEAT] Mem: ${usedMem}MB / ${totalMem}MB, BLE: ${app.bleManager.isConnected.value}, MQTT: ${app.mqttManager.isConnected.value}")
+
+                val bleStr  = if (app.bleManager.isConnected.value) "Connected"
+                              else if (app.bleManager.isConnectingOrConnected) "Connecting"
+                              else "Disconnected"
+                val mqttStr = if (app.mqttManager.isConnected.value) "Connected"
+                              else if (app.mqttManager.isConnecting.value) "Connecting"
+                              else "Disconnected"
+                val appStr  = if (app.isUiActive.value) "Foreground" else "Background"
+                val flowStr = if (BikePresenceManager.isBikePresent.value) "Present" else "Absent"
+                val monStr  = if (reconnectionJob?.isActive == true) "ON" else "OFF"
+
+                FileLogger.log("[HEARTBEAT] Mem:${usedMem}MB/${totalMem}MB | APP:$appStr | Flow:$flowStr | BLE:$bleStr | MQTT:$mqttStr | Monitor:$monStr")
                 kotlinx.coroutines.delay(60000) // 1 minute
             }
         }
@@ -295,6 +355,8 @@ class EBikeBackgroundService : Service() {
         FileLogger.log("EBikeBackgroundService: onDestroy")
         val app = application as EBikeApplication
         
+        cancelHomeSyncWindow()
+        
         // Stop foreground and cancel notifications
         stopForeground(true)
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -386,5 +448,55 @@ class EBikeBackgroundService : Service() {
             reconnectionJob?.cancel()
             reconnectionJob = null
         }
+    }
+
+    // ── Home Sync Window ─────────────────────────────────────────────────────────
+    // Keeps an MQTT-only reconnect loop alive after bike-off so end-of-ride data
+    // is pushed to the broker when the phone reaches home WiFi.
+
+    private fun startHomeSyncWindow(snapshot: com.example.ebikemonitor.data.model.BikeStatus, durationMs: Long) {
+        cancelHomeSyncWindow()
+        endOfRideSnapshot = snapshot
+        FileLogger.log("EBikeBackgroundService: [HOME SYNC] Window started (${durationMs / 1000}s) — MQTT-only reconnect for post-ride sync")
+
+        homeSyncJob = serviceScope.launch {
+            val app = application as EBikeApplication
+            val settings = app.settingsRepository
+            val mqttManager = app.mqttManager
+            val deadline = System.currentTimeMillis() + durationMs
+
+            while (isActive && System.currentTimeMillis() < deadline) {
+                val autoMqtt = settings.autoConnectMqtt.first()
+                if (autoMqtt && !mqttManager.isConnected.value && !mqttManager.isConnecting.value) {
+                    val uri = settings.mqttBrokerUri.first()
+                    val user = settings.mqttUser.first()
+                    val pass = settings.mqttPassword.first()
+                    val eBikeName = settings.eBikeName.first()
+                    val mac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first()
+                    if (uri.isNotEmpty()) {
+                        val clientId = if (eBikeName.isNotEmpty()) eBikeName else "MyEbike"
+                        val deviceId = mac?.lowercase()?.replace(":", "") ?: "unknown"
+                        val topic = "ebikemonitor/$deviceId"
+                        FileLogger.log("EBikeBackgroundService: [HOME SYNC] Connecting MQTT to $uri")
+                        mqttManager.connect(uri, clientId, user, pass, topic)
+                    }
+                }
+                kotlinx.coroutines.delay(10000)
+            }
+
+            // Window expired without a successful sync
+            FileLogger.log("EBikeBackgroundService: [HOME SYNC] Window expired without MQTT sync. Stopping service.")
+            endOfRideSnapshot = null
+            stopSelf()
+        }
+    }
+
+    private fun cancelHomeSyncWindow() {
+        if (homeSyncJob?.isActive == true) {
+            FileLogger.log("EBikeBackgroundService: [HOME SYNC] Window cancelled")
+            homeSyncJob?.cancel()
+        }
+        homeSyncJob = null
+        endOfRideSnapshot = null
     }
 }

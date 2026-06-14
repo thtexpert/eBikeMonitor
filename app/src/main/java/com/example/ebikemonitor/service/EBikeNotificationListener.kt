@@ -31,17 +31,22 @@ class EBikeNotificationListener : NotificationListenerService() {
         if (packageName == "com.bosch.ebike.onebikeapp") {
             if (channelId == "com.bosch.ebike.flow.pocketmode.channel") {
                 FileLogger.log("EBikeNotificationListener: Bosch Pocket Mode detected!")
+                val wasAlreadyPresent = com.example.ebikemonitor.BikePresenceManager.isBikePresent.value
                 updateFlowConnected(true)
-                
-                scope.launch {
-                    val settings = (application as EBikeApplication).settingsRepository
-                    val enabled = settings.backgroundStartup.first()
-                    
-                    if (enabled) {
-                        FileLogger.log("EBikeNotificationListener: Background Startup is enabled. Starting service...")
-                        startMonitoringService()
-                    } else {
-                        FileLogger.log("EBikeNotificationListener: Background Startup is disabled by user.")
+
+                if (wasAlreadyPresent) {
+                    FileLogger.log("EBikeNotificationListener: Duplicate notification ignored (Flow already present).")
+                } else {
+                    scope.launch {
+                        val settings = (application as EBikeApplication).settingsRepository
+                        val enabled = settings.backgroundStartup.first()
+
+                        if (enabled) {
+                            FileLogger.log("EBikeNotificationListener: Background Startup is enabled. Starting service...")
+                            startMonitoringService()
+                        } else {
+                            FileLogger.log("EBikeNotificationListener: Background Startup is disabled by user.")
+                        }
                     }
                 }
             }

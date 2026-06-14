@@ -2,6 +2,22 @@
 
 All notable changes to the **eBikeMonitor** project will be documented in this file.
 
+## [1.15.1] - 2026-06-14
+### Added
+- **Home Sync Window**: After eBike turns off, keeps MQTT-only reconnect loop alive for a configurable duration (0–10 min, default 2 min) to push end-of-ride data when the phone reaches home WiFi. Set to 0 to disable. Configurable in Settings → Automation.
+- Enhanced logging: `[STATUS]` combined status line on every state change, enriched `[HEARTBEAT]`, full `[APP STATE]` lifecycle entries, and `[USER ACTION]` tags for UI-initiated connections.
+- GATT error code human-readable descriptions in BLE log entries.
+- Log origin tagging in MainViewModel: auto-connect vs. user-initiated actions are now distinguishable in the log.
+
+### Fixed
+- **MQTT reconnect storm** (#28): `isAutomaticReconnect=false` and manual reconnect loop is now the sole authority. Eliminates burst reconnections on connection loss.
+- Duplicate Bosch Flow pocket-mode notifications no longer trigger redundant background service starts.
+- MQTT `connectionTimeout` reduced to 10 s for faster retry cycles (~20 s instead of ~40 s).
+
+### Changed
+- Removed 30 s MQTT timestamp suppression guard — every connection is now timestamped immediately.
+- `[HOME SYNC]` log prefix replaces previous internal "Grace Window" terminology.
+
 ## [1.15.0] - 2026-06-06
 ### Added
 - Hardware-level Direct eBike Detection using Android `CompanionDeviceManager` as a fallback.

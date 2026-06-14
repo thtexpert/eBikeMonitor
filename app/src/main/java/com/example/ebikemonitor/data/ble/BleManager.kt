@@ -58,7 +58,15 @@ class BleManager(private val context: Context) {
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                val errorMsg = "BleManager: GATT Error: $status"
+                val description = when (status) {
+                    19  -> "GATT_CONN_TERMINATE_PEER_USER — remote device closed connection"
+                    22  -> "GATT_CONN_TERMINATE_LOCAL_HOST — local stack closed connection"
+                    8   -> "GATT_CONN_TIMEOUT — connection supervision timeout"
+                    133 -> "GATT_ERROR (133) — generic Android BLE stack error, often a stale handle"
+                    147 -> "GATT_ERROR (147) — too many open BLE connections or Android internal error"
+                    else -> "GATT status $status"
+                }
+                val errorMsg = "BleManager: GATT Error: $status ($description)"
                 Log.e("BleManager", errorMsg)
                 FileLogger.log(errorMsg)
                 _isConnected.value = false

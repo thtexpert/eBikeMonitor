@@ -70,6 +70,7 @@ class MainViewModel(
     val savedBleMac = settingsRepository.bleMacAddress.stateIn(viewModelScope, SharingStarted.Lazily, null)
     val savedEBikeName = settingsRepository.eBikeName.stateIn(viewModelScope, SharingStarted.Lazily, "")
     val backgroundStartup = settingsRepository.backgroundStartup.stateIn(viewModelScope, SharingStarted.Lazily, true)
+    val homeSyncDurationMins = settingsRepository.homeSyncDurationMins.stateIn(viewModelScope, SharingStarted.Lazily, 2)
     
     val bikeProfiles = settingsRepository.bikeProfiles.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     val batteryProfiles = settingsRepository.batteryProfiles.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -94,6 +95,7 @@ class MainViewModel(
             
             val autoMqtt = settingsRepository.autoConnectMqtt.first()
             if (autoMqtt && !mqttManager.isConnected.value && !mqttManager.isConnecting.value) {
+                FileLogger.log("MainViewModel: Auto-connect on UI start (MQTT not yet connected)")
                 connectMqtt()
             }
         }
@@ -252,19 +254,23 @@ class MainViewModel(
 
     fun toggleMqttConnection() {
         if (isMqttConnected.value) {
+            FileLogger.log("MainViewModel: [USER ACTION] Manual MQTT disconnect via UI")
             viewModelScope.launch { mqttManager.disconnect() }
         } else {
+            FileLogger.log("MainViewModel: [USER ACTION] Manual MQTT connect via UI")
             connectMqtt()
         }
     }
 
     fun toggleBleConnection() {
         if (isBleConnected.value) {
+            FileLogger.log("MainViewModel: [USER ACTION] Manual BLE disconnect via UI")
             bleManager.disconnect()
         } else {
             viewModelScope.launch {
                 val mac = activeBikeMac.value
                 if (mac != null) {
+                    FileLogger.log("MainViewModel: [USER ACTION] Manual BLE connect via UI to $mac")
                     bleManager.connect(mac)
                 }
             }
@@ -358,6 +364,13 @@ class MainViewModel(
         }
     }
 
+    fun updateHomeSyncDuration(mins: Int) {
+        viewModelScope.launch {
+            FileLogger.log("MainViewModel: [USER ACTION] Home Sync Window set to ${mins}min")
+            settingsRepository.saveHomeSyncDuration(mins)
+        }
+    }
+
     fun toggleDirectDetection(enabled: Boolean, context: Context) {
         viewModelScope.launch {
             settingsRepository.saveUseDirectDetection(enabled)
@@ -400,6 +413,7 @@ class MainViewModel(
     override fun onCleared() {
         // Disconnect as an extra safety measure when the UI is gone
         // Do this BEFORE super.onCleared() so the viewModelScope is still active
+        FileLogger.log("MainViewModel: onCleared — disconnecting BLE and MQTT as safety measure")
         mqttManager.disconnect()
         bleManager.disconnect()
         super.onCleared()

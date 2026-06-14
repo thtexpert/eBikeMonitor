@@ -35,18 +35,33 @@ class MainActivity : ComponentActivity() {
         // If critical are missing, we might show a dialog.
     }
 
+    // ── Activity lifecycle → drives isUiActive gate in EBikeBackgroundService ────────
+
     override fun onStart() {
         super.onStart()
+        FileLogger.log("MainActivity: [APP STATE] FOREGROUND (onStart)")
         (application as EBikeApplication).setUiActive(true)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        FileLogger.log("MainActivity: [APP STATE] RESUMED — app on screen and interactive")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        FileLogger.log("MainActivity: [APP STATE] PAUSED — app partially visible or switching")
     }
 
     override fun onStop() {
         super.onStop()
+        FileLogger.log("MainActivity: [APP STATE] BACKGROUND (onStop) — app no longer visible")
         (application as EBikeApplication).setUiActive(false)
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        FileLogger.log("MainActivity: [APP STATE] DESTROYED (onDestroy)")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

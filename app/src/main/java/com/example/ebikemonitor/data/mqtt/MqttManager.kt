@@ -35,7 +35,7 @@ class MqttManager(private val context: Context) {
 
     private var keepAliveJob: kotlinx.coroutines.Job? = null
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
-    private var lastConnectTimestamp = 0L
+
 
     private fun normalizeBrokerUri(input: String): String {
         var uri = input.trim()
@@ -94,9 +94,18 @@ class MqttManager(private val context: Context) {
         val options = MqttConnectOptions().apply {
             userName = user
             password = pass.toCharArray()
-            isAutomaticReconnect = true
-            isCleanSession = false
-            maxReconnectDelay = 5000
+            // Fix #28: Disable Paho's internal auto-reconnect. The app's own 10-second
+            // reconnect loop in EBikeBackgroundService is the sole reconnect authority.
+            // Having both active caused a race that produced a self-amplifying storm of
+            // competing clients, each kicking the other off the broker every ~1 second.
+            isAutomaticReconnect = false
+            // Clean session avoids the broker "already connected, closing old connection"
+            // cascade that occurred when a stale non-clean session was still registered.
+            isCleanSession = true
+            // Shorter timeout so failed attempts (no WiFi / broker unreachable) resolve
+            // quickly. Reduces the retry cycle from ~40 s to ~20 s with no battery cost,
+            // since the radio releases sooner on failure. (#28)
+            connectionTimeout = 10
         }
         options.setKeepAliveInterval(60);
         // --- LWT CONFIGURATION ---
@@ -111,12 +120,11 @@ class MqttManager(private val context: Context) {
                     _isConnected.value = true
                     _isConnecting.value = false
                     startKeepAlive(topic)
-                    
-                    val now = System.currentTimeMillis()
-                    if (now - lastConnectTimestamp >= 30000) {
-                        publish("$topic/mqttconnecttimestamp", java.time.Instant.now().toString(), retained = true)
-                        lastConnectTimestamp = now
-                    }
+                    // Publish connect timestamp on every connection. The retained topic
+                    // stores only one value on the broker so there is no spam concern.
+                    // The previous 30 s suppression guard is no longer needed after fix #28
+                    // controls the reconnect rate to ~20 s minimum.
+                    publish("$topic/mqttconnecttimestamp", java.time.Instant.now().toString(), retained = true)
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
@@ -139,12 +147,8 @@ class MqttManager(private val context: Context) {
                      _isConnected.value = true
                      _isConnecting.value = false
                      startKeepAlive(topic)
-                     
-                     val now = System.currentTimeMillis()
-                     if (now - lastConnectTimestamp >= 30000) {
-                         publish("$topic/mqttconnecttimestamp", java.time.Instant.now().toString(), retained = true)
-                         lastConnectTimestamp = now
-                     }
+                     // Publish connect timestamp on every connection (see onSuccess comment).
+                     publish("$topic/mqttconnecttimestamp", java.time.Instant.now().toString(), retained = true)
                 }
                 override fun connectionLost(cause: Throwable?) {
                      val errorMsg = "MqttManager: Connection Lost: ${cause?.message}"
@@ -152,7 +156,7 @@ class MqttManager(private val context: Context) {
                      FileLogger.log(errorMsg)
                      _isConnected.value = false
                      _isConnecting.value = false
-                     // stopKeepAlive()
+                     stopKeepAlive() // Fix #28: stop keep-alive on connection loss
                      _connectionError.tryEmit(errorMsg)
                 }
                 override fun messageArrived(topic: String?, message: MqttMessage?) {}
@@ -292,9 +296,14 @@ class MqttManager(private val context: Context) {
                 publish("${this.baseTopic}/status", "offline", retained = false)
             }
             stopKeepAlive()
-            client?.disconnect()
+            // Fix #28: Use disconnectForcibly to guarantee Paho's internal network
+            // threads are terminated immediately, preventing any residual reconnect
+            // attempts after the app-level disconnect is requested.
+            client?.disconnectForcibly(0, 1000)
+            client?.close()
             client = null
             _isConnected.value = false
+            _isConnecting.value = false
         } catch (e: Exception) {
              Log.e(TAG, "Error disconnecting: ${e.message}")
         }

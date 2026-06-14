@@ -135,6 +135,36 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Direct eBike Detection (Fallback)", style = MaterialTheme.typography.bodyMedium)
                 }
+
+                // Home Sync Window
+                val homeSyncDurationMins by viewModel.homeSyncDurationMins.collectAsState()
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Home Sync Window", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "After eBike turns off, keep trying to reach MQTT broker to sync your ride data.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (homeSyncDurationMins == 0) "Off" else "${homeSyncDurationMins} min",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Slider(
+                    value = homeSyncDurationMins.toFloat(),
+                    onValueChange = { viewModel.updateHomeSyncDuration(it.toInt()) },
+                    valueRange = 0f..10f,
+                    steps = 9,  // 11 positions: 0,1,2,...,10
+                    modifier = Modifier.fillMaxWidth()
+                )
              }
 
              // Bluetooth
