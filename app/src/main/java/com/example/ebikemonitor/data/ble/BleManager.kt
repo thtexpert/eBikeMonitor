@@ -426,7 +426,8 @@ class BleManager(private val context: Context) {
             startupError = null,
             startupSecondaryError = null,
             prevTripDistPerMode = null,
-            prevUnsortedUsageRecords = null
+            prevUnsortedUsageRecords = null,
+            lastUpdateTimestamp = 0L
         )
     }
 

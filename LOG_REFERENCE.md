@@ -126,7 +126,8 @@ Emitted by `MainActivity` on each Android lifecycle transition.
 | `onTaskRemoved: No active background monitoring. Stopping service.` | User swiped app from recents and bike is absent; service stops |
 | `Starting reconnection loop` | Active monitoring started — BLE and MQTT will be reconnected as needed |
 | `Stopping reconnection loop` | Monitoring stopped (bike gone or UI closed with no bike) |
-| `MQTT Connected. Flagging for full sync.` | MQTT just connected; next BLE data push will be a full sync of all topics |
+| `MQTT Connected. Flagging for full sync.` | MQTT connected while BLE was also connected; all topics will be published |
+| `MQTT Connected but BLE not ready — skipping sync until BLE connects.` | MQTT connected before BLE — sync deferred; BLE connect in next loop cycle will trigger full sync |
 | `Performing full sync for <deviceId>` | All MQTT topics being published (first connect or after reconnect) |
 | `Pre-loading N persistent baselines for <MAC>` | Stored per-mode cumulative values loaded from DataStore for trip tracking |
 
@@ -136,10 +137,16 @@ Emitted by `MainActivity` on each Android lifecycle transition.
 |---|---|
 | `[HOME SYNC] Window started (Xs) — MQTT-only reconnect for post-ride sync` | eBike turned off; BLE disconnected; MQTT-only loop started to sync ride data on home WiFi arrival |
 | `[HOME SYNC] Connecting MQTT to <uri>` | Home Sync loop attempting MQTT connection |
-| `[HOME SYNC] MQTT connected — pushing end-of-ride snapshot` | MQTT reached; publishing the end-of-ride data captured at bike-off moment |
+| `[HOME SYNC] MQTT connected — pushing end-of-ride snapshot (full sync)` | MQTT reached; publishing the complete end-of-ride state (all topics) captured at bike-off moment |
 | `[HOME SYNC] Window cancelled` | Bike turned back on (main loop takes over) or service stopped |
 | `[HOME SYNC] Window expired without MQTT sync. Stopping service.` | Duration elapsed without reaching MQTT broker; data not pushed this cycle |
 | `[HOME SYNC] shouldServiceRun=false but home sync active — keeping service alive` | UI and monitoring both inactive, but Home Sync Window is still running; service stays alive until window finishes |
+
+**Reconnection Loop:**
+
+| Entry | Meaning |
+|---|---|
+| `Reconnection Loop: Bike absent — exiting stale iteration` | Loop detected bike is off at start of iteration — exits cleanly (normal after bike-off race condition) |
 
 ---
 

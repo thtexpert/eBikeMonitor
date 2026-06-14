@@ -118,7 +118,7 @@ class EBikeBackgroundService : Service() {
             bleManager.bikeStatus
                 .sample(1000)
                 .collect { status ->
-                    if (mqttManager.isConnected.value) {
+                    if (mqttManager.isConnected.value && status.lastUpdateTimestamp > 0) {
                         syncToMqtt(status)
                     }
                     
@@ -207,18 +207,20 @@ class EBikeBackgroundService : Service() {
                 if (connected) {
                     val snapshot = endOfRideSnapshot
                     if (snapshot != null) {
-                        // Home Sync Window path: push end-of-ride snapshot to MQTT
-                        FileLogger.log("EBikeBackgroundService: [HOME SYNC] MQTT connected — pushing end-of-ride snapshot")
+                        // Home Sync Window path: force full sync of end-of-ride snapshot
+                        FileLogger.log("EBikeBackgroundService: [HOME SYNC] MQTT connected — pushing end-of-ride snapshot (full sync)")
+                        lastPublishedStatus = null  // ensure all values are published, not just diffs
                         syncToMqtt(snapshot)
                         cancelHomeSyncWindow()
                         stopSelf()
                     } else {
-                        // Normal path: full sync of current BLE data
-                        FileLogger.log("EBikeBackgroundService: MQTT Connected. Flagging for full sync.")
-                        lastPublishedStatus = null
-                        val currentStatus = app.bleManager.bikeStatus.value
-                        if (currentStatus.lastUpdateTimestamp > 0) {
-                            syncToMqtt(currentStatus)
+                        // Normal path: full sync of current BLE data — only if we have live data
+                        if (app.bleManager.bikeStatus.value.lastUpdateTimestamp > 0) {
+                            FileLogger.log("EBikeBackgroundService: MQTT Connected. Flagging for full sync.")
+                            lastPublishedStatus = null
+                            syncToMqtt(app.bleManager.bikeStatus.value)
+                        } else {
+                            FileLogger.log("EBikeBackgroundService: MQTT Connected but no live BLE data yet — deferring sync.")
                         }
                     }
                 }
@@ -418,6 +420,13 @@ class EBikeBackgroundService : Service() {
             val mqttManager = app.mqttManager
             
             while (isActive) {
+                // Guard: exit immediately if bike is no longer present (handles stale iterations
+                // that slip through after cancel() due to coroutine scheduling timing)
+                if (!BikePresenceManager.isBikePresent.value) {
+                    FileLogger.log("EBikeBackgroundService: Reconnection Loop: Bike absent — exiting stale iteration")
+                    break
+                }
+
                 // 1. Maintain BLE Connection
                 if (!bleManager.isConnected.value && !bleManager.isConnectingOrConnected) {
                     val savedMac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first()
@@ -427,9 +436,11 @@ class EBikeBackgroundService : Service() {
                     }
                 }
                 
-                // 2. Maintain MQTT Connection
+                // 2. Maintain MQTT Connection — only when BLE is confirmed connected
+                // This prevents publishing stale data if Flow fires a false-positive
+                // pocket-mode notification (e.g. Flow starting without eBike turned on).
                 val autoMqtt = settings.autoConnectMqtt.first()
-                if (autoMqtt && !mqttManager.isConnected.value && !mqttManager.isConnecting.value) {
+                if (bleManager.isConnected.value && autoMqtt && !mqttManager.isConnected.value && !mqttManager.isConnecting.value) {
                     val uri = settings.mqttBrokerUri.first()
                     val user = settings.mqttUser.first()
                     val pass = settings.mqttPassword.first()
