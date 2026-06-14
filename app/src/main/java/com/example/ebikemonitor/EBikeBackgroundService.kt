@@ -155,27 +155,36 @@ class EBikeBackgroundService : Service() {
                 val shouldServiceRun = uiActive || shouldMonitor
                 
                 FileLogger.log("EBikeBackgroundService: State updated: bikePresent=$bikePresent, bgStartup=$bgStartup, directDetection=$directDetection, uiActive=$uiActive -> shouldMonitor=$shouldMonitor, shouldServiceRun=$shouldServiceRun")
-                
+
+                // ── Bike-off transition: handled BEFORE shouldServiceRun check ──────────
+                // This must fire regardless of uiActive so the Home Sync Window starts
+                // even when shouldServiceRun=false (UI inactive + bike off simultaneously).
+                if (lastBikePresent == true && !bikePresent) {
+                    val snapshot = app.bleManager.bikeStatus.value
+                    FileLogger.log("EBikeBackgroundService: Bike disconnected. Disconnecting BLE.")
+                    bleManager.disconnect()
+                    val homeSyncMins = settings.homeSyncDurationMins.first()
+                    if (homeSyncMins > 0 && snapshot.lastUpdateTimestamp > 0 && !mqttManager.isConnected.value) {
+                        // MQTT not connected — Home Sync Window will push the snapshot when WiFi arrives
+                        startHomeSyncWindow(snapshot, homeSyncMins * 60_000L)
+                    } else {
+                        if (mqttManager.isConnected.value) {
+                            FileLogger.log("EBikeBackgroundService: MQTT already connected at bike-off — data synced during ride. Disconnecting MQTT.")
+                        } else {
+                            FileLogger.log("EBikeBackgroundService: Home Sync Window disabled or no BLE data. Disconnecting MQTT.")
+                        }
+                        mqttManager.disconnect()
+                    }
+                }
+
+                // ── Service lifecycle gate ────────────────────────────────────────────
                 if (shouldServiceRun) {
                     if (shouldMonitor) {
                         cancelHomeSyncWindow()  // bike is back on — main loop takes over
                         startReconnectionLoop()
                     } else {
                         stopReconnectionLoop()
-                        // Bike just turned off: take snapshot and start Home Sync Window
-                        if (lastBikePresent == true && !bikePresent) {
-                            val snapshot = app.bleManager.bikeStatus.value
-                            FileLogger.log("EBikeBackgroundService: Bike disconnected. Disconnecting BLE.")
-                            bleManager.disconnect()
-                            val homeSyncMins = settings.homeSyncDurationMins.first()
-                            if (homeSyncMins > 0 && snapshot.lastUpdateTimestamp > 0) {
-                                // Don't disconnect MQTT yet — Home Sync Window handles it
-                                startHomeSyncWindow(snapshot, homeSyncMins * 60_000L)
-                            } else {
-                                FileLogger.log("EBikeBackgroundService: Home Sync Window disabled or no BLE data. Disconnecting MQTT.")
-                                mqttManager.disconnect()
-                            }
-                        }
+                        // Bike-off disconnect already handled above
                     }
                 } else {
                     if (homeSyncJob?.isActive == true) {

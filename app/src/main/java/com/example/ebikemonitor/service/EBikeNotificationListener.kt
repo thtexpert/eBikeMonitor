@@ -59,6 +59,11 @@ class EBikeNotificationListener : NotificationListenerService() {
 
         if (packageName == "com.bosch.ebike.onebikeapp") {
             if (channelId == "com.bosch.ebike.flow.pocketmode.channel") {
+                val wasPresent = com.example.ebikemonitor.BikePresenceManager.isBikePresent.value
+                if (!wasPresent) {
+                    FileLogger.log("EBikeNotificationListener: Duplicate removal ignored (Flow already absent).")
+                    return
+                }
                 FileLogger.log("EBikeNotificationListener: Bosch Pocket Mode notification removed.")
                 updateFlowConnected(false)
             }
