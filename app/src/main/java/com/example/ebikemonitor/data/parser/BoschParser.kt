@@ -256,16 +256,12 @@ object BoschParser {
             return StartupDecodingResult(status = "COUNT_MISMATCH_BATCH")
         }
 
-        // --- ZERO-TRIP FALLBACK ---
-        // If trip data (A252) is missing (empty), we attempt decoding assuming all trips are 0.
-        // We only accept this if the match is extremely good.
-        val tripToUse = if (currentTrip.isEmpty()) {
-            List(numModes) { 0 }
-        } else if (currentTrip.size != numModes) {
+        // --- TRIP DISTANCE GATE ---
+        // We MUST have the exact trip distances to decode properly.
+        if (currentTrip.size != numModes) {
             return StartupDecodingResult(status = "COUNT_MISMATCH_TRIP")
-        } else {
-            currentTrip
         }
+        val tripToUse = currentTrip
 
         val indices = (0 until numModes).toList()
         val allPermutations = mutableListOf<List<Int>>()
@@ -323,14 +319,7 @@ object BoschParser {
             }
         }
 
-        // Final validation for Zero-Trip Fallback: 
-        // We previously required a low error (< 500m) for zero-trip fallback.
-        // As per user feedback, we now trust the ambiguity check regardless of odometer drift distance.
-        val finalStatus = if (currentTrip.isEmpty()) {
-            "SUCCESS_ZERO_TRIP"
-        } else {
-            "SUCCESS"
-        }
+        val finalStatus = "SUCCESS"
 
         return StartupDecodingResult(
             mapping = bestP.mapIndexed { modeIdx, batchIdx -> modeIdx to batchIdx }.toMap(),
