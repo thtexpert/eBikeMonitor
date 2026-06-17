@@ -2,14 +2,18 @@
 
 All notable changes to the **eBikeMonitor** project will be documented in this file.
 
-## [1.15.1] - 2026-06-14
+## [1.15.1] - 2026-06-17
 ### Added
-- **Home Sync Window**: After eBike turns off, keeps MQTT-only reconnect loop alive for a configurable duration (0–10 min, default 2 min) to push end-of-ride data when the phone reaches home WiFi. Set to 0 to disable. Configurable in Settings → Automation.
+- **Hardware Connection Trigger**: Fast startup feature that directly listens to Android's low-level Bluetooth events (`ACTION_ACL_CONNECTED`), instantly starting the app ~250ms *before* the Bosch Flow app even posts a notification. Configurable in Settings → Automation.
+- **Hardware Disconnect Trigger**: Reliably shuts down the background service the exact millisecond the eBike turns off via `ACTION_ACL_DISCONNECTED`, bypassing flawed notification removal logic.
+- **Latency Tracking**: Automatically tracks and logs the exact millisecond delay between the hardware connection and the Bosch notification appearing in `ebike_monitor_debug.txt`.
+- **Home Sync Window**: After eBike turns off, keeps MQTT-only reconnect loop alive for a configurable duration (0–10 min, default 2 min) to push end-of-ride data when the phone reaches home WiFi.
 - Enhanced logging: `[STATUS]` combined status line on every state change, enriched `[HEARTBEAT]`, full `[APP STATE]` lifecycle entries, and `[USER ACTION]` tags for UI-initiated connections.
 - GATT error code human-readable descriptions in BLE log entries.
-- Log origin tagging in MainViewModel: auto-connect vs. user-initiated actions are now distinguishable in the log.
 
 ### Fixed
+- **Zero-Trip Fallback Race Condition**: Fixed a bug where `108C` packets arriving before `A252` packets would incorrectly zero out trip distances. Decoding is now safely deferred until `A252` arrives.
+- **Zombie Reconnecting Bug**: Completely eliminated the infinite reconnection loop caused by crashed Bosch apps leaving stuck "Pocket Mode" notifications on the screen.
 - **MQTT reconnect storm** (#28): `isAutomaticReconnect=false` and manual reconnect loop is now the sole authority. Eliminates burst reconnections on connection loss.
 - Duplicate Bosch Flow pocket-mode notifications no longer trigger redundant background service starts.
 - MQTT `connectionTimeout` reduced to 10 s for faster retry cycles (~20 s instead of ~40 s).

@@ -136,6 +136,13 @@ fun SettingsScreen(
                     Text("Direct eBike Detection (Fallback)", style = MaterialTheme.typography.bodyMedium)
                 }
 
+                val useHardwareTrigger by viewModel.settingsRepository.useHardwareConnectionTrigger.collectAsState(false)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                    Switch(checked = useHardwareTrigger, onCheckedChange = { viewModel.updateUseHardwareConnectionTrigger(it) })
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Hardware Connection Trigger (Fast Startup)", style = MaterialTheme.typography.bodyMedium)
+                }
+
                 // Home Sync Window
                 val homeSyncDurationMins by viewModel.homeSyncDurationMins.collectAsState()
                 Spacer(modifier = Modifier.height(8.dp))

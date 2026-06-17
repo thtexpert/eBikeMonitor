@@ -30,15 +30,30 @@ class EBikeNotificationListener : NotificationListenerService() {
 
         if (packageName == "com.bosch.ebike.onebikeapp") {
             if (channelId == "com.bosch.ebike.flow.pocketmode.channel") {
-                FileLogger.log("EBikeNotificationListener: Bosch Pocket Mode detected!")
-                val wasAlreadyPresent = com.example.ebikemonitor.BikePresenceManager.isBikePresent.value
-                updateFlowConnected(true)
+                scope.launch {
+                    val settings = (application as EBikeApplication).settingsRepository
+                    val useHardwareTrigger = settings.useHardwareConnectionTrigger.first()
+                    
+                    val latencyText = if (com.example.ebikemonitor.BikePresenceManager.lastHardwareConnectTime > 0) {
+                        val diff = System.currentTimeMillis() - com.example.ebikemonitor.BikePresenceManager.lastHardwareConnectTime
+                        " [Latency since hardware connection: ${diff}ms]"
+                    } else {
+                        ""
+                    }
+                    
+                    FileLogger.log("EBikeNotificationListener: Bosch Pocket Mode detected!$latencyText")
 
-                if (wasAlreadyPresent) {
-                    FileLogger.log("EBikeNotificationListener: Duplicate notification ignored (Flow already present).")
-                } else {
-                    scope.launch {
-                        val settings = (application as EBikeApplication).settingsRepository
+                    if (useHardwareTrigger) {
+                        FileLogger.log("EBikeNotificationListener: Hardware trigger enabled. Ignoring notification for startup.")
+                        return@launch
+                    }
+
+                    val wasAlreadyPresent = com.example.ebikemonitor.BikePresenceManager.isBikePresent.value
+                    updateFlowConnected(true)
+
+                    if (wasAlreadyPresent) {
+                        FileLogger.log("EBikeNotificationListener: Duplicate notification ignored (Flow already present).")
+                    } else {
                         val enabled = settings.backgroundStartup.first()
 
                         if (enabled) {
@@ -59,25 +74,41 @@ class EBikeNotificationListener : NotificationListenerService() {
 
         if (packageName == "com.bosch.ebike.onebikeapp") {
             if (channelId == "com.bosch.ebike.flow.pocketmode.channel") {
-                val wasPresent = com.example.ebikemonitor.BikePresenceManager.isBikePresent.value
-                if (!wasPresent) {
-                    FileLogger.log("EBikeNotificationListener: Duplicate removal ignored (Flow already absent).")
-                    return
+                scope.launch {
+                    val settings = (application as EBikeApplication).settingsRepository
+                    val useHardwareTrigger = settings.useHardwareConnectionTrigger.first()
+                    
+                    if (useHardwareTrigger) {
+                        FileLogger.log("EBikeNotificationListener: Hardware trigger enabled. Ignoring notification removal.")
+                        return@launch
+                    }
+                    
+                    val wasPresent = com.example.ebikemonitor.BikePresenceManager.isBikePresent.value
+                    if (!wasPresent) {
+                        FileLogger.log("EBikeNotificationListener: Duplicate removal ignored (Flow already absent).")
+                        return@launch
+                    }
+                    FileLogger.log("EBikeNotificationListener: Bosch Pocket Mode notification removed.")
+                    updateFlowConnected(false)
                 }
-                FileLogger.log("EBikeNotificationListener: Bosch Pocket Mode notification removed.")
-                updateFlowConnected(false)
             }
         }
     }
 
     private fun checkActiveNotifications() {
         try {
-            val active = activeNotifications
-            val isPresent = active?.any { sbn ->
-                sbn.packageName == "com.bosch.ebike.onebikeapp" &&
-                sbn.notification.channelId == "com.bosch.ebike.flow.pocketmode.channel"
-            } ?: false
-            updateFlowConnected(isPresent)
+            scope.launch {
+                val settings = (application as EBikeApplication).settingsRepository
+                val useHardwareTrigger = settings.useHardwareConnectionTrigger.first()
+                if (useHardwareTrigger) return@launch
+                
+                val active = activeNotifications
+                val isPresent = active?.any { sbn ->
+                    sbn.packageName == "com.bosch.ebike.onebikeapp" &&
+                    sbn.notification.channelId == "com.bosch.ebike.flow.pocketmode.channel"
+                } ?: false
+                updateFlowConnected(isPresent)
+            }
         } catch (e: Exception) {
             FileLogger.log("EBikeNotificationListener: Error checking active notifications: ${e.message}")
         }

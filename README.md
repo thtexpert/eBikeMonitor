@@ -36,7 +36,7 @@ For decoding see [BLE TOPICS](BLE_TOPICS.md).
    - **eBike Name**: Enter a name for your eBike. This name will be used for the MQTT device in Home Assistant.
    - **Select eBike**: Choose your paired eBike from the Bluetooth devices list so the app knows which hardware to track.
    - **MQTT Setup**: Enter your MQTT broker URI (e.g., `tcp://192.168.1.10:1883`), username, and password.
-   - **Automation**: Configure "Auto-Connect MQTT", "Background Startup", "Direct eBike Detection (Fallback)", and **"Home Sync Window"** to manage how the app runs automatically in the background.
+   - **Automation**: Configure "Auto-Connect MQTT", "Background Startup", "Direct eBike Detection (Fallback)", "Hardware Connection Trigger (Fast Startup)", and **"Home Sync Window"** to manage how the app runs automatically in the background.
 
 ### Privacy & Permissions Note
 To detect if the Bosch Flow app is running, this app requires the **Usage Access** (`PACKAGE_USAGE_STATS`) permission. Additionally, it uses the **Query All Packages** (`QUERY_ALL_PACKAGES`) permission to locate the Flow app on your device. For background automation, the app requires **Notification Access** to read when the Flow app connects to your eBike. It also utilizes the Android **Companion Device Manager** to directly detect your eBike's Bluetooth hardware presence. These permissions are used exclusively for local state detection and automation (auto-launching/stopping). No personal browsing data or package lists are transmitted or collected.
@@ -51,6 +51,7 @@ With background automation enabled, the sequence is completely hands-off:
 
 1. **Turn on your eBike.**
 2. That's it! 
+   - If **Hardware Connection Trigger** is enabled, eBikeMonitor will wake up instantly by listening to your phone's low-level Bluetooth connection events, starting even faster than the Flow app notification.
    - If **Background Startup** is enabled, eBikeMonitor will wake up automatically as soon as the Bosch Flow app connects. *(**CRITICAL:** You must enable "Ride Screen / Pocket Mode" notifications inside the official Bosch Flow app settings for this to work!)*
    - If **Direct eBike Detection** is enabled, the Android system will wake eBikeMonitor directly when it senses the eBike's Bluetooth hardware.
 3. The app will silently connect to BLE and MQTT in the background to sync your ride data. You will see a small, persistent notification indicating that background monitoring is active.

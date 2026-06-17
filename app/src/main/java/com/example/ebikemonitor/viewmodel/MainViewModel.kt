@@ -364,6 +364,12 @@ class MainViewModel(
         }
     }
 
+    fun updateUseHardwareConnectionTrigger(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.saveUseHardwareConnectionTrigger(enabled)
+        }
+    }
+
     fun updateHomeSyncDuration(mins: Int) {
         viewModelScope.launch {
             FileLogger.log("MainViewModel: [USER ACTION] Home Sync Window set to ${mins}min")

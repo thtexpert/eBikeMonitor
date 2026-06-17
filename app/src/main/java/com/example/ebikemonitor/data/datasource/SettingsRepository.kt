@@ -31,6 +31,7 @@ class SettingsRepository(private val context: Context) {
         val AUTO_LAUNCH_FLOW = booleanPreferencesKey("auto_launch_flow")
         val BACKGROUND_STARTUP = booleanPreferencesKey("background_startup")
         val USE_DIRECT_DETECTION = booleanPreferencesKey("use_direct_detection")
+        val USE_HARDWARE_CONNECTION_TRIGGER = booleanPreferencesKey("use_hardware_connection_trigger")
         
         val MQTT_BROKER_URI = stringPreferencesKey("mqtt_broker_uri")
         val MQTT_USER = stringPreferencesKey("mqtt_user")
@@ -53,6 +54,7 @@ class SettingsRepository(private val context: Context) {
     val autoLaunchFlow: Flow<Boolean> = context.dataStore.data.map { it[AUTO_LAUNCH_FLOW] ?: false }
     val backgroundStartup: Flow<Boolean> = context.dataStore.data.map { it[BACKGROUND_STARTUP] ?: true }
     val useDirectDetection: Flow<Boolean> = context.dataStore.data.map { it[USE_DIRECT_DETECTION] ?: true }
+    val useHardwareConnectionTrigger: Flow<Boolean> = context.dataStore.data.map { it[USE_HARDWARE_CONNECTION_TRIGGER] ?: false }
     
     val mqttBrokerUri: Flow<String> = context.dataStore.data.map { it[MQTT_BROKER_URI] ?: "" }
     val mqttUser: Flow<String> = context.dataStore.data.map { it[MQTT_USER] ?: "" }
@@ -104,6 +106,10 @@ class SettingsRepository(private val context: Context) {
     
     suspend fun saveUseDirectDetection(enabled: Boolean) {
         context.dataStore.edit { it[USE_DIRECT_DETECTION] = enabled }
+    }
+
+    suspend fun saveUseHardwareConnectionTrigger(enabled: Boolean) {
+        context.dataStore.edit { it[USE_HARDWARE_CONNECTION_TRIGGER] = enabled }
     }
 
     suspend fun saveHomeSyncDuration(mins: Int) {

@@ -141,20 +141,22 @@ class EBikeBackgroundService : Service() {
                 BikePresenceManager.isBikePresent,
                 settings.backgroundStartup,
                 settings.useDirectDetection,
+                settings.useHardwareConnectionTrigger,
                 app.isUiActive
-            ) { bikePresent, bgStartup, directDetection, uiActive ->
-                listOf(bikePresent, bgStartup, directDetection, uiActive)
+            ) { bikePresent, bgStartup, directDetection, hwTrigger, uiActive ->
+                listOf(bikePresent, bgStartup, directDetection, hwTrigger, uiActive)
             }.distinctUntilChanged()
              .collect { states ->
                 val bikePresent = states[0] as Boolean
                 val bgStartup = states[1] as Boolean
                 val directDetection = states[2] as Boolean
-                val uiActive = states[3] as Boolean
+                val hwTrigger = states[3] as Boolean
+                val uiActive = states[4] as Boolean
 
-                val shouldMonitor = bikePresent && (bgStartup || directDetection)
+                val shouldMonitor = bikePresent && (bgStartup || directDetection || hwTrigger)
                 val shouldServiceRun = uiActive || shouldMonitor
                 
-                FileLogger.log("EBikeBackgroundService: State updated: bikePresent=$bikePresent, bgStartup=$bgStartup, directDetection=$directDetection, uiActive=$uiActive -> shouldMonitor=$shouldMonitor, shouldServiceRun=$shouldServiceRun")
+                FileLogger.log("EBikeBackgroundService: State updated: bikePresent=$bikePresent, bgStartup=$bgStartup, directDetection=$directDetection, hwTrigger=$hwTrigger, uiActive=$uiActive -> shouldMonitor=$shouldMonitor, shouldServiceRun=$shouldServiceRun")
 
                 // ── Bike-off transition: handled BEFORE shouldServiceRun check ──────────
                 // This must fire regardless of uiActive so the Home Sync Window starts
