@@ -123,6 +123,13 @@ fun SettingsScreen(
                     Text(stringResource(R.string.switch_auto_connect_mqtt), style = MaterialTheme.typography.bodyMedium)
                 }
 
+                 val useHardwareTrigger by viewModel.settingsRepository.useHardwareConnectionTrigger.collectAsState(false)
+                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                     Switch(checked = useHardwareTrigger, onCheckedChange = { viewModel.updateUseHardwareConnectionTrigger(it) })
+                     Spacer(modifier = Modifier.width(8.dp))
+                     Text("Hardware Connection Trigger (Fast Startup)", style = MaterialTheme.typography.bodyMedium)
+                 }
+
                  Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                     Switch(checked = backgroundStartup, onCheckedChange = { viewModel.updateBackgroundStartup(it) })
                     Spacer(modifier = Modifier.width(8.dp))
@@ -134,13 +141,6 @@ fun SettingsScreen(
                     Switch(checked = useDirectDetection, onCheckedChange = { viewModel.toggleDirectDetection(it, context) })
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Direct eBike Detection (Fallback)", style = MaterialTheme.typography.bodyMedium)
-                }
-
-                val useHardwareTrigger by viewModel.settingsRepository.useHardwareConnectionTrigger.collectAsState(false)
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                    Switch(checked = useHardwareTrigger, onCheckedChange = { viewModel.updateUseHardwareConnectionTrigger(it) })
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Hardware Connection Trigger (Fast Startup)", style = MaterialTheme.typography.bodyMedium)
                 }
 
                 // Home Sync Window

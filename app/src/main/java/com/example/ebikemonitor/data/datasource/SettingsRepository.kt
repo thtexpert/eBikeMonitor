@@ -52,9 +52,9 @@ class SettingsRepository(private val context: Context) {
     val autoConnectBle: Flow<Boolean> = context.dataStore.data.map { it[AUTO_CONNECT_BLE] ?: true }
     val autoConnectMqtt: Flow<Boolean> = context.dataStore.data.map { it[AUTO_CONNECT_MQTT] ?: true }
     val autoLaunchFlow: Flow<Boolean> = context.dataStore.data.map { it[AUTO_LAUNCH_FLOW] ?: false }
-    val backgroundStartup: Flow<Boolean> = context.dataStore.data.map { it[BACKGROUND_STARTUP] ?: true }
+    val backgroundStartup: Flow<Boolean> = context.dataStore.data.map { it[BACKGROUND_STARTUP] ?: false }
     val useDirectDetection: Flow<Boolean> = context.dataStore.data.map { it[USE_DIRECT_DETECTION] ?: true }
-    val useHardwareConnectionTrigger: Flow<Boolean> = context.dataStore.data.map { it[USE_HARDWARE_CONNECTION_TRIGGER] ?: false }
+    val useHardwareConnectionTrigger: Flow<Boolean> = context.dataStore.data.map { it[USE_HARDWARE_CONNECTION_TRIGGER] ?: true }
     
     val mqttBrokerUri: Flow<String> = context.dataStore.data.map { it[MQTT_BROKER_URI] ?: "" }
     val mqttUser: Flow<String> = context.dataStore.data.map { it[MQTT_USER] ?: "" }
