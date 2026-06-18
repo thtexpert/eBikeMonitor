@@ -107,9 +107,13 @@ class EBikeBackgroundService : Service() {
 
                 FileLogger.log("[STATUS] APP:$appStr | Flow:$flowStr | BLE:$bleStr | MQTT:$mqttStr | Monitor:$monStr")
                 // Update the persistent notification with the core connection states
-                val notifBle  = if (bleConnected) "Connected" else if (autoMqtt) "Reconnecting..." else "Disconnected"
-                val notifMqtt = if (mqttConnected) "Connected" else if (autoMqtt) "Reconnecting..." else "Disconnected"
-                updateNotification("BLE: $notifBle | MQTT: $notifMqtt")
+                if (!bikePresent && homeSyncJob?.isActive != true) {
+                    updateNotification("Session Ended")
+                } else {
+                    val notifBle  = if (bleConnected) "Connected" else if (bikePresent && autoMqtt) "Reconnecting..." else "Disconnected"
+                    val notifMqtt = if (mqttConnected) "Connected" else if ((bikePresent || homeSyncJob?.isActive == true) && autoMqtt) "Reconnecting..." else "Disconnected"
+                    updateNotification("BLE: $notifBle | MQTT: $notifMqtt")
+                }
              }
         }
 
@@ -354,7 +358,9 @@ class EBikeBackgroundService : Service() {
             val bikePresent = BikePresenceManager.isBikePresent.value
             val bgStartup = app.settingsRepository.backgroundStartup.first()
             val directDetection = app.settingsRepository.useDirectDetection.first()
-            if (!(bikePresent && (bgStartup || directDetection))) {
+            val hwTrigger = app.settingsRepository.useHardwareConnectionTrigger.first()
+            
+            if (!(bikePresent && (bgStartup || directDetection || hwTrigger))) {
                 FileLogger.log("EBikeBackgroundService: onTaskRemoved: No active background monitoring. Stopping service.")
                 stopSelf()
             } else {

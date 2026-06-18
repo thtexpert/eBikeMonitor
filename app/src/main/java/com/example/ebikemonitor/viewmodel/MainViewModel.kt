@@ -417,11 +417,9 @@ class MainViewModel(
     }
 
     override fun onCleared() {
-        // Disconnect as an extra safety measure when the UI is gone
-        // Do this BEFORE super.onCleared() so the viewModelScope is still active
-        FileLogger.log("MainViewModel: onCleared — disconnecting BLE and MQTT as safety measure")
-        mqttManager.disconnect()
-        bleManager.disconnect()
+        // We no longer proactively disconnect here.
+        // The EBikeBackgroundService state machine is the single source of truth 
+        // for connection lifecycles and will disconnect if shouldMonitor evaluates to false.
         super.onCleared()
     }
 }
