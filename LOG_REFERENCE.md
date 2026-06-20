@@ -89,6 +89,8 @@ Emitted by `MainActivity` on each Android lifecycle transition.
 | `Connected to GATT` | BLE connection established; service discovery starting |
 | `Disconnected from GATT` | Clean BLE disconnect (e.g. called by app) |
 | `GATT Error: N (description)` | BLE stack error — see table below |
+| `LED Software Version decoded: <version>` | Startup decoding extracted the bike's software version |
+| `Deferring Startup Decoding until Trip Distances (A252) arrive` | Wait for necessary payload before concluding startup decoding |
 
 **GATT Error Codes:**
 
@@ -124,12 +126,17 @@ Emitted by `MainActivity` on each Android lifecycle transition.
 | `onDestroy` | Service stopping — BLE and MQTT will be disconnected |
 | `onTaskRemoved: Background monitoring active. Keeping service running.` | User swiped app from recents but bike is present; service intentionally stays alive |
 | `onTaskRemoved: No active background monitoring. Stopping service.` | User swiped app from recents and bike is absent; service stops |
+| `Stopping service reactively (UI inactive & Bike disconnected).` | Service shuts down completely after all windows and activities finish |
+| `State updated: bikePresent=... -> shouldMonitor=...` | Highly detailed snapshot of the internal decision matrix governing service state |
+| `Bike disconnected. Disconnecting BLE.` | Hardware disconnected cleanly or trigger ended, terminating the BLE link |
 | `Starting reconnection loop` | Active monitoring started — BLE and MQTT will be reconnected as needed |
 | `Stopping reconnection loop` | Monitoring stopped (bike gone or UI closed with no bike) |
+| `MQTT already connected at bike-off — data synced during ride. Disconnecting MQTT.` | No home sync needed; connection is actively torn down on bike power-off |
 | `MQTT Connected. Flagging for full sync.` | MQTT connected while BLE was also connected; all topics will be published |
-| `MQTT Connected but BLE not ready — skipping sync until BLE connects.` | MQTT connected before BLE — sync deferred; BLE connect in next loop cycle will trigger full sync |
+| `MQTT Connected but no live BLE data yet — deferring sync.` | MQTT connected before BLE — sync deferred; BLE connect in next loop cycle will trigger full sync |
 | `Performing full sync for <deviceId>` | All MQTT topics being published (first connect or after reconnect) |
 | `Pre-loading N persistent baselines for <MAC>` | Stored per-mode cumulative values loaded from DataStore for trip tracking |
+| `Baseline pre-load error: ...` | Error occurred while loading cumulative tracking data |
 
 **Home Sync Window** (`[HOME SYNC]` prefix):
 
@@ -154,8 +161,30 @@ Emitted by `MainActivity` on each Android lifecycle transition.
 
 | Entry | Meaning |
 |---|---|
-| `Bike presence updated to true by NotificationListener` | Bosch Flow pocket-mode notification appeared — eBike detected |
-| `Bike presence updated to false by NotificationListener` | Notification removed — eBike turned off or Flow app stopped |
+| `Bike presence updated to <true/false> by <source>` | E-bike presence state was toggled by NotificationListener, Hardware trigger, or UI |
+
+---
+
+### `BluetoothConnectionReceiver` — Hardware Bluetooth Trigger
+
+| Entry | Meaning |
+|---|---|
+| `Hardware connection detected for eBike (<mac>). Starting service...` | Hardware-level Bluetooth connect received for the target MAC, initiating start |
+| `Hardware connection detected, but trigger disabled.` | Connect seen but user disabled the hardware trigger setting |
+| `Hardware disconnection detected for eBike (<mac>).` | Hardware-level Bluetooth disconnect received for the target MAC |
+| `Hardware disconnection detected, but trigger disabled.` | Disconnect seen but hardware trigger setting is inactive |
+| `Failed to start service: <error>` | Android policy prevented starting the background service |
+
+---
+
+### `EBikeCompanionService` — Android Companion Device API
+
+| Entry | Meaning |
+|---|---|
+| `Device appeared: <address>` | Companion device trigger fired for the eBike |
+| `Background service started via Foreground` | Started the primary background service after companion detection |
+| `Failed to start service: <error>` | Exception encountered during startup from companion callback |
+| `Device disappeared: <address>` | Companion device trigger fired for eBike loss |
 
 ---
 
@@ -165,10 +194,15 @@ Emitted by `MainActivity` on each Android lifecycle transition.
 |---|---|
 | `Connected and listening...` | Notification listener bound and active |
 | `Disconnected.` | Listener unbound (usually temporary; Android rebinds automatically) |
-| `Bosch Pocket Mode detected!` | Trigger notification seen — initiates background service start if `backgroundStartup` is enabled |
-| `Duplicate notification ignored (Flow already present).` | Flow app posted the same pocket-mode notification twice; second instance safely suppressed |
+| `Bosch Pocket Mode detected!` | Trigger notification seen — initiates background service start |
+| `Hardware trigger enabled. Ignoring notification for startup.` | Hardware Bluetooth trigger has priority; ignoring the slower notification start |
+| `Duplicate notification ignored (Flow already present).` | Flow app posted the same pocket-mode notification twice; safely suppressed |
 | `Bosch Pocket Mode notification removed.` | Trigger notification gone — presence set to false |
+| `Hardware trigger enabled. Ignoring notification removal.` | Hardware Bluetooth trigger handles disconnects; ignoring the notification clear |
+| `Background Startup is enabled. Starting service...` | Background startup setting is active and starting the main background service |
 | `Background Startup is disabled by user.` | Setting is off; service will not be started automatically |
+| `Error checking active notifications: ...` | Internal Android error querying the active notification bar |
+| `Error starting service: ...` | Android policy or crash prevented starting the background service |
 
 ---
 
@@ -182,6 +216,7 @@ These entries distinguish user-triggered events from automatic background action
 | `[USER ACTION] Manual MQTT disconnect via UI` | User pressed the MQTT disconnect button |
 | `[USER ACTION] Manual BLE connect via UI to <MAC>` | User pressed the BLE connect button |
 | `[USER ACTION] Manual BLE disconnect via UI` | User pressed the BLE disconnect button |
+| `[USER ACTION] Home Sync Window set to <X>min` | User updated the home sync duration from the UI slider |
 | `Auto-connect on UI start (MQTT not yet connected)` | App opened, auto-connect setting is ON, MQTT was not yet connected — triggered automatically, not by user |
 | `onCleared — disconnecting BLE and MQTT as safety measure` | ViewModel destroyed (activity finished) — safety disconnect called |
 
