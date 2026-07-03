@@ -18,6 +18,7 @@ All messages received from the Bosch BLE characteristic (`00000011-eaa2-11e9-81b
 | `0x108C` | Usage Record | Protobuf-like | Contains Distance (Tag 1, Varint) and Energy (Tag 2, Varint). Used for per-mode consumption tracking. |
 | `0x180C` | Assist Mode Names | List of Strings (`decodeAssistModes`) | Length-delimited UTF-8 strings. Typically: Off, Eco, Tour, Sport, Turbo. |
 | `0x206B` | LED Software Version | String (`decodeStringField`) | Software version of the Control Unit / LED Remote. |
+| `0x8088` | BMS Battery Level | `Int` (%) | Raw Battery State of Charge (SOC) reported directly by the BMS. Typically maintains a +1% to +2% offset above the UI Battery Level (0x80BC). |
 | `0x8096` | Charge Cycles | `Int` / 10.0 | Cumulative number of full charge cycles. |
 | `0x809C` | Total Battery Energy | `Int` / 1000.0 (kWh) | This sensor likely reports total battery capacity or cumulative energy. |
 | `0x80BC` | Battery Level | `Int` (%) | Current state of charge in percent. |
@@ -25,10 +26,11 @@ All messages received from the Bosch BLE characteristic (`00000011-eaa2-11e9-81b
 | `0x9818` | Total Distance | `Int` / 1000.0 (km) | System odometer. |
 | `0x9819` | Drive Unit Hours | `Int` | Total operating hours of the motor unit. |
 | `0x982D` | Speed | `Int` / 100.0 (km/h) | Real-time speed. |
+| `0x9857` | Remaining Ranges | List of Varints (`decodeRanges`) | List of estimated remaining ranges in km for [ECO, TOUR/TOUR+, SPORT, TURBO] modes. |
 | `0x985A` | Cadence | `Int` / 2 (rpm) | Pedal rotations per minute. |
 | `0x985B` | Human Power | `Int` (W) | Rider's power input. |
 | `0x985D` | Motor Power | `Int` (W) | Electrical power output from the motor. |
-| `0xA243` | Unknown Energy? | `Int` / 10.0 (kcal) | Does NOT match Bosch FLOW values. Rationale unknown. |
+| `0xA243` | Trip Total Energy | `Int` / 20.0 (Wh) | Total mechanical energy (rider + motor) for the trip. 1 raw unit = 0.05 Wh (20 units/Wh). Used by Kiox to compute support percentage split with 25% human efficiency. |
 | `0xA246` | Trip Speed | `Int` / 100.0 (km/h) | Average speed for the current trip. |
 | `0xA247` | Trip Max Speed | `Int` / 100.0 (km/h) | Maximum speed reached in the current trip. |
 | `0xA248` | Trip Cadence | `Int` / 2 (rpm) | Average cadence for the current trip. |
@@ -37,6 +39,7 @@ All messages received from the Bosch BLE characteristic (`00000011-eaa2-11e9-81b
 | `0xA24B` | Trip Max Human Power | `Int` (W) | Maximum human power reached in the current trip. |
 | `0xA251` | Trip Pedal Energy | `Int` (kcal) | Pedal energy in kcal, matches FLOW and KIOX display. |
 | `0xA252` | Trip Dist per Mode | List of Varints (`decodeTripDistPerMode`) | List of distances traveled in each assist mode for the current trip. |
+| `0xA254` | Trip Human Percentage | `Int` (%) | Rider contribution percentage for the trip. Starts at 100.0% if motor support is OFF, and decreases as motor support contributes. |
 
 ## Specialized Decoding Details
 
@@ -51,3 +54,8 @@ Used for most numeric fields and protobuf tags. It uses a standard LEB128 encodi
 
 ### Assist Modes (0x180C)
 The payload contains multiple consecutive string blocks. Each block starts with `0x0A` (Tag 1, Wire Type 2), followed by a length byte and the UTF-8 string data.
+
+### Remaining Ranges (0x9857)
+The payload contains a list of Varints under tag `0x0A` (Field 1, Wire Type 2). It contains the remaining battery range in km for each assist mode in the following order:
+`[ECO, TOUR/TOUR+, SPORT, TURBO]` (from lowest support to highest support).
+
