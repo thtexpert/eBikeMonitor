@@ -13,7 +13,7 @@ android {
         minSdk = 29
         targetSdk = 34
         versionCode = 44
-        versionName = "1.15.1"
+        versionName = "1.15.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -58,7 +58,7 @@ android {
         val variant = this
         outputs.all {
             val output = this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
-            val version = variant.versionName?.replace(".", "_") ?: "unknown"
+            val version = variant.versionName ?: "unknown"
             output.outputFileName = "eBikeMonitor-${version}.apk"
         }
     }

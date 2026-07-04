@@ -40,3 +40,7 @@ local.properties
 /PROPOSAL_SESSION_DASHBOARD.md
 /venv
 /Wireshark
+/analysis
+/tmp
+
+

@@ -162,7 +162,6 @@ fun AllSensorsDebugCard(
             sensors.add(stringResource(R.string.debug_sensor_battery_serial) to (bikeStatus.batterySerialNumber ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_ble_status) to if (isBleConnected) "connected" else "disconnected")
             sensors.add(stringResource(R.string.debug_sensor_human_calories) to (bikeStatus.tripPedalEnergy?.let { "$it kcal" } ?: "--"))
-            sensors.add("Unknown kcal (0xA243)" to (bikeStatus.humanCalories?.let { "%.1f kcal".format(it) } ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_cadence) to (bikeStatus.cadence?.toString() ?: "--") + " rpm")
             sensors.add(stringResource(R.string.debug_sensor_charge_cycles) to (bikeStatus.chargeCycles?.toString() ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_led_version) to (bikeStatus.ebikeLedSoftwareVersion ?: "--"))
@@ -176,6 +175,13 @@ fun AllSensorsDebugCard(
             sensors.add("Trip Max Cadence" to (bikeStatus.tripMaxCadence?.let { "$it rpm" } ?: "--"))
             sensors.add("Trip Human Power" to (bikeStatus.tripHumanPower?.let { "$it W" } ?: "--"))
             sensors.add("Trip Max Human Power" to (bikeStatus.tripMaxHumanPower?.let { "$it W" } ?: "--"))
+            sensors.add("Trip Total Energy (Wh)" to (bikeStatus.tripTotalEnergy?.let { "%.2f Wh".format(it) } ?: "--"))
+            sensors.add("Trip Human Percentage" to (bikeStatus.tripHumanPercentage?.let { "$it%" } ?: "--"))
+            sensors.add("Remaining Ranges (E/T/S/T)" to if (bikeStatus.remainingRanges.isNotEmpty()) {
+                bikeStatus.remainingRanges.joinToString(" / ") { "$it km" }
+            } else {
+                "--"
+            })
 
             // Per-Mode
             val modeNames = bikeStatus.assistModeNames

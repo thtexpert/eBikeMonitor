@@ -77,6 +77,27 @@ data class BoschMessage(
         return distances
     }
 
+    fun decodeRanges(): List<Int>? {
+        if (messageId != 0x9857) return null
+        
+        val ranges = mutableListOf<Int>()
+        var idx = 4
+        if (idx >= rawBytes.size) return null
+        
+        if (rawBytes[idx] == 0x0A.toByte()) {
+            val totalLen = rawBytes[idx + 1].toInt() and 0xFF
+            idx += 2
+            val endIdx = idx + totalLen
+            
+            while (idx < endIdx && idx < rawBytes.size) {
+                val (value, consumed) = BoschParser.decodeVarint(rawBytes.subList(idx, rawBytes.size))
+                ranges.add(value)
+                idx += consumed
+            }
+        }
+        return ranges
+    }
+
     fun decodeAssistModes(): List<String> {
         val modes = mutableListOf<String>()
         if (messageId != 0x180C) return modes
