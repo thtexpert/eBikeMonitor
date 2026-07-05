@@ -189,4 +189,75 @@ class SettingsRepository(private val context: Context) {
             saveBikeProfiles(profiles)
         }
     }
+
+    suspend fun updateBikeBaselines(
+        mac: String,
+        pedalBaseline: Double,
+        rideBaseline: Double,
+        pedalMeasuredBaseline: Double,
+        pedalEstimatedBaseline: Double,
+        lastTripPedal: Int,
+        lastTripRide: Double,
+        lastOdo: Double,
+        lastTotalBattery: Double
+    ) {
+        val profiles = bikeProfiles.first().toMutableList()
+        val index = profiles.indexOfFirst { it.macAddress == mac }
+        if (index != -1) {
+            profiles[index] = profiles[index].copy(
+                totalPedalEnergyBaseline = pedalBaseline,
+                totalRideEnergyBaseline = rideBaseline,
+                totalPedalEnergyMeasuredBaseline = pedalMeasuredBaseline,
+                totalPedalEnergyEstimatedBaseline = pedalEstimatedBaseline,
+                lastTripPedalEnergy = lastTripPedal,
+                lastTripRideEnergy = lastTripRide,
+                lastOdometer = lastOdo,
+                lastTotalMotorEnergy = lastTotalBattery
+            )
+            saveBikeProfiles(profiles)
+        }
+    }
+
+    suspend fun updateBikeUsableCapacity(mac: String, capacity: Float) {
+        val profiles = bikeProfiles.first().toMutableList()
+        val index = profiles.indexOfFirst { it.macAddress == mac }
+        if (index != -1) {
+            profiles[index] = profiles[index].copy(
+                learnedUsableMotorCapacity = capacity
+            )
+            saveBikeProfiles(profiles)
+        }
+    }
+
+    suspend fun updateActiveRideReferences(
+        mac: String,
+        currentOdo: Double,
+        currentTotalBattery: Double,
+        currentTripPedal: Int,
+        currentTripRide: Double
+    ) {
+        val profiles = bikeProfiles.first().toMutableList()
+        val index = profiles.indexOfFirst { it.macAddress == mac }
+        if (index != -1) {
+            profiles[index] = profiles[index].copy(
+                lastOdometer = currentOdo,
+                lastTotalMotorEnergy = currentTotalBattery,
+                lastTripPedalEnergy = currentTripPedal,
+                lastTripRideEnergy = currentTripRide
+            )
+            saveBikeProfiles(profiles)
+        }
+    }
+
+    suspend fun updateBikeLearningParams(mac: String, effortCoeff: Float, rates: List<Float>) {
+        val profiles = bikeProfiles.first().toMutableList()
+        val index = profiles.indexOfFirst { it.macAddress == mac }
+        if (index != -1) {
+            profiles[index] = profiles[index].copy(
+                learnedUserEffortCoefficient = effortCoeff,
+                learnedMotorConsumptionRates = rates
+            )
+            saveBikeProfiles(profiles)
+        }
+    }
 }

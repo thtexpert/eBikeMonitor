@@ -136,11 +136,15 @@ fun DashboardScreen(
 
 @Composable
 fun AllSensorsDebugCard(
+    viewModel: MainViewModel,
     bikeStatus: BikeStatus,
     isMqttConnected: Boolean,
     isBleConnected: Boolean,
     mqttConnectTime: String?
 ) {
+    val activeMac by viewModel.activeBikeMac.collectAsState()
+    val bikeProfiles by viewModel.bikeProfiles.collectAsState()
+    val activeProfile = bikeProfiles.find { it.macAddress == activeMac }
     Card(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -182,6 +186,43 @@ fun AllSensorsDebugCard(
             } else {
                 "--"
             })
+
+            val activeEstKcal = bikeStatus.activeEstKcal ?: 0.0
+            val activeEstError = bikeStatus.activeEstError ?: 0.0
+            val simulatedEstKcalStr = if (bikeStatus.tripPedalEnergy != null && bikeStatus.tripPedalEnergy!! > 0 && activeEstKcal > 0.0) {
+                "%.1f kcal (error: %.1f%%)".format(activeEstKcal, activeEstError)
+            } else {
+                "%.1f kcal".format(activeEstKcal)
+            }
+            sensors.add("Simulated Est. kcal" to simulatedEstKcalStr)
+            
+            sensors.add("Learned Capacity" to (activeProfile?.learnedUsableMotorCapacity?.let { "%.1f Wh".format(it) } ?: "--"))
+            sensors.add("Learned Gamma" to (activeProfile?.learnedUserEffortCoefficient?.let { "%.2f".format(it) } ?: "--"))
+            
+            val rates = activeProfile?.learnedMotorConsumptionRates
+            val ratesStr = if (rates != null && rates.size >= 5) {
+                "${"%.2f".format(rates[1])} / ${"%.2f".format(rates[2])} / ${"%.2f".format(rates[3])} / ${"%.2f".format(rates[4])} Wh/km"
+            } else {
+                "--"
+            }
+            sensors.add("Rates (E/T/S/T)" to ratesStr)
+
+            // Total human measured and estimated baselines
+            val totalMeasuredKcal = if (activeProfile != null) {
+                val currentTripVal = bikeStatus.tripPedalEnergy ?: 0
+                val totalMeasured = activeProfile.totalPedalEnergyMeasuredBaseline + currentTripVal
+                "%.1f kcal".format(totalMeasured)
+            } else {
+                "--"
+            }
+            sensors.add("Total Measured" to totalMeasuredKcal)
+            
+            val totalEstimatedKcal = if (activeProfile != null) {
+                "%.1f kcal".format(activeProfile.totalPedalEnergyEstimatedBaseline)
+            } else {
+                "--"
+            }
+            sensors.add("Total Estimated" to totalEstimatedKcal)
 
             // Per-Mode
             val modeNames = bikeStatus.assistModeNames
@@ -269,6 +310,7 @@ fun PortraitLayout(
                 }
                 item {
                     AllSensorsDebugCard(
+                        viewModel = viewModel,
                         bikeStatus = bikeStatus,
                         isMqttConnected = isMqttConnected,
                         isBleConnected = isBleConnected,
@@ -337,6 +379,7 @@ fun LandscapeLayout(
             }
             item {
                 AllSensorsDebugCard(
+                    viewModel = viewModel,
                     bikeStatus = bikeStatus,
                     isMqttConnected = isMqttConnected,
                     isBleConnected = isBleConnected,

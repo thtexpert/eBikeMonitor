@@ -462,6 +462,13 @@ class BleManager(private val context: Context) {
         if (_bikeStatus.value.persistentBaselines == null) {
             _bikeStatus.value = _bikeStatus.value.copy(persistentBaselines = baselines)
             Log.d("BleManager", "Persistent baselines loaded: $baselines")
+        }
     }
+
+    fun updateEstimatedCalories(estKcal: Double?, errorPct: Double?) {
+        _bikeStatus.value = _bikeStatus.value.copy(
+            activeEstKcal = estKcal,
+            activeEstError = errorPct
+        )
     }
 }

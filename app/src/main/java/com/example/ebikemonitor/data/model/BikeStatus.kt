@@ -41,6 +41,8 @@ data class BikeStatus(
     val startupDecodingStatus: String? = null,
     val startupError: Long? = null,
     val startupSecondaryError: Long? = null,
+    val activeEstKcal: Double? = null,
+    val activeEstError: Double? = null,
     val lastUpdateTimestamp: Long = 0L
 )
 
