@@ -25,6 +25,9 @@ class EBikeBackgroundService : Service() {
 
     // Cache for delta-publishing
     private var lastPublishedStatus: com.example.ebikemonitor.data.model.BikeStatus? = null
+    private var profileBeforeSync: com.example.ebikemonitor.data.model.BikeProfile? = null
+    private var syncCompletionTime: Long = 0L
+    private var lastTelemetryLogTime: Long = 0L
 
     // Home Sync Window — keeps MQTT alive after bike-off to push end-of-ride data
     private var homeSyncJob: kotlinx.coroutines.Job? = null
@@ -159,6 +162,19 @@ class EBikeBackgroundService : Service() {
                         syncToMqtt(status)
                     }
                     
+                    val odoVal = status.totalDistance
+                    val usageCount = status.sortedUsageRecordsB.size
+                    val usageSum = if (status.sortedUsageRecordsB.isNotEmpty()) {
+                        status.sortedUsageRecordsB.sumOf { it?.distance?.toDouble() ?: 0.0 } / 1000.0
+                    } else {
+                        0.0
+                    }
+                    val nowVal = System.currentTimeMillis()
+                    if (nowVal - lastTelemetryLogTime >= 5000) {
+                        lastTelemetryLogTime = nowVal
+                        FileLogger.log("EBikeBackgroundService: Live Status Check: Odo: $odoVal km, UsageSum: ${"%.3f".format(usageSum)} km, RecordsCount: $usageCount, Speed: ${status.speed} m/s")
+                    }
+                    
                     val mac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first() ?: return@collect
                     
                     // Sync Gating Checklist
@@ -178,6 +194,144 @@ class EBikeBackgroundService : Service() {
                         if (checklistOk) {
                             FileLogger.log("EBikeBackgroundService: BLE Sync checklist fully satisfied. Completing sync.")
                             completeSync(force = false)
+                        }
+                    }
+
+                    // Late Sync Reference Adjustment
+                    if (isSyncComplete && bleManager.isConnected.value && System.currentTimeMillis() - syncCompletionTime <= 30000) {
+                        val currentOdo = status.totalDistance
+                        val currentUsage = status.sortedUsageRecordsB
+                        val expectedCount = status.assistModeNames.size
+                        
+                        val currentUsageSum = if (currentUsage.size == expectedCount) currentUsage.sumOf { it?.distance?.toDouble() ?: 0.0 } / 1000.0 else 0.0
+                        val startupUsageSum = if (startupUsageRecords.size == expectedCount) startupUsageRecords.sumOf { it?.distance?.toDouble() ?: 0.0 } / 1000.0 else 0.0
+                        
+                        val speed = status.speed ?: 0.0
+                        val elapsedSeconds = (System.currentTimeMillis() - syncCompletionTime) / 1000.0
+                        val maxPossibleDistKm = ((speed / 3600.0) * elapsedSeconds) + 0.05 // Min 50m threshold to prevent tiny drift triggers
+                        
+                        val odoJump = if (currentOdo != null && startupOdometer != null) currentOdo - startupOdometer!! else 0.0
+                        val usageJump = currentUsageSum - startupUsageSum
+                        
+                        val odoTrigger = odoJump > maxPossibleDistKm
+                        val usageTrigger = usageJump > maxPossibleDistKm
+                        
+                        if (odoTrigger || usageTrigger) {
+                            val oldStartupOdo = startupOdometer
+                            val triggerReason = if (odoTrigger && usageTrigger) "Odo & Usage jump" else if (odoTrigger) "Odo jump" else "Usage jump"
+                            val resolvedOdo = currentOdo ?: startupOdometer ?: 0.0
+                            
+                            FileLogger.log("EBikeBackgroundService: Late sync detected! Trigger: $triggerReason. Odo: $oldStartupOdo -> $resolvedOdo, UsageSum: $startupUsageSum -> $currentUsageSum (jump: ${"%.3f".format(odoJump)}/${"%.3f".format(usageJump)} km vs max expected ${"%.3f".format(maxPossibleDistKm)} km). Re-running sync with updated references.")
+                            
+                            // 1. Update starting reference points
+                            startupOdometer = resolvedOdo
+                            startupTotalBattery = status.totalBattery ?: startupTotalBattery
+                            startupTripPedal = status.tripPedalEnergy ?: startupTripPedal
+                            startupTripTotal = status.tripTotalEnergy ?: startupTripTotal
+                            startupTripDists = if (status.tripDistPerMode.isNotEmpty()) status.tripDistPerMode else startupTripDists
+                            startupSoC = status.batteryLevel ?: startupSoC
+                            startupUsageRecords = currentUsage
+                            
+                            // 2. Re-run offline segment detection using profileBeforeSync
+                            val originalProfile = profileBeforeSync
+                            if (originalProfile != null) {
+                                val odoDelta = resolvedOdo - originalProfile.lastOdometer
+                                val tripResetDetected = (status.tripPedalEnergy ?: 0) < originalProfile.lastTripPedalEnergy ||
+                                                       (status.tripTotalEnergy ?: 0.0) < originalProfile.lastTripRideEnergy
+                                                       
+                                var pedalBaseline = originalProfile.totalPedalEnergyBaseline
+                                var rideBaseline = originalProfile.totalRideEnergyBaseline
+                                var pedalMeasuredBaseline = originalProfile.totalPedalEnergyMeasuredBaseline
+                                var pedalEstimatedBaseline = originalProfile.totalPedalEnergyEstimatedBaseline
+                                
+                                if (tripResetDetected) {
+                                    FileLogger.log("EBikeBackgroundService: Trip reset detected on late sync. Updating baselines.")
+                                    pedalBaseline += originalProfile.lastTripPedalEnergy
+                                    pedalMeasuredBaseline += originalProfile.lastTripPedalEnergy
+                                    rideBaseline += originalProfile.lastTripRideEnergy
+                                }
+                                
+                                if (odoDelta > 0.20) {
+                                    val prevTripDistSum = if (tripResetDetected) 0.0 else originalProfile.lastTripDistPerMode.sum() / 1000.0
+                                    val currentTripDistSum = (status.tripDistPerMode.sum()) / 1000.0
+                                    val tripDelta = currentTripDistSum - prevTripDistSum
+                                    val offlineDist = odoDelta - tripDelta
+                                    
+                                    val formattedLastOdo = "%.3f".format(originalProfile.lastOdometer)
+                                    val formattedCurrentOdo = "%.3f".format(resolvedOdo)
+                                    val formattedOdoDelta = "%.3f".format(odoDelta)
+                                    val formattedLastTrip = "%.3f".format(prevTripDistSum)
+                                    val formattedCurrentTrip = "%.3f".format(currentTripDistSum)
+                                    val formattedTripDelta = "%.3f".format(tripDelta)
+                                    val formattedOfflineDist = "%.3f".format(offlineDist)
+                                    val offlineStatus = if (offlineDist > 0.20) "OFFLINE_TRIGGERED" else "SKIPPED"
+                                    
+                                    FileLogger.log("[OFFLINE_CHECK_LATE] lastOdo: $formattedLastOdo | currentOdo: $formattedCurrentOdo | odoDelta: $formattedOdoDelta | lastTripSum: $formattedLastTrip | currentTripSum: $formattedCurrentTrip | tripDelta: $formattedTripDelta | offlineDist: $formattedOfflineDist | status: $offlineStatus")
+                                    
+                                    if (offlineDist > 0.20) {
+                                        var capacity = originalProfile.learnedUsableMotorCapacity
+                                        if (capacity == 500.0f && !status.batteryModel.isNullOrEmpty()) {
+                                            if (status.batteryModel.contains("750")) capacity = 750f * 0.70f
+                                            else if (status.batteryModel.contains("625")) capacity = 625f * 0.70f
+                                            else if (status.batteryModel.contains("500")) capacity = 500f * 0.70f
+                                            else if (status.batteryModel.contains("400")) capacity = 400f * 0.70f
+                                        }
+                                        val rangeArray = status.remainingRanges
+                                        val modesCount = status.assistModeNames.size
+                                        val rates = originalProfile.learnedMotorConsumptionRates.toMutableList()
+                                        while (rates.size < modesCount) rates.add(8.0f)
+                                        val learnedCoeff = originalProfile.learnedUserEffortCoefficient
+                                        
+                                        if (rangeArray.isNotEmpty() && (status.batteryLevel ?: 0) >= 10) {
+                                            for (r in 0 until rangeArray.size) {
+                                                val range = rangeArray[r]
+                                                if (range > 0) {
+                                                    val modeIndex = r + 1
+                                                    if (modeIndex < rates.size) {
+                                                        rates[modeIndex] = (capacity * ((status.batteryLevel ?: 0) / 100.0f)) / range
+                                                    }
+                                                }
+                                            }
+                                            if (rates.isNotEmpty()) rates[0] = 0.0f
+                                            settings.updateBikeLearningParams(mac, learnedCoeff, rates)
+                                        }
+                                        
+                                        val energyDeltaKWh = (status.totalBattery ?: originalProfile.lastTotalMotorEnergy) - originalProfile.lastTotalMotorEnergy
+                                        val isOffRide = energyDeltaKWh <= 0.001
+                                        val estimatedWh: Double
+                                        val estimatedKcal: Double
+                                        
+                                        if (isOffRide) {
+                                            estimatedWh = 0.0
+                                            estimatedKcal = offlineDist * 22.0
+                                            FileLogger.log("EBikeBackgroundService: Offline segment detected as unassisted (no SoC drop). Using distance-based estimate.")
+                                        } else {
+                                            val activeRates = rates.filterIndexed { idx, _ -> idx >= 1 }
+                                            val avgRate = if (activeRates.isNotEmpty()) activeRates.average() else 8.0
+                                            estimatedWh = offlineDist * avgRate
+                                            estimatedKcal = learnedCoeff * estimatedWh
+                                        }
+                                        
+                                        FileLogger.log("EBikeBackgroundService: Late Offline Est - Wh: ${"%.2f".format(estimatedWh)}, kcal: ${"%.1f".format(estimatedKcal)}")
+                                        
+                                        pedalBaseline += estimatedKcal
+                                        pedalEstimatedBaseline += estimatedKcal
+                                        rideBaseline += estimatedWh
+                                    }
+                                }
+                                
+                                settings.updateBikeBaselines(
+                                    mac = mac,
+                                    pedalBaseline = pedalBaseline,
+                                    rideBaseline = rideBaseline,
+                                    pedalMeasuredBaseline = pedalMeasuredBaseline,
+                                    pedalEstimatedBaseline = pedalEstimatedBaseline,
+                                    lastTripPedal = status.tripPedalEnergy ?: 0,
+                                    lastTripRide = status.tripTotalEnergy ?: 0.0,
+                                    lastOdo = resolvedOdo,
+                                    lastTotalBattery = status.totalBattery ?: originalProfile.lastTotalMotorEnergy
+                                )
+                            }
                         }
                     }
 
@@ -210,12 +364,14 @@ class EBikeBackgroundService : Service() {
                             val currentTripTotal = status.tripTotalEnergy ?: 0.0
                             if (currentOdo != null && currentBattery != null) {
                                 settings.updateActiveRideReferences(
-                                    mac = mac,
-                                    currentOdo = currentOdo,
-                                    currentTotalBattery = currentBattery,
-                                    currentTripPedal = currentTripPedal,
-                                    currentTripRide = currentTripTotal
-                                )
+                                     mac = mac,
+                                     currentOdo = currentOdo,
+                                     currentTotalBattery = currentBattery,
+                                     currentTripPedal = currentTripPedal,
+                                     currentTripRide = currentTripTotal,
+                                     tripDistPerMode = status.tripDistPerMode,
+                                     usageRecords = status.sortedUsageRecordsB
+                                 )
                             }
                         }
                     }
@@ -726,6 +882,8 @@ class EBikeBackgroundService : Service() {
         startupTripDists = null
         startupSoC = null
         startupUsageRecords = emptyList()
+        profileBeforeSync = null
+        syncCompletionTime = 0L
     }
 
     private fun completeSync(force: Boolean) {
@@ -744,6 +902,8 @@ class EBikeBackgroundService : Service() {
             try {
                 val mac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first() ?: return@launch
                 val profile = activeProfile ?: com.example.ebikemonitor.data.model.BikeProfile(macAddress = mac, name = "MyBike")
+                profileBeforeSync = profile
+                syncCompletionTime = System.currentTimeMillis()
                 
                 // Capture starting values
                 val currentOdo = status.totalDistance ?: profile.lastOdometer
@@ -821,11 +981,11 @@ class EBikeBackgroundService : Service() {
                     val formattedCurrentTrip = "%.3f".format(currentTripDistSum)
                     val formattedTripDelta = "%.3f".format(tripDelta)
                     val formattedOfflineDist = "%.3f".format(offlineDist)
-                    val offlineStatus = if (offlineDist > 0.20) "OFFLINE_TRIGGERED" else "SKIPPED"
+                    val offlineStatus = if (tripResetDetected && offlineDist > 0.20) "OFFLINE_TRIGGERED" else "SKIPPED"
                     
                     FileLogger.log("[OFFLINE_CHECK] lastOdo: $formattedLastOdo | currentOdo: $formattedCurrentOdo | odoDelta: $formattedOdoDelta | lastTripSum: $formattedLastTrip | currentTripSum: $formattedCurrentTrip | tripDelta: $formattedTripDelta | offlineDist: $formattedOfflineDist | status: $offlineStatus")
                     
-                    if (offlineDist > 0.20) { // Threshold: 200 meters (0.20 km)
+                    if (tripResetDetected && offlineDist > 0.20) { // Threshold: 200 meters (0.20 km)
                         FileLogger.log("EBikeBackgroundService: Offline segment of ${"%.3f".format(offlineDist)} km detected.")
                         
                         var capacity = profile.learnedUsableMotorCapacity
@@ -927,6 +1087,20 @@ class EBikeBackgroundService : Service() {
                 val rates = profile.learnedMotorConsumptionRates.toMutableList()
                 while (rates.size < expectedCount) rates.add(8.0f)
                 
+                val usageSum = if (currentUsage.size == expectedCount && localStartupUsageRecords.size == expectedCount) {
+                    currentUsage.mapIndexed { i, cur -> 
+                        val start = localStartupUsageRecords.getOrNull(i)
+                        if (cur != null && start != null) (cur.distance - start.distance) / 1000.0 else 0.0
+                    }.sum()
+                } else {
+                    0.0
+                }
+                val isDataConsistent = odoDelta <= 0.20 || kotlin.math.abs(odoDelta - usageSum) <= 0.20
+                
+                if (!isDataConsistent) {
+                    FileLogger.log("EBikeBackgroundService: End-of-session calibration skipped due to Odo/Usage mismatch (OdoDelta: ${"%.3f".format(odoDelta)} km, UsageSum: ${"%.3f".format(usageSum)} km). Startup sync will reconcile.")
+                }
+                
                 var totalMotorEnergyDelta = 0.0
                 var totalExpectedEffort = 0.0
                 
@@ -937,7 +1111,7 @@ class EBikeBackgroundService : Service() {
                 val startBattery = startupTotalBattery
                 var finalUsableCap = profile.learnedUsableMotorCapacity
                 
-                if (endSoC != null && endBattery != null && startSoC != null && startBattery != null) {
+                if (isDataConsistent && endSoC != null && endBattery != null && startSoC != null && startBattery != null) {
                     val socDrop = startSoC - endSoC
                     if (socDrop >= 3) {
                         val energyDeltaKWh = endBattery - startBattery
@@ -951,7 +1125,7 @@ class EBikeBackgroundService : Service() {
                     }
                 }
 
-                if (currentUsage.size == expectedCount && localStartupUsageRecords.size == expectedCount) {
+                if (isDataConsistent && currentUsage.size == expectedCount && localStartupUsageRecords.size == expectedCount) {
                     for (i in 1 until expectedCount) { // Skip Index 0 (OFF)
                         val cur = currentUsage[i]
                         val start = localStartupUsageRecords.getOrNull(i)
@@ -982,14 +1156,16 @@ class EBikeBackgroundService : Service() {
                 val currentTripPedal = status.tripPedalEnergy ?: 0
                 val pedalDelta = currentTripPedal - (localStartupTripPedal ?: 0)
                 
-                if (totalMotorEnergyDelta >= 10.0 && pedalDelta > 0 && totalExpectedEffort > 0.0) {
+                if (isDataConsistent && totalMotorEnergyDelta >= 10.0 && pedalDelta > 0 && totalExpectedEffort > 0.0) {
                     val measuredGamma = pedalDelta / totalExpectedEffort
                     val boundedGamma = measuredGamma.coerceIn(0.2, 5.0)
                     currentGamma = ((currentGamma * 0.90) + (boundedGamma * 0.10)).toFloat()
                     FileLogger.log("EBikeBackgroundService: Calibrated Effort Gamma: Actual: $pedalDelta kcal, Expected: ${"%.2f".format(totalExpectedEffort)} Wh-equivalent -> Gamma: ${"%.3f".format(boundedGamma)} (smoothed: ${"%.3f".format(currentGamma)})")
                 }
                 
-                settings.updateBikeLearningParams(mac, currentGamma, rates)
+                if (isDataConsistent) {
+                    settings.updateBikeLearningParams(mac, currentGamma, rates)
+                }
                 
                 var simulatedKcalSum = 0.0
                 if (currentUsage.size == expectedCount && localStartupUsageRecords.size == expectedCount) {
@@ -1012,7 +1188,9 @@ class EBikeBackgroundService : Service() {
                     currentOdo = currentOdo,
                     currentTotalBattery = endBattery ?: profile.lastTotalMotorEnergy,
                     currentTripPedal = currentTripPedal,
-                    currentTripRide = status.tripTotalEnergy ?: 0.0
+                    currentTripRide = status.tripTotalEnergy ?: 0.0,
+                    tripDistPerMode = status.tripDistPerMode,
+                    usageRecords = status.sortedUsageRecordsB
                 )
                 
                 val errorPct = if (pedalDelta > 0) {

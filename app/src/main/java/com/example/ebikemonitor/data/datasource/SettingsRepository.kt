@@ -234,7 +234,9 @@ class SettingsRepository(private val context: Context) {
         currentOdo: Double,
         currentTotalBattery: Double,
         currentTripPedal: Int,
-        currentTripRide: Double
+        currentTripRide: Double,
+        tripDistPerMode: List<Int>,
+        usageRecords: List<com.example.ebikemonitor.data.model.UsageRecord?>
     ) {
         val profiles = bikeProfiles.first().toMutableList()
         val index = profiles.indexOfFirst { it.macAddress == mac }
@@ -243,7 +245,9 @@ class SettingsRepository(private val context: Context) {
                 lastOdometer = currentOdo,
                 lastTotalMotorEnergy = currentTotalBattery,
                 lastTripPedalEnergy = currentTripPedal,
-                lastTripRideEnergy = currentTripRide
+                lastTripRideEnergy = currentTripRide,
+                lastTripDistPerMode = tripDistPerMode,
+                lastUsageRecords = usageRecords
             )
             saveBikeProfiles(profiles)
         }

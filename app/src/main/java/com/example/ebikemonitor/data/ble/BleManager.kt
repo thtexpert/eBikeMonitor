@@ -161,7 +161,11 @@ class BleManager(private val context: Context) {
                 }
                 0x80BC -> currentStatus = currentStatus.copy(batteryLevel = msg.value)
                 0x9809 -> currentStatus = currentStatus.copy(assistMode = msg.value)
-                0x9818 -> currentStatus = currentStatus.copy(totalDistance = msg.value / 1000.0)
+                0x9818 -> {
+                    val odo = msg.value / 1000.0
+                    currentStatus = currentStatus.copy(totalDistance = odo)
+                    com.example.ebikemonitor.FileLogger.log("BleManager: Raw Odometer received: ${"%.3f".format(odo)} km (raw: ${msg.value})")
+                }
                 0x8096 -> currentStatus = currentStatus.copy(chargeCycles = msg.value / 10.0)
                 0xA243 -> {
                     currentStatus = currentStatus.copy(
@@ -269,7 +273,13 @@ class BleManager(private val context: Context) {
                             }
                             
                             if (unsortedModeUsageList.size == expectedCount) {
-                            Log.d("BleManager", "Batch of $expectedCount usage records complete: $unsortedModeUsageList")
+                             Log.d("BleManager", "Batch of $expectedCount usage records complete: $unsortedModeUsageList")
+                             val sumDist = unsortedModeUsageList.sumOf { it.distance.toDouble() } / 1000.0
+                             val sumEnergy = sumKWh ?: 0.0
+                             val modesDetail = unsortedModeUsageList.mapIndexed { idx, record ->
+                                 "Mode$idx: ${"%.3f".format(record.distance / 1000.0)} km"
+                             }.joinToString(", ")
+                             com.example.ebikemonitor.FileLogger.log("BleManager: Raw Usage Batch complete: SumDist = ${"%.3f".format(sumDist)} km ($modesDetail), SumEnergy = ${"%.3f".format(sumEnergy)} kWh, Valid = $batchValid, BikeOdo = ${currentStatus.totalDistance} km")
                             
                             // 1. Startup Decoding Ritual (Persistent Storage)
                             if (currentStatus.initialTripDistPerMode == null && currentStatus.persistentBaselines != null) {
@@ -444,7 +454,18 @@ class BleManager(private val context: Context) {
             startupSecondaryError = null,
             prevTripDistPerMode = null,
             prevUnsortedUsageRecords = null,
-            lastUpdateTimestamp = 0L
+            lastUpdateTimestamp = 0L,
+            // Clear telemetry cache to avoid corrupting next session startup decoding
+            tripDistPerMode = emptyList(),
+            sortedUsageRecordsB = emptyList(),
+            sortedUsageRecordsA = emptyList(),
+            unsortedUsageRecords = emptyList(),
+            totalDistance = null,
+            tripPedalEnergy = null,
+            tripTotalEnergy = null,
+            batteryLevel = null,
+            totalBattery = null,
+            remainingRanges = emptyList()
         )
     }
 
