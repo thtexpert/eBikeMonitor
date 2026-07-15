@@ -209,13 +209,18 @@ fun AllSensorsDebugCard(
 
             // Total human measured and estimated baselines
             val totalMeasuredKcal = if (activeProfile != null) {
-                val currentTripVal = bikeStatus.tripPedalEnergy ?: 0
+                val currentTripVal = if (isBleConnected) {
+                    bikeStatus.tripPedalEnergy ?: 0
+                } else {
+                    activeProfile.lastTripPedalEnergy
+                }
                 val totalMeasured = activeProfile.totalPedalEnergyMeasuredBaseline + currentTripVal
                 "%.1f kcal".format(totalMeasured)
             } else {
                 "--"
             }
             sensors.add("Total Measured" to totalMeasuredKcal)
+
             
             val totalEstimatedKcal = if (activeProfile != null) {
                 "%.1f kcal".format(activeProfile.totalPedalEnergyEstimatedBaseline)
@@ -223,6 +228,21 @@ fun AllSensorsDebugCard(
                 "--"
             }
             sensors.add("Total Estimated" to totalEstimatedKcal)
+
+            val dbMeasuredKcal = if (activeProfile != null) {
+                "%.1f kcal".format(activeProfile.totalPedalEnergyMeasuredBaseline)
+            } else {
+                "--"
+            }
+            sensors.add("Measured Baseline (DB)" to dbMeasuredKcal)
+
+            val dbEstimatedKcal = if (activeProfile != null) {
+                "%.1f kcal".format(activeProfile.totalPedalEnergyEstimatedBaseline)
+            } else {
+                "--"
+            }
+            sensors.add("Estimated Baseline (DB)" to dbEstimatedKcal)
+
 
             // Per-Mode
             val modeNames = bikeStatus.assistModeNames

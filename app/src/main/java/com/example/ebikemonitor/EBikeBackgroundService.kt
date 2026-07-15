@@ -28,6 +28,8 @@ class EBikeBackgroundService : Service() {
     private var profileBeforeSync: com.example.ebikemonitor.data.model.BikeProfile? = null
     private var syncCompletionTime: Long = 0L
     private var lastTelemetryLogTime: Long = 0L
+    private var lastObservedTripPedal: Int? = null
+    private var lastObservedTripTotal: Double? = null
 
     // Home Sync Window — keeps MQTT alive after bike-off to push end-of-ride data
     private var homeSyncJob: kotlinx.coroutines.Job? = null
@@ -84,7 +86,7 @@ class EBikeBackgroundService : Service() {
         }
         
         // 2. Pre-load Baselines so we are ready the moment we connect
-        serviceScope.launch {
+        kotlinx.coroutines.runBlocking {
             try {
                 // Use activeBikeMac if available, otherwise fallback to legacy bleMacAddress
                 val mac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first()
@@ -92,14 +94,17 @@ class EBikeBackgroundService : Service() {
                     val profiles = settings.bikeProfiles.first()
                     val profile = profiles.find { it.macAddress == mac }
                     
-                    if (profile != null && profile.lastUsageRecords.isNotEmpty()) {
-                        val baselines = profile.lastUsageRecords.mapIndexed { i, usage ->
-                            val trip = profile.lastTripDistPerMode.getOrNull(i) ?: 0
-                            (usage?.distance ?: 0) - trip
-                        }
-                        if (baselines.size == profile.lastUsageRecords.size) {
-                            FileLogger.log("EBikeBackgroundService: Pre-loading ${baselines.size} persistent baselines for $mac")
-                            bleManager.setPersistentBaselines(baselines)
+                    if (profile != null) {
+                        activeProfile = profile
+                        if (profile.lastUsageRecords.isNotEmpty()) {
+                            val baselines = profile.lastUsageRecords.mapIndexed { i, usage ->
+                                val trip = profile.lastTripDistPerMode.getOrNull(i) ?: 0
+                                (usage?.distance ?: 0) - trip
+                            }
+                            if (baselines.size == profile.lastUsageRecords.size) {
+                                FileLogger.log("EBikeBackgroundService: Pre-loading ${baselines.size} persistent baselines for $mac")
+                                bleManager.setPersistentBaselines(baselines)
+                            }
                         }
                     }
                 }
@@ -158,7 +163,7 @@ class EBikeBackgroundService : Service() {
             bleManager.bikeStatus
                 .sample(1000)
                 .collect { status ->
-                    if (mqttManager.isConnected.value && status.lastUpdateTimestamp > 0) {
+                    if (mqttManager.isConnected.value && status.lastUpdateTimestamp > 0 && isSyncComplete) {
                         syncToMqtt(status)
                     }
                     
@@ -170,9 +175,18 @@ class EBikeBackgroundService : Service() {
                         0.0
                     }
                     val nowVal = System.currentTimeMillis()
-                    if (nowVal - lastTelemetryLogTime >= 5000) {
+                    if (nowVal - lastTelemetryLogTime >= 30000) {
                         lastTelemetryLogTime = nowVal
                         FileLogger.log("EBikeBackgroundService: Live Status Check: Odo: $odoVal km, UsageSum: ${"%.3f".format(usageSum)} km, RecordsCount: $usageCount, Speed: ${status.speed} m/s")
+                        val profile = activeProfile
+                        if (isSyncComplete && profile != null) {
+                            val currentTripPedal = status.tripPedalEnergy ?: 0
+                            val measuredTotal = profile.totalPedalEnergyMeasuredBaseline + currentTripPedal
+                            val estimatedTotal = profile.totalPedalEnergyEstimatedBaseline
+                            val overallTotal = measuredTotal + estimatedTotal
+                            val formattedOdo = if (odoVal != null) "%.3f".format(odoVal) else "null"
+                            FileLogger.log("[MQTT_DRYRUN] Trigger: Active Riding | Odo: $formattedOdo km | Topics: pedal_energy_measured = ${"%.1f".format(measuredTotal)} kcal | pedal_energy_estimated = ${"%.1f".format(estimatedTotal)} kcal | pedal_energy_total = ${"%.1f".format(overallTotal)} kcal")
+                        }
                     }
                     
                     val mac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first() ?: return@collect
@@ -232,17 +246,18 @@ class EBikeBackgroundService : Service() {
                             startupSoC = status.batteryLevel ?: startupSoC
                             startupUsageRecords = currentUsage
                             
-                            // 2. Re-run offline segment detection using profileBeforeSync
-                            val originalProfile = profileBeforeSync
-                            if (originalProfile != null) {
-                                val odoDelta = resolvedOdo - originalProfile.lastOdometer
-                                val tripResetDetected = (status.tripPedalEnergy ?: 0) < originalProfile.lastTripPedalEnergy ||
+                            // 2. Re-run offline segment detection using activeProfile
+                            app.applicationScope.launch {
+                                val originalProfile = activeProfile
+                                if (originalProfile != null) {
+                                    val odoDelta = resolvedOdo - originalProfile.lastOdometer
+                                    val tripResetDetected = (status.tripPedalEnergy ?: 0) < originalProfile.lastTripPedalEnergy ||
                                                        (status.tripTotalEnergy ?: 0.0) < originalProfile.lastTripRideEnergy
                                                        
-                                var pedalBaseline = originalProfile.totalPedalEnergyBaseline
-                                var rideBaseline = originalProfile.totalRideEnergyBaseline
-                                var pedalMeasuredBaseline = originalProfile.totalPedalEnergyMeasuredBaseline
-                                var pedalEstimatedBaseline = originalProfile.totalPedalEnergyEstimatedBaseline
+                                    var pedalBaseline = originalProfile.totalPedalEnergyBaseline
+                                    var rideBaseline = originalProfile.totalRideEnergyBaseline
+                                    var pedalMeasuredBaseline = originalProfile.totalPedalEnergyMeasuredBaseline
+                                    var pedalEstimatedBaseline = originalProfile.totalPedalEnergyEstimatedBaseline
                                 
                                 if (tripResetDetected) {
                                     FileLogger.log("EBikeBackgroundService: Trip reset detected on late sync. Updating baselines.")
@@ -334,6 +349,7 @@ class EBikeBackgroundService : Service() {
                             }
                         }
                     }
+                    }
 
                     // Active mid-ride trip reset check
                     if (isSyncComplete && bleManager.isConnected.value) {
@@ -341,15 +357,44 @@ class EBikeBackgroundService : Service() {
                         val currentTripTotal = status.tripTotalEnergy ?: 0.0
                         val currentTripDists = if (status.tripDistPerMode.isNotEmpty()) status.tripDistPerMode else List(status.assistModeNames.size) { 0 }
                         
-                        val tripResetDetected = currentTripPedal < (startupTripPedal ?: 0) || 
-                                               currentTripTotal < (startupTripTotal ?: 0.0)
-                                               
-                        if (tripResetDetected) {
-                            FileLogger.log("EBikeBackgroundService: Mid-ride trip reset detected. Resetting session starting reference points.")
-                            startupTripPedal = currentTripPedal
-                            startupTripTotal = currentTripTotal
-                            startupTripDists = currentTripDists
-                            startupUsageRecords = status.sortedUsageRecordsB
+                        val prevPedal = lastObservedTripPedal
+                        val prevTotal = lastObservedTripTotal
+                        
+                        if (prevPedal == null || prevTotal == null) {
+                            lastObservedTripPedal = currentTripPedal
+                            lastObservedTripTotal = currentTripTotal
+                        } else {
+                            val tripResetDetected = currentTripPedal < prevPedal || currentTripTotal < prevTotal
+                            
+                            if (tripResetDetected) {
+                                FileLogger.log("EBikeBackgroundService: Mid-ride trip reset detected (Pedal: $prevPedal -> $currentTripPedal, Total: $prevTotal -> $currentTripTotal). Saving accumulated session calories ($prevPedal kcal) to database baseline.")
+                                val profile = activeProfile
+                                if (profile != null) {
+                                    val newPedalMeasuredBaseline = profile.totalPedalEnergyMeasuredBaseline + prevPedal
+                                    val newPedalBaseline = profile.totalPedalEnergyBaseline + prevPedal
+                                    val newRideBaseline = profile.totalRideEnergyBaseline + prevTotal
+                                    
+                                    app.applicationScope.launch {
+                                        settings.updateBikeBaselines(
+                                            mac = mac,
+                                            pedalBaseline = newPedalBaseline,
+                                            rideBaseline = newRideBaseline,
+                                            pedalMeasuredBaseline = newPedalMeasuredBaseline,
+                                            pedalEstimatedBaseline = profile.totalPedalEnergyEstimatedBaseline,
+                                            lastTripPedal = currentTripPedal,
+                                            lastTripRide = currentTripTotal,
+                                            lastOdo = status.totalDistance ?: profile.lastOdometer,
+                                            lastTotalBattery = status.totalBattery ?: profile.lastTotalMotorEnergy
+                                        )
+                                    }
+                                }
+                                startupTripPedal = currentTripPedal
+                                startupTripTotal = currentTripTotal
+                                startupTripDists = currentTripDists
+                                startupUsageRecords = status.sortedUsageRecordsB
+                            }
+                            lastObservedTripPedal = currentTripPedal
+                            lastObservedTripTotal = currentTripTotal
                         }
                     }
 
@@ -683,6 +728,7 @@ class EBikeBackgroundService : Service() {
         
         // Disconnect BLE and MQTT
         app.bleManager.disconnect()
+        app.bleManager.clearTelemetryCache()
         app.mqttManager.disconnect()
         serviceScope.cancel() 
         
@@ -884,6 +930,13 @@ class EBikeBackgroundService : Service() {
         startupUsageRecords = emptyList()
         profileBeforeSync = null
         syncCompletionTime = 0L
+        
+        lastObservedTripPedal = null
+        lastObservedTripTotal = null
+        
+        // Clear telemetry cache AFTER calibration has completed
+        val app = application as EBikeApplication
+        app.bleManager.clearTelemetryCache()
     }
 
     private fun completeSync(force: Boolean) {
@@ -898,7 +951,7 @@ class EBikeBackgroundService : Service() {
         
         FileLogger.log("EBikeBackgroundService: SYNC_COMPLETE (forced=$force)")
         
-        serviceScope.launch {
+        app.applicationScope.launch {
             try {
                 val mac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first() ?: return@launch
                 val profile = activeProfile ?: com.example.ebikemonitor.data.model.BikeProfile(macAddress = mac, name = "MyBike")
@@ -908,9 +961,9 @@ class EBikeBackgroundService : Service() {
                 // Capture starting values
                 val currentOdo = status.totalDistance ?: profile.lastOdometer
                 val currentTotalBattery = status.totalBattery ?: profile.lastTotalMotorEnergy
-                val currentTripPedal = status.tripPedalEnergy ?: 0
-                val currentTripTotal = status.tripTotalEnergy ?: 0.0
-                val currentTripDists = if (status.tripDistPerMode.isNotEmpty()) status.tripDistPerMode else List(status.assistModeNames.size) { 0 }
+                val currentTripPedal = status.tripPedalEnergy ?: profile.lastTripPedalEnergy
+                val currentTripTotal = status.tripTotalEnergy ?: profile.lastTripRideEnergy
+                val currentTripDists = if (status.tripDistPerMode.isNotEmpty()) status.tripDistPerMode else if (profile.lastTripDistPerMode.isNotEmpty()) profile.lastTripDistPerMode else List(status.assistModeNames.size) { 0 }
                 val currentSoC = status.batteryLevel ?: 0
                 
                 startupOdometer = currentOdo
@@ -981,11 +1034,11 @@ class EBikeBackgroundService : Service() {
                     val formattedCurrentTrip = "%.3f".format(currentTripDistSum)
                     val formattedTripDelta = "%.3f".format(tripDelta)
                     val formattedOfflineDist = "%.3f".format(offlineDist)
-                    val offlineStatus = if (tripResetDetected && offlineDist > 0.20) "OFFLINE_TRIGGERED" else "SKIPPED"
+                    val offlineStatus = if (offlineDist > 0.20) "OFFLINE_TRIGGERED" else "SKIPPED"
                     
                     FileLogger.log("[OFFLINE_CHECK] lastOdo: $formattedLastOdo | currentOdo: $formattedCurrentOdo | odoDelta: $formattedOdoDelta | lastTripSum: $formattedLastTrip | currentTripSum: $formattedCurrentTrip | tripDelta: $formattedTripDelta | offlineDist: $formattedOfflineDist | status: $offlineStatus")
                     
-                    if (tripResetDetected && offlineDist > 0.20) { // Threshold: 200 meters (0.20 km)
+                    if (offlineDist > 0.20) { // Threshold: 200 meters (0.20 km)
                         FileLogger.log("EBikeBackgroundService: Offline segment of ${"%.3f".format(offlineDist)} km detected.")
                         
                         var capacity = profile.learnedUsableMotorCapacity
@@ -1054,7 +1107,11 @@ class EBikeBackgroundService : Service() {
                     lastOdo = currentOdo,
                     lastTotalBattery = currentTotalBattery
                 )
-                
+                val activeEstKcal = pedalMeasuredBaseline + currentTripPedal
+                val activeEstEstimated = pedalEstimatedBaseline
+                val activeEstTotal = activeEstKcal + activeEstEstimated
+                val formattedOdo = if (currentOdo != null) "%.3f".format(currentOdo) else "null"
+                FileLogger.log("[MQTT_DRYRUN] Trigger: Startup Sync Completion | Odo: $formattedOdo km | Topics: pedal_energy_measured = ${"%.1f".format(activeEstKcal)} kcal | pedal_energy_estimated = ${"%.1f".format(activeEstEstimated)} kcal | pedal_energy_total = ${"%.1f".format(activeEstTotal)} kcal")
             } catch (e: Exception) {
                 FileLogger.log("EBikeBackgroundService: sync completion error: ${e.message}")
             }
@@ -1073,7 +1130,7 @@ class EBikeBackgroundService : Service() {
         
         if (!isSyncComplete) return
         
-        serviceScope.launch {
+        app.applicationScope.launch {
             try {
                 val mac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first() ?: return@launch
                 val profile = activeProfile ?: return@launch
@@ -1153,7 +1210,8 @@ class EBikeBackgroundService : Service() {
                 if (rates.isNotEmpty()) rates[0] = 0.0f
                 
                 var currentGamma = profile.learnedUserEffortCoefficient
-                val currentTripPedal = status.tripPedalEnergy ?: 0
+                val currentTripPedal = status.tripPedalEnergy ?: localStartupTripPedal ?: profile.lastTripPedalEnergy
+                val currentTripTotal = status.tripTotalEnergy ?: startupTripTotal ?: profile.lastTripRideEnergy
                 val pedalDelta = currentTripPedal - (localStartupTripPedal ?: 0)
                 
                 if (isDataConsistent && totalMotorEnergyDelta >= 10.0 && pedalDelta > 0 && totalExpectedEffort > 0.0) {
@@ -1188,7 +1246,7 @@ class EBikeBackgroundService : Service() {
                     currentOdo = currentOdo,
                     currentTotalBattery = endBattery ?: profile.lastTotalMotorEnergy,
                     currentTripPedal = currentTripPedal,
-                    currentTripRide = status.tripTotalEnergy ?: 0.0,
+                    currentTripRide = currentTripTotal,
                     tripDistPerMode = status.tripDistPerMode,
                     usageRecords = status.sortedUsageRecordsB
                 )
@@ -1212,6 +1270,12 @@ class EBikeBackgroundService : Service() {
                 val rangesStr = status.remainingRanges.joinToString("/")
                 
                 FileLogger.log("[ESTIMATOR_DIAGNOSTIC] SessionEnded | OdoDelta: ${"%.3f".format(odoDelta)} | ModeDists: [$modesDistsStr] | RemainingRanges: [$rangesStr] | SoC: ${status.batteryLevel}% | UsableCap: ${"%.1f".format(finalUsableCap)} | LearnedGamma: ${"%.3f".format(currentGamma)} | ActualKcal: $pedalDelta | EstKcal: ${"%.1f".format(simulatedKcalSum)} | Error: ${"%.1f".format(errorPct)}%")
+                FileLogger.log("EBikeBackgroundService: End-of-Session Baselines - Measured: ${"%.1f".format(profile.totalPedalEnergyMeasuredBaseline)} kcal, Estimated: ${"%.1f".format(profile.totalPedalEnergyEstimatedBaseline)} kcal (Live Session Trip: $currentTripPedal kcal)")
+                val measuredTotal = profile.totalPedalEnergyMeasuredBaseline + currentTripPedal
+                val estimatedTotal = profile.totalPedalEnergyEstimatedBaseline
+                val overallTotal = measuredTotal + estimatedTotal
+                val formattedOdo = if (currentOdo != null) "%.3f".format(currentOdo) else "null"
+                FileLogger.log("[MQTT_DRYRUN] Trigger: BLE Disconnect | Odo: $formattedOdo km | Topics: pedal_energy_measured = ${"%.1f".format(measuredTotal)} kcal | pedal_energy_estimated = ${"%.1f".format(estimatedTotal)} kcal | pedal_energy_total = ${"%.1f".format(overallTotal)} kcal")
                 
             } catch (e: Exception) {
                 FileLogger.log("EBikeBackgroundService: End-of-session calibration error: ${e.message}")

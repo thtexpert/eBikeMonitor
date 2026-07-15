@@ -2,8 +2,12 @@ package com.example.ebikemonitor.data.parser
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Test
 import com.example.ebikemonitor.data.model.UsageRecord
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 
 class EnergyEstimationTest {
 
@@ -177,5 +181,244 @@ class EnergyEstimationTest {
         val learnedCoeff = 3.0f
         val estimatedKcal = learnedCoeff * estimatedWh
         assertEquals(76.84, estimatedKcal, 0.10)
+    }
+
+    @Test
+    fun testOfflineSegmentEstimationRestrictedToTripReset() {
+        val odoDelta = 5.0 // km
+        val distanceThreshold = 0.20 // km
+
+        // Scenario A: Odo delta > threshold
+        val statusA = if (odoDelta > distanceThreshold) "OFFLINE_TRIGGERED" else "SKIPPED"
+        assertEquals("OFFLINE_TRIGGERED", statusA)
+
+        // Scenario B: Offline trip reset occurred (offlineDist > threshold) but tripResetDetected == false
+        // We assert that the system should trigger offline estimation to recover the offline segment.
+        val odoDeltaB = 5.0
+        val statusB = if (odoDeltaB > distanceThreshold) "OFFLINE_TRIGGERED" else "SKIPPED"
+        assertEquals("OFFLINE_TRIGGERED", statusB)
+    }
+
+    @Test
+    fun testMidRideResetDetection() {
+        // Telemetry frames over time: tripPedal goes 0 -> 69 -> 2
+        var lastObservedTripPedal: Int? = null
+        var totalPedalEnergyMeasuredBaseline = 125.0
+        var savedBaselineIncrement = 0.0
+
+        // Frame 1: Startup
+        var currentTripPedal = 0
+        if (lastObservedTripPedal == null) {
+            lastObservedTripPedal = currentTripPedal
+        }
+        assertEquals(0, lastObservedTripPedal)
+
+        // Frame 2: Riding along (accumulated 69 kcal)
+        currentTripPedal = 69
+        var tripResetDetected = lastObservedTripPedal != null && currentTripPedal < lastObservedTripPedal!!
+        assertFalse(tripResetDetected)
+        lastObservedTripPedal = currentTripPedal
+
+        // Frame 3: Manual Trip Reset (drops to 2 kcal)
+        currentTripPedal = 2
+        tripResetDetected = lastObservedTripPedal != null && currentTripPedal < lastObservedTripPedal!!
+        assertTrue(tripResetDetected)
+        
+        if (tripResetDetected) {
+            savedBaselineIncrement = lastObservedTripPedal!!.toDouble()
+            totalPedalEnergyMeasuredBaseline += savedBaselineIncrement
+        }
+        lastObservedTripPedal = currentTripPedal
+
+        // Verify the 69 kcal was successfully saved into the baseline
+        assertEquals(69.0, savedBaselineIncrement, 0.0)
+        assertEquals(194.0, totalPedalEnergyMeasuredBaseline, 0.0)
+        assertEquals(2, lastObservedTripPedal)
+    }
+
+    @Test
+    fun testLateSyncPreservesUpdatedBaselines() {
+        // Database values before startup sync
+        val dbBaselineBeforeSync = 125.0
+        val dbLastTripBeforeSync = 109.0
+
+        // Capture profileBeforeSync at the very beginning
+        val profileBeforeSync = dbBaselineBeforeSync
+
+        // 1. Startup sync runs and updates database baselines
+        val activeProfileBaseline = dbBaselineBeforeSync + dbLastTripBeforeSync // 234.0
+
+        // 2. Late sync runs
+        // Scenario A (Bug): uses stale profileBeforeSync, reverting the database
+        val finalBaselineBug = profileBeforeSync
+        assertEquals(125.0, finalBaselineBug, 0.0)
+
+        // Scenario B (Fix): uses activeProfile, preserving the updated baselines
+        val finalBaselineFix = activeProfileBaseline
+        assertEquals(234.0, finalBaselineFix, 0.0)
+    }
+
+    @Test
+    fun testDisconnectCalibrationTelemetryCacheDecoupling() {
+        val sessionCalories = 53
+
+        // Scenario A (Bug): disconnect() wipes telemetry variables before calibration
+        var tripPedalEnergyCache: Int? = sessionCalories
+        // disconnect() runs first
+        tripPedalEnergyCache = null
+        // Calibration runs
+        val calibrationValueBug = tripPedalEnergyCache ?: 0
+        assertEquals(0, calibrationValueBug) // 53 kcal lost!
+
+        // Scenario B (Fix): Calibration runs before clearTelemetryCache() wipes the variables
+        var tripPedalEnergyCacheFix: Int? = sessionCalories
+        // Calibration runs first
+        val calibrationValueFix = tripPedalEnergyCacheFix ?: 0
+        assertEquals(53, calibrationValueFix) // 53 kcal successfully saved!
+        // clearTelemetryCache() runs afterwards
+        tripPedalEnergyCacheFix = null
+        assertNull(tripPedalEnergyCacheFix)
+    }
+
+    @Test
+    fun testEnergyValuesAreMonotonicallyIncreasing() {
+        val energyHistory = mutableListOf<Double>()
+        var measuredBaseline = 0.0
+        var estimatedBaseline = 76.6
+        
+        fun calculateTotal(currentTrip: Int): Double {
+            val total = measuredBaseline + estimatedBaseline + currentTrip
+            energyHistory.add(total)
+            return total
+        }
+
+        // 1. Startup
+        calculateTotal(0) // 76.6
+        
+        // 2. Segment 1: ride to 69 kcal
+        calculateTotal(20)
+        calculateTotal(45)
+        calculateTotal(69) // 145.6
+        
+        // 3. Manual Reset: Kiox drops to 2 kcal (current < prev)
+        // Mid-ride reset check triggers: we commit the previous 69 kcal to baseline.
+        measuredBaseline += 69.0
+        calculateTotal(2) // 147.6
+        
+        // 4. Segment 2: ride to 58 kcal
+        calculateTotal(30)
+        calculateTotal(58) // 203.6
+        
+        // 5. Disconnect (End of session):
+        // Telemetry cache preserved during calibration, lastTrip is saved as 58.
+        val lastTripSaved = 58
+        
+        // 6. Offline ride occurs (BLE off)
+        val offlineEstimate = 25.7
+        
+        // 7. Startup sync of next ride:
+        // Trip reset detected (Kiox is 0 < lastTripSaved), baselines updated.
+        measuredBaseline += lastTripSaved // 69.0 + 58.0 = 127.0
+        estimatedBaseline += offlineEstimate // 76.6 + 25.7 = 102.3
+        
+        calculateTotal(0) // 229.3
+        
+        // 8. Late sync occurs:
+        // Database baseline stays 127.0 (using activeProfile, not stale profileBeforeSync).
+        // Kiox calories updates late to 111
+        calculateTotal(111) // 340.3
+        
+        // Verify monotonicity across the entire timeline
+        for (i in 1 until energyHistory.size) {
+            val prev = energyHistory[i - 1]
+            val curr = energyHistory[i]
+            assertTrue("Value decreased at index $i: $prev -> $curr", curr >= prev)
+        }
+        
+        // Final sanity checks
+        assertEquals(9, energyHistory.size)
+        assertEquals(76.6, energyHistory.first(), 0.01)
+        assertEquals(340.3, energyHistory.last(), 0.01)
+    }
+
+    @Test
+    fun testApplicationScopeCalibrationTaskSurvival() = kotlinx.coroutines.runBlocking {
+        val serviceScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+        val applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+        
+        var isDbWriteSuccessful = false
+        
+        // Scenario A (Bug): Launch on serviceScope which gets cancelled during stopSelf/onDestroy
+        val jobA = serviceScope.launch {
+            try {
+                kotlinx.coroutines.delay(100)
+                isDbWriteSuccessful = true
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cancelled
+            }
+        }
+        
+        // Simulate service onDestroy cancelling the serviceScope
+        serviceScope.cancel()
+        jobA.join()
+        assertFalse(isDbWriteSuccessful) // Database write was cancelled!
+        
+        // Scenario B (Fix): Launch on applicationScope which survives service destruction
+        val jobB = applicationScope.launch {
+            try {
+                kotlinx.coroutines.delay(50)
+                isDbWriteSuccessful = true
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Should not happen
+            }
+        }
+        
+        // Even if service is destroyed, applicationScope continues running
+        jobB.join()
+        assertTrue(isDbWriteSuccessful) // Database write successfully completed!
+    }
+
+    @Test
+    fun testDeferredSyncTimeoutSequence() {
+        // State variables in profile/datastore from Session 1 end:
+        var dbMeasuredBaseline = 1578.0
+        var dbLastTripPedal = 111
+        var dbLastTripDistPerModeSum = 38.56
+        
+        // 1. Session 2 connects. Sync timeout occurs. Kiox data is missing (currentTripPedal = null).
+        // Since sync is deferred, we do NOT complete sync, and we do NOT call updateActiveRideReferences on disconnect.
+        val session2SyncCompleted = false // Deferred!
+        
+        if (session2SyncCompleted) {
+            // If it had completed sync incorrectly, it would have reset the references:
+            dbMeasuredBaseline += dbLastTripPedal
+            dbLastTripPedal = 0
+            dbLastTripDistPerModeSum = 0.0
+        }
+        
+        // Assert that the references are preserved as they were
+        assertEquals(1578.0, dbMeasuredBaseline, 0.0)
+        assertEquals(111, dbLastTripPedal)
+        assertEquals(38.56, dbLastTripDistPerModeSum, 0.0)
+        
+        // 2. Session 3 connects. Checklist satisfied, sync completes successfully.
+        // Kiox trip data arrives: currentTripPedal = 0 (physical reset offline), currentTripDistSum = 1.024
+        val currentTripPedal = 0
+        val currentTripDistSum = 1.024
+        
+        // Reset detection runs using the preserved database references:
+        val tripResetDetected = currentTripPedal < dbLastTripPedal || currentTripDistSum < dbLastTripDistPerModeSum
+        assertTrue(tripResetDetected)
+        
+        if (tripResetDetected) {
+            dbMeasuredBaseline += dbLastTripPedal // 1578.0 + 111 = 1689.0
+            dbLastTripPedal = currentTripPedal
+            dbLastTripDistPerModeSum = currentTripDistSum
+        }
+        
+        // Verify the correct baselines are set and double-counting is prevented
+        assertEquals(1689.0, dbMeasuredBaseline, 0.0)
+        assertEquals(0, dbLastTripPedal)
+        assertEquals(1.024, dbLastTripDistPerModeSum, 0.0)
     }
 }

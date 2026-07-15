@@ -164,7 +164,7 @@ class BleManager(private val context: Context) {
                 0x9818 -> {
                     val odo = msg.value / 1000.0
                     currentStatus = currentStatus.copy(totalDistance = odo)
-                    com.example.ebikemonitor.FileLogger.log("BleManager: Raw Odometer received: ${"%.3f".format(odo)} km (raw: ${msg.value})")
+                    Log.d("BleManager", "Raw Odometer received: ${"%.3f".format(odo)} km (raw: ${msg.value})")
                 }
                 0x8096 -> currentStatus = currentStatus.copy(chargeCycles = msg.value / 10.0)
                 0xA243 -> {
@@ -442,7 +442,9 @@ class BleManager(private val context: Context) {
         bluetoothGatt?.close()
         bluetoothGatt = null
         _isConnected.value = false
-        
+    }
+
+    fun clearTelemetryCache() {
         // Clear session tracking variables so the next connection starts fresh
         _bikeStatus.value = _bikeStatus.value.copy(
             initialTripDistPerMode = null,

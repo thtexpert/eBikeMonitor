@@ -15,6 +15,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import com.example.ebikemonitor.data.model.BikeProfile
 import com.example.ebikemonitor.data.model.BatteryProfile
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -46,6 +48,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     private val json = Json { ignoreUnknownKeys = true }
+    private val profilesMutex = Mutex()
 
     val bleMacAddress: Flow<String?> = context.dataStore.data.map { it[BLE_MAC_ADDRESS] }
     val eBikeName: Flow<String> = context.dataStore.data.map { it[EBIKE_NAME] ?: "MyEBike" }
@@ -156,11 +159,13 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun updateBikeDiscoveryVersion(mac: String, version: Int) {
-        val profiles = bikeProfiles.first().toMutableList()
-        val index = profiles.indexOfFirst { it.macAddress == mac }
-        if (index != -1) {
-            profiles[index] = profiles[index].copy(lastDiscoveryVersion = version)
-            saveBikeProfiles(profiles)
+        profilesMutex.withLock {
+            val profiles = bikeProfiles.first().toMutableList()
+            val index = profiles.indexOfFirst { it.macAddress == mac }
+            if (index != -1) {
+                profiles[index] = profiles[index].copy(lastDiscoveryVersion = version)
+                saveBikeProfiles(profiles)
+            }
         }
     }
 
@@ -179,14 +184,16 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun updateBikeUsageHistory(mac: String, usage: List<com.example.ebikemonitor.data.model.UsageRecord?>, trip: List<Int>) {
-        val profiles = bikeProfiles.first().toMutableList()
-        val index = profiles.indexOfFirst { it.macAddress == mac }
-        if (index != -1) {
-            profiles[index] = profiles[index].copy(
-                lastUsageRecords = usage,
-                lastTripDistPerMode = trip
-            )
-            saveBikeProfiles(profiles)
+        profilesMutex.withLock {
+            val profiles = bikeProfiles.first().toMutableList()
+            val index = profiles.indexOfFirst { it.macAddress == mac }
+            if (index != -1) {
+                profiles[index] = profiles[index].copy(
+                    lastUsageRecords = usage,
+                    lastTripDistPerMode = trip
+                )
+                saveBikeProfiles(profiles)
+            }
         }
     }
 
@@ -201,31 +208,35 @@ class SettingsRepository(private val context: Context) {
         lastOdo: Double,
         lastTotalBattery: Double
     ) {
-        val profiles = bikeProfiles.first().toMutableList()
-        val index = profiles.indexOfFirst { it.macAddress == mac }
-        if (index != -1) {
-            profiles[index] = profiles[index].copy(
-                totalPedalEnergyBaseline = pedalBaseline,
-                totalRideEnergyBaseline = rideBaseline,
-                totalPedalEnergyMeasuredBaseline = pedalMeasuredBaseline,
-                totalPedalEnergyEstimatedBaseline = pedalEstimatedBaseline,
-                lastTripPedalEnergy = lastTripPedal,
-                lastTripRideEnergy = lastTripRide,
-                lastOdometer = lastOdo,
-                lastTotalMotorEnergy = lastTotalBattery
-            )
-            saveBikeProfiles(profiles)
+        profilesMutex.withLock {
+            val profiles = bikeProfiles.first().toMutableList()
+            val index = profiles.indexOfFirst { it.macAddress == mac }
+            if (index != -1) {
+                profiles[index] = profiles[index].copy(
+                    totalPedalEnergyBaseline = pedalBaseline,
+                    totalRideEnergyBaseline = rideBaseline,
+                    totalPedalEnergyMeasuredBaseline = pedalMeasuredBaseline,
+                    totalPedalEnergyEstimatedBaseline = pedalEstimatedBaseline,
+                    lastTripPedalEnergy = lastTripPedal,
+                    lastTripRideEnergy = lastTripRide,
+                    lastOdometer = lastOdo,
+                    lastTotalMotorEnergy = lastTotalBattery
+                )
+                saveBikeProfiles(profiles)
+            }
         }
     }
 
     suspend fun updateBikeUsableCapacity(mac: String, capacity: Float) {
-        val profiles = bikeProfiles.first().toMutableList()
-        val index = profiles.indexOfFirst { it.macAddress == mac }
-        if (index != -1) {
-            profiles[index] = profiles[index].copy(
-                learnedUsableMotorCapacity = capacity
-            )
-            saveBikeProfiles(profiles)
+        profilesMutex.withLock {
+            val profiles = bikeProfiles.first().toMutableList()
+            val index = profiles.indexOfFirst { it.macAddress == mac }
+            if (index != -1) {
+                profiles[index] = profiles[index].copy(
+                    learnedUsableMotorCapacity = capacity
+                )
+                saveBikeProfiles(profiles)
+            }
         }
     }
 
@@ -238,30 +249,45 @@ class SettingsRepository(private val context: Context) {
         tripDistPerMode: List<Int>,
         usageRecords: List<com.example.ebikemonitor.data.model.UsageRecord?>
     ) {
-        val profiles = bikeProfiles.first().toMutableList()
-        val index = profiles.indexOfFirst { it.macAddress == mac }
-        if (index != -1) {
-            profiles[index] = profiles[index].copy(
-                lastOdometer = currentOdo,
-                lastTotalMotorEnergy = currentTotalBattery,
-                lastTripPedalEnergy = currentTripPedal,
-                lastTripRideEnergy = currentTripRide,
-                lastTripDistPerMode = tripDistPerMode,
-                lastUsageRecords = usageRecords
-            )
-            saveBikeProfiles(profiles)
+        profilesMutex.withLock {
+            val profiles = bikeProfiles.first().toMutableList()
+            val index = profiles.indexOfFirst { it.macAddress == mac }
+            if (index != -1) {
+                val currentProfile = profiles[index]
+                val finalUsage = if (usageRecords.isNotEmpty() && usageRecords.all { it != null }) {
+                    usageRecords
+                } else {
+                    currentProfile.lastUsageRecords
+                }
+                val finalTripDists = if (tripDistPerMode.isNotEmpty()) {
+                    tripDistPerMode
+                } else {
+                    currentProfile.lastTripDistPerMode
+                }
+                profiles[index] = currentProfile.copy(
+                    lastOdometer = currentOdo,
+                    lastTotalMotorEnergy = currentTotalBattery,
+                    lastTripPedalEnergy = currentTripPedal,
+                    lastTripRideEnergy = currentTripRide,
+                    lastTripDistPerMode = finalTripDists,
+                    lastUsageRecords = finalUsage
+                )
+                saveBikeProfiles(profiles)
+            }
         }
     }
 
     suspend fun updateBikeLearningParams(mac: String, effortCoeff: Float, rates: List<Float>) {
-        val profiles = bikeProfiles.first().toMutableList()
-        val index = profiles.indexOfFirst { it.macAddress == mac }
-        if (index != -1) {
-            profiles[index] = profiles[index].copy(
-                learnedUserEffortCoefficient = effortCoeff,
-                learnedMotorConsumptionRates = rates
-            )
-            saveBikeProfiles(profiles)
+        profilesMutex.withLock {
+            val profiles = bikeProfiles.first().toMutableList()
+            val index = profiles.indexOfFirst { it.macAddress == mac }
+            if (index != -1) {
+                profiles[index] = profiles[index].copy(
+                    learnedUserEffortCoefficient = effortCoeff,
+                    learnedMotorConsumptionRates = rates
+                )
+                saveBikeProfiles(profiles)
+            }
         }
     }
 }
