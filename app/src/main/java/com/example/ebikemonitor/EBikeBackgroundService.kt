@@ -954,7 +954,25 @@ class EBikeBackgroundService : Service() {
         app.applicationScope.launch {
             try {
                 val mac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first() ?: return@launch
-                val profile = activeProfile ?: com.example.ebikemonitor.data.model.BikeProfile(macAddress = mac, name = "MyBike")
+                var profile = activeProfile ?: com.example.ebikemonitor.data.model.BikeProfile(macAddress = mac, name = "MyBike")
+                
+                // Re-initialize/Repair database if references are empty (self-healing)
+                val currentUnsorted = status.unsortedUsageRecords
+                if (profile.lastUsageRecords.isEmpty() && currentUnsorted.size == status.assistModeNames.size) {
+                    val sortedList = com.example.ebikemonitor.data.parser.BoschParser.processUsageRecords(currentUnsorted)
+                    if (sortedList != null && sortedList.size == status.assistModeNames.size) {
+                        FileLogger.log("EBikeBackgroundService: [SELF_HEALING] Restoring empty database usage records using consumption rate sorting.")
+                        val tripDists = if (status.tripDistPerMode.isNotEmpty()) status.tripDistPerMode else List(status.assistModeNames.size) { 0 }
+                        settings.updateBikeUsageHistory(mac, sortedList, tripDists)
+                        
+                        profile = profile.copy(
+                            lastUsageRecords = sortedList,
+                            lastTripDistPerMode = tripDists
+                        )
+                        activeProfile = profile
+                    }
+                }
+                
                 profileBeforeSync = profile
                 syncCompletionTime = System.currentTimeMillis()
                 
