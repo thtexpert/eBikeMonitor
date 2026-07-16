@@ -392,6 +392,10 @@ class EBikeBackgroundService : Service() {
                                 startupTripTotal = currentTripTotal
                                 startupTripDists = currentTripDists
                                 startupUsageRecords = status.sortedUsageRecordsB
+                                startupOdometer = status.totalDistance ?: startupOdometer
+                                
+                                // Notify BLE Manager to align session baselines
+                                app.bleManager.handleMidRideReset(currentTripDists, status.sortedUsageRecordsB)
                             }
                             lastObservedTripPedal = currentTripPedal
                             lastObservedTripTotal = currentTripTotal

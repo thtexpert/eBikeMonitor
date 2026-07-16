@@ -488,6 +488,20 @@ class BleManager(private val context: Context) {
         }
     }
 
+    fun handleMidRideReset(newTripDists: List<Int>, sortedUsageRecords: List<UsageRecord?>) {
+        val expectedCount = _bikeStatus.value.assistModeNames.size
+        if (sortedUsageRecords.size == expectedCount && sortedUsageRecords.all { it != null }) {
+            val newBaselines = sortedUsageRecords.map { it!!.distance }
+            _bikeStatus.value = _bikeStatus.value.copy(
+                persistentBaselines = newBaselines,
+                initialTripDistPerMode = newTripDists.toList(),
+                initialUnsortedUsageRecords = _bikeStatus.value.unsortedUsageRecords.toList(),
+                tripDistPerMode = newTripDists.toList()
+            )
+            Log.d("BleManager", "Version B: Mid-ride reset handled. New baselines: $newBaselines")
+        }
+    }
+
     fun updateEstimatedCalories(estKcal: Double?, errorPct: Double?) {
         _bikeStatus.value = _bikeStatus.value.copy(
             activeEstKcal = estKcal,
