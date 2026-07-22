@@ -53,6 +53,8 @@ class EBikeBackgroundService : Service() {
     private var activeSessionStartBattery: Double? = null
     private var lastReferenceWriteTime = 0L
     private var activeProfile: com.example.ebikemonitor.data.model.BikeProfile? = null
+    private var wasChargingInSession = false
+    private var lastKnownChargingSoC: Int? = null
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val CHANNEL_ID = "EBikeMonitorChannel"
@@ -115,14 +117,16 @@ class EBikeBackgroundService : Service() {
 
         // 3. Observe all key states → emit a single [STATUS] summary line on any change
         serviceScope.launch {
+            var lastStatusLogLine: String? = null
             combine(
                 bleManager.isConnected,
                 mqttManager.isConnected,
                 mqttManager.isConnecting,
                 settings.autoConnectMqtt,
-                BikePresenceManager.isBikePresent
+                BikePresenceManager.isBikePresent,
+                bleManager.bikeStatus
             ) { arr ->
-                // arr: [bleConn, mqttConn, mqttConnecting, autoMqtt, bikePresent]
+                // arr: [bleConn, mqttConn, mqttConnecting, autoMqtt, bikePresent, status]
                 arr.toList()
             }.combine(app.isUiActive) { stateArr, uiActive ->
                 stateArr + uiActive
@@ -133,7 +137,8 @@ class EBikeBackgroundService : Service() {
                 val mqttConnecting   = states[2] as Boolean
                 val autoMqtt         = states[3] as Boolean
                 val bikePresent      = states[4] as Boolean
-                val uiActive         = states[5] as Boolean
+                val status           = states[5] as com.example.ebikemonitor.data.model.BikeStatus
+                val uiActive         = states[6] as Boolean
 
                 val bleStr  = if (bleConnected) "Connected"
                               else if (bleManager.isConnectingOrConnected) "Connecting"
@@ -146,13 +151,23 @@ class EBikeBackgroundService : Service() {
                 val flowStr = if (bikePresent) "Present" else "Absent"
                 val monStr  = if (reconnectionJob?.isActive == true) "ON" else "OFF"
 
-                FileLogger.log("[STATUS] APP:$appStr | Flow:$flowStr | BLE:$bleStr | MQTT:$mqttStr | Monitor:$monStr")
+                val statusLine = "[STATUS] APP:$appStr | Flow:$flowStr | BLE:$bleStr | MQTT:$mqttStr | Monitor:$monStr"
+                if (statusLine != lastStatusLogLine) {
+                    FileLogger.log(statusLine)
+                    lastStatusLogLine = statusLine
+                }
                 // Update the persistent notification with the core connection states
-                if (!bikePresent && homeSyncJob?.isActive != true) {
+                val notifBle  = if (bleConnected) "Connected" else if (bikePresent && autoMqtt) "Reconnecting..." else "Disconnected"
+                val notifMqtt = if (mqttConnected) "Connected" else if ((bikePresent || homeSyncJob?.isActive == true) && autoMqtt) "Reconnecting..." else "Disconnected"
+                
+                if (bleConnected && status.isCharging) {
+                    val tempStr = if (status.batteryTemperature != null) " | Temp: ${status.batteryTemperature}°C" else ""
+                    updateNotification("⚡ Charging: ${status.batteryLevel ?: 0}%$tempStr")
+                } else if (!bleConnected && wasChargingInSession) {
+                    updateNotification("Charging Finished at ${lastKnownChargingSoC ?: 0}% SoC")
+                } else if (!bikePresent && homeSyncJob?.isActive != true) {
                     updateNotification("Session Ended")
                 } else {
-                    val notifBle  = if (bleConnected) "Connected" else if (bikePresent && autoMqtt) "Reconnecting..." else "Disconnected"
-                    val notifMqtt = if (mqttConnected) "Connected" else if ((bikePresent || homeSyncJob?.isActive == true) && autoMqtt) "Reconnecting..." else "Disconnected"
                     updateNotification("BLE: $notifBle | MQTT: $notifMqtt")
                 }
              }
@@ -163,6 +178,12 @@ class EBikeBackgroundService : Service() {
             bleManager.bikeStatus
                 .sample(1000)
                 .collect { status ->
+                    if (status.isCharging) {
+                        wasChargingInSession = true
+                        if (status.batteryLevel != null) {
+                            lastKnownChargingSoC = status.batteryLevel
+                        }
+                    }
                     if (mqttManager.isConnected.value && status.lastUpdateTimestamp > 0 && isSyncComplete) {
                         syncToMqtt(status)
                     }
@@ -881,6 +902,8 @@ class EBikeBackgroundService : Service() {
     private fun onBleConnected() {
         if (isSyncing || isSyncComplete) return
         FileLogger.log("EBikeBackgroundService: BLE connected. Starting synchronization window.")
+        wasChargingInSession = false
+        lastKnownChargingSoC = null
         isSyncing = true
         isSyncComplete = false
         
@@ -900,13 +923,15 @@ class EBikeBackgroundService : Service() {
                     0.0
                 }
                 
-                // If odometer changed, do NOT force completion, wait for trip data.
+                // If odometer changed by more than 0.20 km (offline threshold) and bike is moving, wait for trip data.
                 // Otherwise, force completion now.
-                if (odoDelta <= 0.01) {
-                    FileLogger.log("EBikeBackgroundService: BLE Sync timeout. Odometer unchanged (delta: $odoDelta km). Forcing SYNC_COMPLETE.")
+                val isMoving = (currentStatus.speed ?: 0.0) > 0.1
+                if (odoDelta <= 0.20 || !isMoving) {
+                    val reason = if (odoDelta <= 0.20) "Odometer delta <= 0.20 km" else "Bike is stationary"
+                    FileLogger.log("EBikeBackgroundService: BLE Sync timeout. $reason (delta: $odoDelta km). Forcing SYNC_COMPLETE.")
                     completeSync(force = true)
                 } else {
-                    FileLogger.log("EBikeBackgroundService: BLE Sync timeout. Odometer changed (delta: $odoDelta km) but trip data missing. Deferring sync completion until movement.")
+                    FileLogger.log("EBikeBackgroundService: BLE Sync timeout. Odometer changed (delta: $odoDelta km) and bike is moving, but trip data missing. Deferring sync completion until movement.")
                 }
             } else {
                 FileLogger.log("EBikeBackgroundService: BLE Sync timeout. No active bike MAC. Forcing SYNC_COMPLETE.")

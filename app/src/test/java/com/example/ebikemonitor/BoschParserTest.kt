@@ -78,4 +78,58 @@ class BoschParserTest {
         assertEquals(0x80BC, messages[0].messageId)
         assertEquals(85, messages[0].value)
     }
+
+    @Test
+    fun testParseBatteryTemperature() {
+        // Battery Temperature 0x808B, Value 458
+        // Type 0x08 (Varint)
+        // 458 = 0xCA, 0x03
+        val payload = byteArrayOf(
+            0x01,
+            0x05, // Length: ID(2) + Type(1) + Data(2) = 5
+            0x80.toByte(), 0x8B.toByte(),
+            0x08.toByte(),
+            0xCA.toByte(), 0x03.toByte()
+        )
+        
+        val (messages, _) = BoschParser.parse(payload)
+        assertEquals(1, messages.size)
+        assertEquals(0x808B, messages[0].messageId)
+        assertEquals(458, messages[0].value)
+    }
+
+    @Test
+    fun testParseNegativeBatteryTemperature() {
+        // Battery Temperature 0x808B, Value -100 (-5.0°C)
+        // -100 in 32-bit two's complement LEB128 is: 0x9C, 0xFF, 0xFF, 0xFF, 0x0F
+        val payload = byteArrayOf(
+            0x01,
+            0x08, // Length: ID(2) + Type(1) + Data(5) = 8
+            0x80.toByte(), 0x8B.toByte(),
+            0x08.toByte(),
+            0x9C.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x0F.toByte()
+        )
+        
+        val (messages, _) = BoschParser.parse(payload)
+        assertEquals(1, messages.size)
+        assertEquals(0x808B, messages[0].messageId)
+        assertEquals(-100, messages[0].value)
+    }
+
+    @Test
+    fun testParseRealBatteryTemperatureHex() {
+        // Battery Temperature from hex analysis: 30 05 80 8B 08 CC 02 (Value 332, 16.6°C)
+        val payload = byteArrayOf(
+            0x30.toByte(),
+            0x05.toByte(),
+            0x80.toByte(), 0x8B.toByte(),
+            0x08.toByte(),
+            0xCC.toByte(), 0x02.toByte()
+        )
+        
+        val (messages, _) = BoschParser.parse(payload)
+        assertEquals(1, messages.size)
+        assertEquals(0x808B, messages[0].messageId)
+        assertEquals(332, messages[0].value)
+    }
 }

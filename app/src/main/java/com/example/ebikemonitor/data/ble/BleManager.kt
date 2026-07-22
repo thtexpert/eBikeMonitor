@@ -40,6 +40,7 @@ class BleManager(private val context: Context) {
     val bikeStatus = _bikeStatus.asStateFlow()
 
     private val unsortedModeUsageList = mutableListOf<UsageRecord>()
+    private val lastLoggedDiagnosticValues = mutableMapOf<Int, Int>()
     private var lastUsageRecordTimestamp: Long = 0L
     private val BURST_TIMEOUT_MS = 2000L
     private val DISCOVERY_INTERVAL_MS = 150L
@@ -72,6 +73,7 @@ class BleManager(private val context: Context) {
                 _isConnected.value = false
                 gatt.close()
                 bluetoothGatt = null
+                lastLoggedDiagnosticValues.clear()
                 return
             }
 
@@ -84,6 +86,7 @@ class BleManager(private val context: Context) {
                 _isConnected.value = false
                 gatt.close()
                 bluetoothGatt = null
+                lastLoggedDiagnosticValues.clear()
             }
         }
 
@@ -138,7 +141,41 @@ class BleManager(private val context: Context) {
         var currentStatus = _bikeStatus.value
         
         for (msg in messages) {
+            if (msg.messageId in listOf(0x808A, 0x80C4, 0x808E, 0x808B, 0x8091, 0x8092, 0x809C)) {
+                val lastVal = lastLoggedDiagnosticValues[msg.messageId]
+                if (lastVal != msg.value) {
+                    lastLoggedDiagnosticValues[msg.messageId] = msg.value
+                    val desc = when (msg.messageId) {
+                        0x808A -> "Charging Active (0x808A)"
+                        0x80C4 -> "Charger Connected (0x80C4)"
+                        0x808E -> "Battery State (0x808E)"
+                        0x808B -> "Battery Temperature (0x808B)"
+                        0x8091 -> "Usable Motor Energy (0x8091)"
+                        0x8092 -> "Total Battery Energy (0x8092)"
+                        0x809C -> "Lifetime Discharged Energy (0x809C)"
+                        else -> "Unknown"
+                    }
+                    Log.d("BleManager", "[DIAGNOSTIC] $desc = ${msg.value}")
+                }
+            }
+
             when (msg.messageId) {
+                0x808E -> currentStatus = currentStatus.copy(isCharging = msg.value == 12)
+                0x808A -> {
+                    if (msg.value == 1) {
+                        currentStatus = currentStatus.copy(isCharging = true)
+                    }
+                }
+                0x80C4 -> {
+                    if (msg.value == 1) {
+                        currentStatus = currentStatus.copy(isCharging = true)
+                    }
+                }
+                0x808B -> {
+                    val rawTemp = msg.value
+                    val correctedTemp = if (rawTemp > 32767) (rawTemp - 65536) else rawTemp
+                    currentStatus = currentStatus.copy(batteryTemperature = correctedTemp / 20.0)
+                }
                 0x982D -> {
                     val speed = msg.value / 100.0
                     currentStatus = currentStatus.copy(speed = speed)
@@ -442,6 +479,7 @@ class BleManager(private val context: Context) {
         bluetoothGatt?.close()
         bluetoothGatt = null
         _isConnected.value = false
+        lastLoggedDiagnosticValues.clear()
     }
 
     fun clearTelemetryCache() {

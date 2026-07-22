@@ -2,6 +2,23 @@
 
 All notable changes to the **eBikeMonitor** project will be documented in this file.
 
+## [1.16.0] - 2026-07-16
+### Added
+- **Human Energy Estimator**: Real-time integration of rider human pedal energy (measured via BLE when online, and automatically estimated based on Usable Motor Capacity, assist mode ranges, and effort coefficient when offline).
+- **Offline Ride Recovery**: Automatically detects offline segments by comparing odometer increments when reconnecting, calculates the unmonitored distance, and injects the estimated calorie metrics seamlessly into Home Assistant.
+- **Self-Healing Database Repair**: If database profile records ever get corrupted or wiped, the app automatically repairs them from the first complete incoming BLE batch using consumption-rate sorting.
+- **Mid-Ride Reset Support**: Automatically detects Kiox trip resets mid-ride, propagates the reset to realign BLE manager session baselines, and prevents per-mode telemetry updates from freezing.
+
+### Fixed
+- **Database Baseline Corruption**: Implemented repository guards to prevent transient connections (stationary power cycles with missing Kiox characteristics) from overwriting valid database references with empty lists.
+- **Calibration Safe Fallbacks**: Uses database-stored active ride metrics instead of defaulting to `0` during short sessions, preventing negative calorie outputs on disconnect.
+
+### Rider Guide: Resetting Kiox Trip Data
+To maintain clean baseline synchronization with Home Assistant:
+*   **Stationary Resets (Best Practice)**: Reset your trip distance **directly on the Kiox unit** while the bike is turned on.
+*   **Post-Offline Rides**: After riding offline (without the phone connected), the Kiox unit will keep its trip data hidden until it registers movement. **Roll/move the bike slightly at startup** to wake up the Kiox BLE broadcast; the app will immediately complete its sync and reconcile the offline distance.
+*   **Avoid Resetting via App**: Resetting the trip via the Bosch Flow App while the eBikeMonitor service is connected can cause brief data inconsistencies due to app notification conflicts. Direct Kiox reset is always preferred.
+
 ## [1.15.1] - 2026-06-17
 ### Added
 - **Hardware Connection Trigger**: Fast startup feature that directly listens to Android's low-level Bluetooth events (`ACTION_ACL_CONNECTED`), instantly starting the app ~250ms *before* the Bosch Flow app even posts a notification. Configurable in Settings → Automation.

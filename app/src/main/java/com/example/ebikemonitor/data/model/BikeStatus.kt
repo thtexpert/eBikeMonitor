@@ -6,6 +6,8 @@ data class BikeStatus(
     val humanPower: Int? = null,
     val motorPower: Int? = null,
     val batteryLevel: Int? = null,
+    val isCharging: Boolean = false,
+    val batteryTemperature: Double? = null,
     val assistMode: Int? = null,
     val totalDistance: Double? = null,
     val totalBattery: Double? = null,
