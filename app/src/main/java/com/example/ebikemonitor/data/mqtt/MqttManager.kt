@@ -244,11 +244,35 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "eBike LED Software Version", "ebike_led_sw_version", "ebikeledsoftwareversion", icon = "mdi:information-outline", stateClass = null)
         publishConfig("sensor", "Total Hours", "total_hours", "totalhours", "h", icon = "mdi:timer-outline", stateClass = "total_increasing")
 
+        // Cumulative Human Effort Sensors
+        publishConfig("sensor", "Pedal Energy (Measured)", "pedal_energy_measured", "pedal_energy_measured", "kcal", stateClass = "total_increasing")
+        publishConfig("sensor", "Pedal Energy (Estimated)", "pedal_energy_estimated", "pedal_energy_estimated", "kcal", stateClass = "total_increasing")
+        publishConfig("sensor", "Pedal Energy (Total)", "pedal_energy_total", "pedal_energy_total", "kcal", stateClass = "total_increasing")
+
+        // Trip Dynamics
+        publishConfig("sensor", "Trip Pedal Energy", "trip_pedal_energy", "trip_pedal_energy", "kcal")
+        publishConfig("sensor", "Trip Total Energy", "trip_total_energy", "trip_total_energy", "Wh", "energy")
+        publishConfig("sensor", "Trip Human Percentage", "trip_human_percentage", "trip_human_percentage", "%", icon = "mdi:percent")
+        publishConfig("sensor", "Trip Avg Speed", "trip_speed", "trip_speed", "km/h", "speed")
+        publishConfig("sensor", "Trip Max Speed", "trip_max_speed", "trip_max_speed", "km/h", "speed")
+        publishConfig("sensor", "Trip Avg Cadence", "trip_cadence", "trip_cadence", "rpm", icon = "mdi:bike-fast")
+        publishConfig("sensor", "Trip Max Cadence", "trip_max_cadence", "trip_max_cadence", "rpm", icon = "mdi:bike-fast")
+        publishConfig("sensor", "Trip Avg Human Power", "trip_human_power", "trip_human_power", "W", "power")
+        publishConfig("sensor", "Trip Max Human Power", "trip_max_human_power", "trip_max_human_power", "W", "power")
+
         // Per-Mode Sensors (Dropping _from_battery)
         assistModeNames.forEach { mode ->
             val safeMode = sanitize(mode)
             publishConfig("sensor", "$mode Distance", "${safeMode}_dist", "${safeMode}distance", "km", "distance", "total_increasing")
             publishConfig("sensor", "$mode Energy", "${safeMode}_energy", "${safeMode}energy", "kWh", "energy", "total_increasing")
+        }
+
+        // Dynamic Range Sensors (excluding OFF at index 0)
+        assistModeNames.forEachIndexed { index, mode ->
+            if (index > 0) {
+                val safeMode = sanitize(mode)
+                publishConfig("sensor", "$mode Range", "${safeMode}_range", "${safeMode}range", "km", "distance")
+            }
         }
         
         // Connectivity/Status
@@ -286,7 +310,12 @@ class MqttManager(private val context: Context) {
 
         publishConfig("sensor", "Charge Level", "battery", "stateofcharge", "%", "battery")
         publishConfig("sensor", "Total Energy Used", "total_energy", "totalbattery", "kWh", "energy", "total_increasing")
+        publishConfig("sensor", "Usable Energy Remaining", "usable_energy_remaining", "usable_energy_remaining", "Wh", "energy")
+        publishConfig("sensor", "Nominal Design Capacity", "nominal_capacity", "nominal_capacity", "Wh", "energy", stateClass = null)
+        publishConfig("sensor", "Actual Usable Capacity", "usable_capacity", "usable_capacity", "Wh", "energy", stateClass = null)
         publishConfig("sensor", "Charge Cycles", "charge_cycles", "chargecycles", "cycles", icon = "mdi:battery-sync", stateClass = "total_increasing")
+        publishConfig("sensor", "Battery Temperature", "temperature", "temperature", "°C", "temperature")
+        publishConfig("binary_sensor", "Charging State", "charging", "charging", deviceClass = "battery_charging", stateClass = null)
         publishConfig("sensor", "Hardware Serial", "serial", "serial", icon = "mdi:barcode-scan", stateClass = null)
     }
 

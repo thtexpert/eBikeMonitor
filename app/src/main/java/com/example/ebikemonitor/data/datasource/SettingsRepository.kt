@@ -20,8 +20,8 @@ import kotlinx.coroutines.sync.withLock
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-const val CURRENT_BIKE_DISCOVERY_VERSION = 3
-const val CURRENT_BATTERY_DISCOVERY_VERSION = 2
+const val CURRENT_BIKE_DISCOVERY_VERSION = 4
+const val CURRENT_BATTERY_DISCOVERY_VERSION = 3
 
 class SettingsRepository(private val context: Context) {
 

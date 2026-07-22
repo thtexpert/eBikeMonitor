@@ -681,6 +681,62 @@ class EBikeBackgroundService : Service() {
             }
         }
 
+        // Cumulative Human Effort
+        val profile = activeProfile
+        if (profile != null) {
+            val currentTripPedal = status.tripPedalEnergy ?: 0
+            val measuredTotal = profile.totalPedalEnergyMeasuredBaseline + currentTripPedal
+            val estimatedTotal = profile.totalPedalEnergyEstimatedBaseline
+            val overallTotal = measuredTotal + estimatedTotal
+
+            val lastMeasuredTotal = if (last != null) {
+                val lastTripPedal = last.tripPedalEnergy ?: 0
+                profile.totalPedalEnergyMeasuredBaseline + lastTripPedal
+            } else {
+                null
+            }
+            val lastEstimatedTotal = if (last != null) {
+                profile.totalPedalEnergyEstimatedBaseline
+            } else {
+                null
+            }
+            val lastOverallTotal = if (lastMeasuredTotal != null && lastEstimatedTotal != null) {
+                lastMeasuredTotal + lastEstimatedTotal
+            } else {
+                null
+            }
+
+            pubIfDiff("$bikeTopic/pedal_energy_measured", measuredTotal, lastMeasuredTotal, true)
+            pubIfDiff("$bikeTopic/pedal_energy_estimated", estimatedTotal, lastEstimatedTotal, true)
+            pubIfDiff("$bikeTopic/pedal_energy_total", overallTotal, lastOverallTotal, true)
+        }
+
+        // Trip Dynamics
+        pubIfDiff("$bikeTopic/trip_pedal_energy", status.tripPedalEnergy, last?.tripPedalEnergy)
+        pubIfDiff("$bikeTopic/trip_total_energy", status.tripTotalEnergy, last?.tripTotalEnergy)
+
+        val tripDistKm = (status.tripDistPerMode.sum()) / 1000.0
+        if (tripDistKm >= 1.0) {
+            pubIfDiff("$bikeTopic/trip_human_percentage", status.tripHumanPercentage, last?.tripHumanPercentage)
+        }
+
+        pubIfDiff("$bikeTopic/trip_speed", status.tripSpeed, last?.tripSpeed)
+        pubIfDiff("$bikeTopic/trip_max_speed", status.tripMaxSpeed, last?.tripMaxSpeed)
+        pubIfDiff("$bikeTopic/trip_cadence", status.tripCadence, last?.tripCadence)
+        pubIfDiff("$bikeTopic/trip_max_cadence", status.tripMaxCadence, last?.tripMaxCadence)
+        pubIfDiff("$bikeTopic/trip_human_power", status.tripHumanPower, last?.tripHumanPower)
+        pubIfDiff("$bikeTopic/trip_max_human_power", status.tripMaxHumanPower, last?.tripMaxHumanPower)
+
+        // Dynamic Range Sensors (excluding OFF at index 0)
+        status.remainingRanges.forEachIndexed { rIndex, range ->
+            val modeName = status.assistModeNames.getOrNull(rIndex + 1)
+            if (modeName != null) {
+                val safeMode = sanitizeForMqtt(modeName)
+                val lastRange = last?.remainingRanges?.getOrNull(rIndex)
+                pubIfDiff("$bikeTopic/${safeMode}range", range, lastRange)
+            }
+        }
+
         // PowerTube Specific Topics
         val batterySerial = status.batterySerialNumber
         if (!batterySerial.isNullOrEmpty()) {
@@ -689,6 +745,21 @@ class EBikeBackgroundService : Service() {
             pubIfDiff("$battTopic/totalbattery", status.totalBattery, last?.totalBattery, true)
             pubIfDiff("$battTopic/chargecycles", status.chargeCycles, last?.chargeCycles, true)
             pubIfDiff("$battTopic/serial", batterySerial, last?.batterySerialNumber, true)
+
+            // New battery sensors
+            pubIfDiff("$battTopic/usable_energy_remaining", status.usableEnergyRemaining, last?.usableEnergyRemaining, true)
+            pubIfDiff("$battTopic/nominal_capacity", status.nominalCapacity, last?.nominalCapacity, true)
+            pubIfDiff("$battTopic/usable_capacity", status.usableCapacity, last?.usableCapacity, true)
+            pubIfDiff("$battTopic/temperature", status.batteryTemperature, last?.batteryTemperature)
+
+            // Charging State binary sensor
+            val isChargingVal = if (status.isCharging) "ON" else "OFF"
+            val lastIsChargingVal = if (last != null) {
+                if (last.isCharging) "ON" else "OFF"
+            } else {
+                null
+            }
+            pubIfDiff("$battTopic/charging", isChargingVal, lastIsChargingVal)
         }
 
         lastPublishedStatus = status

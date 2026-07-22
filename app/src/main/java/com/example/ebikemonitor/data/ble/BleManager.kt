@@ -204,6 +204,21 @@ class BleManager(private val context: Context) {
                     Log.d("BleManager", "Raw Odometer received: ${"%.3f".format(odo)} km (raw: ${msg.value})")
                 }
                 0x8096 -> currentStatus = currentStatus.copy(chargeCycles = msg.value / 10.0)
+                0x8091 -> {
+                    val usableEnergy = msg.value / 10.0
+                    currentStatus = currentStatus.copy(usableEnergyRemaining = usableEnergy)
+                    Log.d("BleManager", "Usable motor energy update: $usableEnergy Wh")
+                }
+                0x80B4 -> {
+                    val nominalCap = msg.value / 10.0
+                    currentStatus = currentStatus.copy(nominalCapacity = nominalCap)
+                    Log.d("BleManager", "Nominal capacity update: $nominalCap Wh")
+                }
+                0x80D9 -> {
+                    val usableCap = msg.value / 10.0
+                    currentStatus = currentStatus.copy(usableCapacity = usableCap)
+                    Log.d("BleManager", "Actual usable capacity update: $usableCap Wh")
+                }
                 0xA243 -> {
                     currentStatus = currentStatus.copy(
                         humanCalories = msg.value / 10.0,
