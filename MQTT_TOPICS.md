@@ -57,7 +57,6 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 |-------|-------------|-------------------------|------|-------------|
 | `stateofcharge` | Charge Level | `sensor.bosch_<model>_charge_level` | % | Current charge level of this pack. |
 | `totalbattery` | Total Energy Used | `sensor.bosch_<model>_total_energy_used` | kWh | Lifetime total energy discharged (`0x809C`). |
-| `total_energy_remaining` | Total Energy Remaining | `sensor.bosch_<model>_total_energy_remaining` | Wh | Total remaining battery energy (`0x8092`). |
 | `usable_energy_remaining` | Usable Energy Remaining | `sensor.bosch_<model>_usable_energy_remaining` | Wh | Remaining usable motor energy (`0x8091`). |
 | `nominal_capacity` | Nominal Design Capacity | `sensor.bosch_<model>_nominal_design_capacity` | Wh | Nominal factory design capacity (`0x80B4`). |
 | `usable_capacity` | Actual Usable Capacity | `sensor.bosch_<model>_actual_usable_capacity` | Wh | Actual maximum healthy usable capacity / SOH (`0x80D9`). |
@@ -105,7 +104,7 @@ To ensure data integrity and avoid corrupting graphs or alerts in Home Assistant
   * *Per-Mode History*: `<mode>_distance`, `<mode>_energy`.
 * **Transient (Non-Retained)**: Messages are flagged with `retain=false` (default). Values are dynamic and real-time. When the bike turns off, stale values are not held on the broker.
   * *Live Riding Dynamics*: `speed`, `cadence`, `power`, `motorpower`, `assistmode`.
-  * *Battery Dynamic Metrics*: `stateofcharge`, `temperature`, `charging`, `total_energy_remaining`, `usable_energy_remaining`.
+  * *Battery Dynamic Metrics*: `stateofcharge`, `temperature`, `charging`, `usable_energy_remaining`.
   * *Trip & Session Statistics*: `trip_pedal_energy`, `trip_total_energy`, `trip_human_percentage`, and trip average/maximum metrics.
   * *Dynamic Ranges*: `<mode>_range`.
 
@@ -114,4 +113,4 @@ To ensure data integrity and avoid corrupting graphs or alerts in Home Assistant
 * **Default to 0**: Real-time active riding metrics default to `0` if no active telemetry is received from BLE while the bike is active (e.g. coasting, stopped at a light).
   * *Sensors*: `speed`, `cadence`, `power`, `motorpower`.
 * **Fallback to Unknown (Null)**: Static metadata, state variables, and lifetime accumulators MUST NOT default to `0` when missing. Doing so would trigger false alerts (e.g. 0% SoC, 0°C temperature) or break database history statistics. They will report as `unknown` or remain unset in Home Assistant until valid data is decoded.
-  * *Sensors*: `stateofcharge`, `temperature`, `charging`, `totaldistance`, `totalenergy`, `totalbattery`, `usable_capacity`, `nominal_capacity`, `total_energy_remaining`, `usable_energy_remaining`, `serial`, `batteryserialnumber`, `ebikeledsoftwareversion`.
+  * *Sensors*: `stateofcharge`, `temperature`, `charging`, `totaldistance`, `totalenergy`, `totalbattery`, `usable_capacity`, `nominal_capacity`, `usable_energy_remaining`, `serial`, `batteryserialnumber`, `ebikeledsoftwareversion`.
