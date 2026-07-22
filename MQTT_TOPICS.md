@@ -56,7 +56,7 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | Topic | Sensor Name | HA Entity ID (Default) | Unit | Description |
 |-------|-------------|-------------------------|------|-------------|
 | `stateofcharge` | Charge Level | `sensor.bosch_<model>_charge_level` | % | Current charge level of this pack. |
-| `totalbattery` | Total Energy Used | `sensor.bosch_<model>_total_energy_used` | kWh | Lifetime total energy discharged (`0x809C`). |
+| `totalbattery` | Total Energy Used | `sensor.bosch_<model>_total_energy_used` | kWh | Lifetime total energy discharged (`0x809C`). (**Retained**) |
 | `usable_energy_remaining` | Usable Energy Remaining | `sensor.bosch_<model>_usable_energy_remaining` | Wh | Remaining usable motor energy (`0x8091`). (**Retained**) |
 | `nominal_capacity` | Nominal Design Capacity | `sensor.bosch_<model>_nominal_design_capacity` | Wh | Nominal factory design capacity (`0x80B4`). (**Retained**) |
 | `usable_capacity` | Actual Usable Capacity | `sensor.bosch_<model>_actual_usable_capacity` | Wh | Actual maximum healthy usable capacity / SOH (`0x80D9`). (**Retained**) |
