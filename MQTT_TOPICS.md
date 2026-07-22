@@ -23,9 +23,9 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | `ebikeledsoftwareversion`| LED Version | `sensor.<name>_ebike_led_software_version` | - | Firmware version of the remote. |
 | `batteryserialnumber` | Battery Serial | `sensor.<name>_battery_serial_number` | - | Serial of the current battery pack. |
 | `totalhours` | Total Hours | `sensor.<name>_total_hours` | h | Lifetime drive unit operation hours. (**Retained**) |
-| `pedal_energy_measured` | Pedal Energy (Measured) | `sensor.<name>_pedal_energy_measured` | kcal | Active-session cumulative human effort. |
-| `pedal_energy_estimated`| Pedal Energy (Estimated) | `sensor.<name>_pedal_energy_estimated` | kcal | Estimated human effort during offline segments. |
-| `pedal_energy_total` | Pedal Energy (Total) | `sensor.<name>_pedal_energy_total` | kcal | Total cumulative human effort (measured + estimated). |
+| `pedal_energy_measured` | Pedal Energy (Measured) | `sensor.<name>_pedal_energy_measured` | kcal | Active-session cumulative human effort. (**Retained**) |
+| `pedal_energy_estimated`| Pedal Energy (Estimated) | `sensor.<name>_pedal_energy_estimated` | kcal | Estimated human effort during offline segments. (**Retained**) |
+| `pedal_energy_total` | Pedal Energy (Total) | `sensor.<name>_pedal_energy_total` | kcal | Total cumulative human effort (measured + estimated). (**Retained**) |
 | `trip_pedal_energy` | Trip Pedal Energy | `sensor.<name>_trip_pedal_energy` | kcal | Rider effort for the current trip. |
 | `trip_total_energy` | Trip Total Energy | `sensor.<name>_trip_total_energy` | Wh | Total mechanical energy (rider + motor) for the trip. |
 | `trip_human_percentage`| Trip Human Percentage | `sensor.<name>_trip_human_percentage` | % | Rider contribution split percentage for the trip. |
@@ -57,13 +57,13 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 |-------|-------------|-------------------------|------|-------------|
 | `stateofcharge` | Charge Level | `sensor.bosch_<model>_charge_level` | % | Current charge level of this pack. |
 | `totalbattery` | Total Energy Used | `sensor.bosch_<model>_total_energy_used` | kWh | Lifetime total energy discharged (`0x809C`). |
-| `usable_energy_remaining` | Usable Energy Remaining | `sensor.bosch_<model>_usable_energy_remaining` | Wh | Remaining usable motor energy (`0x8091`). |
-| `nominal_capacity` | Nominal Design Capacity | `sensor.bosch_<model>_nominal_design_capacity` | Wh | Nominal factory design capacity (`0x80B4`). |
-| `usable_capacity` | Actual Usable Capacity | `sensor.bosch_<model>_actual_usable_capacity` | Wh | Actual maximum healthy usable capacity / SOH (`0x80D9`). |
-| `chargecycles` | Charge Cycles | `sensor.bosch_<model>_charge_cycles` | cycles | Cumulative full charge cycles (`0x8096`). |
-| `temperature` | Battery Temperature | `sensor.bosch_<model>_battery_temperature` | °C | Current battery cell temperature (`0x808B`). |
+| `usable_energy_remaining` | Usable Energy Remaining | `sensor.bosch_<model>_usable_energy_remaining` | Wh | Remaining usable motor energy (`0x8091`). (**Retained**) |
+| `nominal_capacity` | Nominal Design Capacity | `sensor.bosch_<model>_nominal_design_capacity` | Wh | Nominal factory design capacity (`0x80B4`). (**Retained**) |
+| `usable_capacity` | Actual Usable Capacity | `sensor.bosch_<model>_actual_usable_capacity` | Wh | Actual maximum healthy usable capacity / SOH (`0x80D9`). (**Retained**) |
+| `chargecycles` | Charge Cycles | `sensor.bosch_<model>_charge_cycles` | cycles | Cumulative full charge cycles (`0x8096`). (**Retained**) |
+| `temperature` | Battery Temperature | `sensor.bosch_<model>_battery_temperature` | °C | Current battery cell temperature (`0x808B`). (**Retained**) |
 | `charging` | Charging State | `binary_sensor.bosch_<model>_charging` | - | Charging active binary state (state is `12` or charging active flag is `1`). |
-| `serial` | Hardware Serial | `sensor.bosch_<model>_hardware_serial` | - | The unique hardware serial identifier (`0x0081`). |
+| `serial` | Hardware Serial | `sensor.bosch_<model>_hardware_serial` | - | The unique hardware serial identifier (`0x0081`). (**Retained**) |
 
 > [!NOTE]
 > `<model>` is the decoded battery model (e.g., `powertube_750`). Home Assistant uses the device name (e.g., `Bosch PowerTube 750`) to create these entity IDs.
@@ -98,13 +98,13 @@ To ensure data integrity and avoid corrupting graphs or alerts in Home Assistant
 ### 1. Persistent (Retained) vs. Transient (Non-Retained) Topics
 
 * **Persistent (Retained)**: Messages are flagged with `retain=true`. The MQTT broker stores the last published value permanently. When Home Assistant restarts or a new dashboard is loaded, it immediately retrieves these values without waiting for the eBike to wake up and transmit.
-  * *Odometer & Lifetime Totals*: `totaldistance`, `totalhours`, `totalenergy`, `totalbattery`.
+  * *Odometer & Lifetime Totals*: `totaldistance`, `totalhours`, `totalenergy`, `totalbattery`, `pedal_energy_measured`, `pedal_energy_estimated`, `pedal_energy_total`.
   * *Configuration & Metadata*: `serial`, `batteryserialnumber`, `ebikeledsoftwareversion`.
-  * *Degradation & Health Capacity*: `nominal_capacity`, `usable_capacity`, `chargecycles`.
+  * *Degradation, Temperature & Health*: `nominal_capacity`, `usable_capacity`, `chargecycles`, `temperature`, `usable_energy_remaining`.
   * *Per-Mode History*: `<mode>_distance`, `<mode>_energy`.
 * **Transient (Non-Retained)**: Messages are flagged with `retain=false` (default). Values are dynamic and real-time. When the bike turns off, stale values are not held on the broker.
   * *Live Riding Dynamics*: `speed`, `cadence`, `power`, `motorpower`, `assistmode`.
-  * *Battery Dynamic Metrics*: `stateofcharge`, `temperature`, `charging`, `usable_energy_remaining`.
+  * *Battery Dynamic Metrics*: `stateofcharge`, `charging`.
   * *Trip & Session Statistics*: `trip_pedal_energy`, `trip_total_energy`, `trip_human_percentage`, and trip average/maximum metrics.
   * *Dynamic Ranges*: `<mode>_range`.
 
