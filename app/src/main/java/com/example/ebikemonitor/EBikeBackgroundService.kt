@@ -55,6 +55,8 @@ class EBikeBackgroundService : Service() {
     private var activeProfile: com.example.ebikemonitor.data.model.BikeProfile? = null
     private var wasChargingInSession = false
     private var lastKnownChargingSoC: Int? = null
+    private var usedPedalFallbackOnStartup = false
+    private var usedTotalFallbackOnStartup = false
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val CHANNEL_ID = "EBikeMonitorChannel"
@@ -201,7 +203,7 @@ class EBikeBackgroundService : Service() {
                         FileLogger.log("EBikeBackgroundService: Live Status Check: Odo: $odoVal km, UsageSum: ${"%.3f".format(usageSum)} km, RecordsCount: $usageCount, Speed: ${status.speed} m/s")
                         val profile = activeProfile
                         if (isSyncComplete && profile != null) {
-                            val currentTripPedal = status.tripPedalEnergy ?: 0
+                            val currentTripPedal = status.tripPedalEnergy ?: startupTripPedal ?: 0
                             val measuredTotal = profile.totalPedalEnergyMeasuredBaseline + currentTripPedal
                             val estimatedTotal = profile.totalPedalEnergyEstimatedBaseline
                             val overallTotal = measuredTotal + estimatedTotal
@@ -250,11 +252,21 @@ class EBikeBackgroundService : Service() {
                         
                         val odoTrigger = odoJump > maxPossibleDistKm
                         val usageTrigger = usageJump > maxPossibleDistKm
+                        val fallbackCorrection = (usedPedalFallbackOnStartup && status.tripPedalEnergy != null) ||
+                                                 (usedTotalFallbackOnStartup && status.tripTotalEnergy != null)
                         
-                        if (odoTrigger || usageTrigger) {
+                        if (odoTrigger || usageTrigger || fallbackCorrection) {
                             val oldStartupOdo = startupOdometer
-                            val triggerReason = if (odoTrigger && usageTrigger) "Odo & Usage jump" else if (odoTrigger) "Odo jump" else "Usage jump"
+                            val triggerReason = if (fallbackCorrection) "Fallback correction"
+                                                else if (odoTrigger && usageTrigger) "Odo & Usage jump"
+                                                else if (odoTrigger) "Odo jump"
+                                                else "Usage jump"
                             val resolvedOdo = currentOdo ?: startupOdometer ?: 0.0
+                            
+                            if (fallbackCorrection) {
+                                usedPedalFallbackOnStartup = false
+                                usedTotalFallbackOnStartup = false
+                            }
                             
                             FileLogger.log("EBikeBackgroundService: Late sync detected! Trigger: $triggerReason. Odo: $oldStartupOdo -> $resolvedOdo, UsageSum: $startupUsageSum -> $currentUsageSum (jump: ${"%.3f".format(odoJump)}/${"%.3f".format(usageJump)} km vs max expected ${"%.3f".format(maxPossibleDistKm)} km). Re-running sync with updated references.")
                             
@@ -373,9 +385,9 @@ class EBikeBackgroundService : Service() {
                     }
 
                     // Active mid-ride trip reset check
-                    if (isSyncComplete && bleManager.isConnected.value) {
-                        val currentTripPedal = status.tripPedalEnergy ?: 0
-                        val currentTripTotal = status.tripTotalEnergy ?: 0.0
+                    if (isSyncComplete && bleManager.isConnected.value && status.tripPedalEnergy != null && status.tripTotalEnergy != null) {
+                        val currentTripPedal = status.tripPedalEnergy ?: startupTripPedal ?: 0
+                        val currentTripTotal = status.tripTotalEnergy ?: startupTripTotal ?: 0.0
                         val currentTripDists = if (status.tripDistPerMode.isNotEmpty()) status.tripDistPerMode else List(status.assistModeNames.size) { 0 }
                         
                         val prevPedal = lastObservedTripPedal
@@ -430,8 +442,8 @@ class EBikeBackgroundService : Service() {
                             lastReferenceWriteTime = now
                             val currentOdo = status.totalDistance
                             val currentBattery = status.totalBattery
-                            val currentTripPedal = status.tripPedalEnergy ?: 0
-                            val currentTripTotal = status.tripTotalEnergy ?: 0.0
+                            val currentTripPedal = status.tripPedalEnergy ?: startupTripPedal ?: 0
+                            val currentTripTotal = status.tripTotalEnergy ?: startupTripTotal ?: 0.0
                             if (currentOdo != null && currentBattery != null) {
                                 settings.updateActiveRideReferences(
                                      mac = mac,
@@ -474,7 +486,7 @@ class EBikeBackgroundService : Service() {
                             simulatedKcalSum = effortCoeff * totalExpectedEffort
                         }
                         
-                        val currentTripPedal = status.tripPedalEnergy ?: 0
+                        val currentTripPedal = status.tripPedalEnergy ?: startupTripPedal ?: 0
                         val pedalDelta = currentTripPedal - (startupTripPedal ?: 0)
                         
                         val errorPct = if (pedalDelta > 0) {
@@ -684,7 +696,7 @@ class EBikeBackgroundService : Service() {
         // Cumulative Human Effort
         val profile = activeProfile
         if (profile != null) {
-            val currentTripPedal = status.tripPedalEnergy ?: 0
+            val currentTripPedal = status.tripPedalEnergy ?: startupTripPedal ?: 0
             val measuredTotal = profile.totalPedalEnergyMeasuredBaseline + currentTripPedal
             val estimatedTotal = profile.totalPedalEnergyEstimatedBaseline
             val overallTotal = measuredTotal + estimatedTotal
@@ -977,11 +989,13 @@ class EBikeBackgroundService : Service() {
         lastKnownChargingSoC = null
         isSyncing = true
         isSyncComplete = false
+        usedPedalFallbackOnStartup = false
+        usedTotalFallbackOnStartup = false
         
-        // Start 10-second safety timeout
+        // Start 30-second safety timeout
         syncTimeoutJob?.cancel()
         syncTimeoutJob = serviceScope.launch {
-            kotlinx.coroutines.delay(10000)
+            kotlinx.coroutines.delay(30000)
             val app = application as EBikeApplication
             val currentStatus = app.bleManager.bikeStatus.value
             val activeMac = app.settingsRepository.activeBikeMac.first() ?: app.settingsRepository.bleMacAddress.first()
@@ -1073,6 +1087,17 @@ class EBikeBackgroundService : Service() {
                     }
                 }
                 
+                if (force) {
+                    val currentStatus = bleManager.bikeStatus.value
+                    if (currentStatus.sortedUsageRecordsB.isEmpty()) {
+                        val fallbackTripDists = profile.lastTripDistPerMode
+                        if (fallbackTripDists.size == currentStatus.assistModeNames.size) {
+                            bleManager.forceStartupDecodingWithFallback(fallbackTripDists)
+                        }
+                    }
+                }
+
+                val status = bleManager.bikeStatus.value
                 profileBeforeSync = profile
                 syncCompletionTime = System.currentTimeMillis()
                 
@@ -1091,6 +1116,9 @@ class EBikeBackgroundService : Service() {
                 startupTripDists = currentTripDists
                 startupSoC = currentSoC
                 startupUsageRecords = status.sortedUsageRecordsB
+                
+                usedPedalFallbackOnStartup = status.tripPedalEnergy == null
+                usedTotalFallbackOnStartup = status.tripTotalEnergy == null
                 
                 // 1. Detect Trip Reset
                 val tripResetDetected = currentTripPedal < profile.lastTripPedalEnergy || 

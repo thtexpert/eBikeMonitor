@@ -54,6 +54,97 @@ class PrototypeStartupDecodingTest {
         }
     }
 
+    @Test
+    fun testDeferredStartupDecodingWhenTripDistancesArriveLate() {
+        val storedUsage = listOf(
+            UsageRecord(59747, 0),    // OFF
+            UsageRecord(943602, 1453),  // ECO
+            UsageRecord(3212074, 13406), // TOUR+
+            UsageRecord(5073079, 33981), // SPORT
+            UsageRecord(3986705, 29511)  // TURBO
+        )
+        val storedTrip = listOf(0, 0, 0, 0, 0)
+        val storedBaselines = storedUsage.zip(storedTrip).map { (u, t) -> u.distance - t }
+
+        val newBatch = listOf(
+            UsageRecord(3986705, 29511), // TURBO
+            UsageRecord(3214116, 13416), // TOUR+
+            UsageRecord(60818, 0),       // OFF
+            UsageRecord(5073344, 33983), // SPORT
+            UsageRecord(946063, 1461)    // ECO
+        )
+
+        // Scenario 1: Trip distances are initially empty (mimicking A252 deferred / not yet arrived)
+        val emptyTrip = emptyList<Int>()
+        val resultDeferred = findBestPermutation(newBatch, emptyTrip, storedBaselines)
+        
+        // Decoding should be deferred (returns null)
+        org.junit.Assert.assertNull("Startup decoding should be deferred when trip distances are empty", resultDeferred)
+
+        // Scenario 2: Trip distances arrive (A252)
+        val newTrip = listOf(1071, 2461, 2042, 265, 0) // OFF, ECO, TOUR+, SPORT, TURBO
+        val resultResolved = findBestPermutation(newBatch, newTrip, storedBaselines)
+        
+        // Decoding should now succeed
+        assertNotNull("Startup decoding should succeed once trip distances arrive", resultResolved)
+        val decoded = resultResolved!!
+        
+        assertEquals("OFF", 60818, decoded[0].distance)
+        assertEquals("ECO", 946063, decoded[1].distance)
+        assertEquals("TOUR+", 3214116, decoded[2].distance)
+        assertEquals("SPORT", 5073344, decoded[3].distance)
+        assertEquals("TURBO", 3986705, decoded[4].distance)
+    }
+
+    @Test
+    fun testForcedFallbackDecodingWhenStationary() {
+        val storedUsage = listOf(
+            UsageRecord(60818, 0),       // OFF
+            UsageRecord(946063, 1461),    // ECO
+            UsageRecord(3214116, 13416), // TOUR+
+            UsageRecord(5073344, 33983), // SPORT
+            UsageRecord(3986705, 29511)  // TURBO
+        )
+        // Last active trip values at disconnect
+        val lastTripDists = listOf(1071, 2461, 2042, 265, 0)
+        val storedBaselines = storedUsage.zip(lastTripDists).map { (u, t) -> u.distance - t }
+
+        // Scenario A: Power cycle WITHOUT trip reset
+        // New batch matches old batch because bike is stationary
+        val newBatchNoReset = listOf(
+            UsageRecord(3986705, 29511), // TURBO
+            UsageRecord(3214116, 13416), // TOUR+
+            UsageRecord(60818, 0),       // OFF
+            UsageRecord(5073344, 33983), // SPORT
+            UsageRecord(946063, 1461)    // ECO
+        )
+        
+        // Option 1: Try decoding assuming no reset (uses fallback lastTripDists)
+        val resultNoReset = findBestPermutation(newBatchNoReset, lastTripDists, storedBaselines)
+        assertNotNull("Should map successfully using fallback trip distances when no reset occurred", resultNoReset)
+        assertEquals("ECO", 946063, resultNoReset!![1].distance)
+
+        // Scenario B: Power cycle WITH trip reset (trip reset occurred offline or on startup)
+        // Since trip reset, the raw odometer records on the bike drop back to baseline values
+        val newBatchWithReset = listOf(
+            UsageRecord(storedBaselines[4], 29511), // TURBO baseline
+            UsageRecord(storedBaselines[2], 13416), // TOUR+ baseline
+            UsageRecord(storedBaselines[0], 0),     // OFF baseline
+            UsageRecord(storedBaselines[3], 33983), // SPORT baseline
+            UsageRecord(storedBaselines[1], 1461)    // ECO baseline
+        )
+        
+        // Option 1 fails because baseline (record - lastTripDists) is less than stored baseline
+        val resultWithResetFailed = findBestPermutation(newBatchWithReset, lastTripDists, storedBaselines)
+        org.junit.Assert.assertNull("Decoding should fail when trying to apply non-zero fallback to a reset trip", resultWithResetFailed)
+
+        // Option 2: Retry assuming trip WAS reset (uses zeros)
+        val zeros = List(lastTripDists.size) { 0 }
+        val resultWithResetSucceeded = findBestPermutation(newBatchWithReset, zeros, storedBaselines)
+        assertNotNull("Decoding should succeed when using zeros after a trip reset", resultWithResetSucceeded)
+        assertEquals("ECO", storedBaselines[1], resultWithResetSucceeded!![1].distance)
+    }
+
     private fun findBestPermutation(
         newBatch: List<UsageRecord>,
         newTrip: List<Int>,

@@ -281,6 +281,58 @@ class BleManager(private val context: Context) {
                     if (tripDists != null) {
                         currentStatus = currentStatus.copy(tripDistPerMode = tripDists)
                         Log.d("BleManager", "Trip distances updated: $tripDists")
+                        
+                        // Retry Startup Decoding if it was previously deferred
+                        val expectedCount = currentStatus.assistModeNames.size
+                        if (currentStatus.initialTripDistPerMode == null && 
+                            currentStatus.persistentBaselines != null && 
+                            unsortedModeUsageList.size == expectedCount && 
+                            expectedCount > 0) {
+                            
+                            val result = BoschParser.findBestStartupMapping(
+                                newBatch = unsortedModeUsageList,
+                                currentTrip = tripDists,
+                                storedBaselines = currentStatus.persistentBaselines!!
+                            )
+                            
+                            currentStatus = currentStatus.copy(
+                                startupDecodingStatus = result.status,
+                                startupError = result.bestError,
+                                startupSecondaryError = result.secondaryError
+                            )
+
+                            if (result.mapping != null) {
+                                Log.d("BleManager", "Version B: Startup decoding successful (${result.status}) via late A252! Initializing baseline from storage. Error: ${result.bestError}")
+                                com.example.ebikemonitor.FileLogger.log("BleManager: Startup decoding successful (${result.status}) via late A252! Error: ${result.bestError}")
+                                
+                                val newSortedRecords = ArrayList<UsageRecord?>(List(currentStatus.persistentBaselines!!.size) { null })
+                                result.mapping.forEach { (modeIdx, batchIdx) ->
+                                    newSortedRecords[modeIdx] = unsortedModeUsageList[batchIdx]
+                                }
+
+                                currentStatus = currentStatus.copy(
+                                    initialTripDistPerMode = tripDists.toList(),
+                                    initialUnsortedUsageRecords = unsortedModeUsageList.toList(),
+                                    modeToInitialIndex = result.mapping,
+                                    confirmedModeIndices = result.mapping.keys,
+                                    sortedUsageRecordsB = newSortedRecords
+                                )
+                                
+                                // Also trigger Version B update with discovery
+                                val resultB = BoschParser.processVersionBWithDiscovery(unsortedModeUsageList, currentStatus)
+                                if (resultB != null) {
+                                    val (sortedB, confirmed, mapping) = resultB
+                                    currentStatus = currentStatus.copy(
+                                        sortedUsageRecordsB = sortedB,
+                                        confirmedModeIndices = confirmed,
+                                        modeToInitialIndex = mapping
+                                    )
+                                    Log.d("BleManager", "Version B Late Update: Confirmed = $confirmed, Mappings = $mapping")
+                                }
+                            } else {
+                                Log.w("BleManager", "Version B: Startup decoding ritual did not succeed via late A252: ${result.status}")
+                            }
+                        }
                     }
                 }
                 0x108C -> {
@@ -520,7 +572,8 @@ class BleManager(private val context: Context) {
             tripTotalEnergy = null,
             batteryLevel = null,
             totalBattery = null,
-            remainingRanges = emptyList()
+            remainingRanges = emptyList(),
+            persistentBaselines = null
         )
     }
 
@@ -538,6 +591,57 @@ class BleManager(private val context: Context) {
         if (_bikeStatus.value.persistentBaselines == null) {
             _bikeStatus.value = _bikeStatus.value.copy(persistentBaselines = baselines)
             Log.d("BleManager", "Persistent baselines loaded: $baselines")
+        }
+    }
+
+    fun forceStartupDecodingWithFallback(fallbackTripDists: List<Int>): Boolean {
+        var statusCopy = _bikeStatus.value
+        val expectedCount = statusCopy.assistModeNames.size
+        if (expectedCount == 0 || statusCopy.unsortedUsageRecords.size != expectedCount || statusCopy.persistentBaselines == null) {
+            return false
+        }
+        
+        // Try Option 1: Assuming trip was NOT reset (use fallbackTripDists)
+        var result = com.example.ebikemonitor.data.parser.BoschParser.findBestStartupMapping(
+            newBatch = statusCopy.unsortedUsageRecords,
+            currentTrip = fallbackTripDists,
+            storedBaselines = statusCopy.persistentBaselines!!
+        )
+        var finalTripDists = fallbackTripDists
+        
+        // Try Option 2: Assuming trip WAS reset (use zeros)
+        if (result.mapping == null) {
+            result = com.example.ebikemonitor.data.parser.BoschParser.findBestStartupMapping(
+                newBatch = statusCopy.unsortedUsageRecords,
+                currentTrip = List(expectedCount) { 0 },
+                storedBaselines = statusCopy.persistentBaselines!!
+            )
+            finalTripDists = List(expectedCount) { 0 }
+        }
+        
+        val mapping = result.mapping
+        if (mapping != null) {
+            val newSortedRecords = ArrayList<com.example.ebikemonitor.data.model.UsageRecord?>(List(expectedCount) { null })
+            mapping.forEach { (modeIdx, batchIdx) ->
+                newSortedRecords[modeIdx] = statusCopy.unsortedUsageRecords[batchIdx]
+            }
+            
+            _bikeStatus.value = statusCopy.copy(
+                startupDecodingStatus = result.status + "_FALLBACK",
+                startupError = result.bestError,
+                startupSecondaryError = result.secondaryError,
+                initialTripDistPerMode = finalTripDists.toList(),
+                tripDistPerMode = finalTripDists.toList(),
+                initialUnsortedUsageRecords = statusCopy.unsortedUsageRecords.toList(),
+                modeToInitialIndex = mapping,
+                confirmedModeIndices = mapping.keys,
+                sortedUsageRecordsB = newSortedRecords
+            )
+            com.example.ebikemonitor.FileLogger.log("BleManager: Forced startup decoding successful with fallback! Status: ${result.status}_FALLBACK, Error: ${result.bestError}")
+            return true
+        } else {
+            com.example.ebikemonitor.FileLogger.log("BleManager: Forced startup decoding failed to resolve a mapping with fallback.")
+            return false
         }
     }
 
