@@ -14,10 +14,24 @@ All messages received from the Bosch BLE characteristic (`00000011-eaa2-11e9-81b
 | Key (Hex) | Sensor Name | Data Type / Decoding | Comment |
 | :--- | :--- | :--- | :--- |
 | `0x0081` | Battery Serial Number | String (`decodeStringField`) | Decoded from UTF-8 bytes. |
+| `0x0083` | Battery Part Number | String | Part/model number of the battery pack (e.g. `BBP3770`). |
+| `0x0086` | Battery Software Version | String | Firmware version of the battery BMS (e.g. `19.17.1`). |
 | `0x009B` | Battery Model | String (`decodeStringField`) | Decoded from UTF-8 bytes. |
+| `0x0D01` | Display Serial Number | String | Serial number of the display (e.g. `12345-6789-01-A01-00-0000`). |
+| `0x0D02` | Display Part Number | String | Part number of the display (e.g. `EB13 100 003`). |
+| `0x0D03` | Display Product Code | String | Product code of the display mount / system controller mount (e.g. `BHU3600`). |
+| `0x0D06` | Display Software Version | String | Firmware version of the display (e.g. `19.11.0`). |
+| `0x0D09` | Display Model Name | String | Model name of the display unit (e.g. `Kiox 300`). |
 | `0x108C` | Usage Record | Protobuf-like | Contains Distance (Tag 1, Varint) and Energy (Tag 2, Varint). Used for per-mode consumption tracking. |
+| `0x1801` | Drive Unit Serial Number | String | Serial number of the motor unit (e.g. `12345-6789-01-A01-00-0000`). |
+| `0x1802` | Drive Unit Part Number | String | Part number of the motor unit (e.g. `EB11 100 001`). |
+| `0x1803` | Drive Unit Product Code | String | Product code of the motor unit (e.g. `BDU3741`). |
+| `0x1806` | Drive Unit Software Version | String | Firmware version of the motor drive unit (e.g. `19.54.0`). |
 | `0x180C` | Assist Mode Names | List of Strings (`decodeAssistModes`) | Length-delimited UTF-8 strings. Typically starts with 'Off', followed by active support modes from lowest to highest support (e.g. Eco, Tour, Sport, Turbo). |
-| `0x206B` | LED Software Version | String (`decodeStringField`) | Software version of the Control Unit / LED Remote. |
+| `0x2061` | LED Remote Serial Number | String | Serial number of the control unit (e.g. `12345-6789-01-A01-00-0000`). |
+| `0x2062` | LED Remote Part Number | String | Part number of the control unit (e.g. `EB13 100 00E`). |
+| `0x2065` | LED Remote Product Code | String | Product code of the control unit (e.g. `BRC3600`). |
+| `0x206B` | LED Remote Software Version | String (`decodeStringField`) | Software version of the Control Unit / LED Remote (e.g. `19.22.0`). |
 | `0x8088` | BMS Battery Level | `Int` (%) | Raw Battery State of Charge (SOC) reported directly by the BMS. Typically maintains a +1% to +2% offset above the UI Battery Level (0x80BC). |
 | `0x808A` | Charging Active | `Int` (Boolean) | 1 = Charging active/power drawing, 0/Absent = inactive. |
 | `0x808B` | Battery Temperature | `Int` / 20.0 (°C) | Current battery cell temperature. |
@@ -30,6 +44,7 @@ All messages received from the Bosch BLE characteristic (`00000011-eaa2-11e9-81b
 | `0x80BC` | Battery Level | `Int` (%) | Current UI state of charge in percent. |
 | `0x80C4` | Charger Connected | `Int` (Boolean) | 1 = Charger connected, 0/Absent = disconnected. |
 | `0x80D9` | Actual Usable Capacity | `Int` / 10.0 (Wh) | Current maximum healthy usable capacity (SOH capacity) of the battery cells (e.g. 713.0 Wh). |
+| `0x80E2` | Actual Usable Capacity (Ah) | `Int` / 100.0 (Ah) | **Needs to be confirmed.** Likely represents maximum usable capacity in Ampere-hours (e.g. 20.60 Ah). |
 | `0x9809` | Assist Mode Index | `Int` | Current assist level index (0 = Off, etc). |
 | `0x9818` | Total Distance | `Int` / 1000.0 (km) | System odometer. |
 | `0x9819` | Drive Unit Hours | `Int` | Total operating hours of the motor unit. |
