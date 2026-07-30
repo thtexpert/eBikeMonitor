@@ -58,6 +58,12 @@ class EBikeBackgroundService : Service() {
     private var usedPedalFallbackOnStartup = false
     private var usedTotalFallbackOnStartup = false
 
+    // Strict monotonicity guard tracking variables
+    private var maxPublishedMeasuredTotal: Double? = null
+    private var maxPublishedEstimatedTotal: Double? = null
+    private var maxPublishedOverallTotal: Double? = null
+    private var maxPublishedMac: String? = null
+
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val CHANNEL_ID = "EBikeMonitorChannel"
     private val NOTIFICATION_ID = 1
@@ -89,7 +95,7 @@ class EBikeBackgroundService : Service() {
             }
         }
         
-        // 2. Pre-load Baselines so we are ready the moment we connect
+        // 2. Pre-load Baselines and starting values so we are ready the moment we connect
         kotlinx.coroutines.runBlocking {
             try {
                 // Use activeBikeMac if available, otherwise fallback to legacy bleMacAddress
@@ -100,16 +106,8 @@ class EBikeBackgroundService : Service() {
                     
                     if (profile != null) {
                         activeProfile = profile
-                        if (profile.lastUsageRecords.isNotEmpty()) {
-                            val baselines = profile.lastUsageRecords.mapIndexed { i, usage ->
-                                val trip = profile.lastTripDistPerMode.getOrNull(i) ?: 0
-                                (usage?.distance ?: 0) - trip
-                            }
-                            if (baselines.size == profile.lastUsageRecords.size) {
-                                FileLogger.log("EBikeBackgroundService: Pre-loading ${baselines.size} persistent baselines for $mac")
-                                bleManager.setPersistentBaselines(baselines)
-                            }
-                        }
+                        FileLogger.log("EBikeBackgroundService: Pre-populating status on onCreate for $mac")
+                        bleManager.prePopulateFromProfile(profile)
                     }
                 }
             } catch (e: Exception) {
@@ -368,17 +366,29 @@ class EBikeBackgroundService : Service() {
                                     }
                                 }
                                 
-                                settings.updateBikeBaselines(
-                                    mac = mac,
-                                    pedalBaseline = pedalBaseline,
-                                    rideBaseline = rideBaseline,
-                                    pedalMeasuredBaseline = pedalMeasuredBaseline,
-                                    pedalEstimatedBaseline = pedalEstimatedBaseline,
-                                    lastTripPedal = status.tripPedalEnergy ?: 0,
-                                    lastTripRide = status.tripTotalEnergy ?: 0.0,
-                                    lastOdo = resolvedOdo,
-                                    lastTotalBattery = status.totalBattery ?: originalProfile.lastTotalMotorEnergy
-                                )
+                                val updatedProfile = originalProfile.copy(
+                                     totalPedalEnergyBaseline = pedalBaseline,
+                                     totalRideEnergyBaseline = rideBaseline,
+                                     totalPedalEnergyMeasuredBaseline = pedalMeasuredBaseline,
+                                     totalPedalEnergyEstimatedBaseline = pedalEstimatedBaseline,
+                                     lastTripPedalEnergy = status.tripPedalEnergy ?: 0,
+                                     lastTripRideEnergy = status.tripTotalEnergy ?: 0.0,
+                                     lastOdometer = resolvedOdo,
+                                     lastTotalMotorEnergy = status.totalBattery ?: originalProfile.lastTotalMotorEnergy
+                                 )
+                                 activeProfile = updatedProfile
+
+                                 settings.updateBikeBaselines(
+                                     mac = mac,
+                                     pedalBaseline = pedalBaseline,
+                                     rideBaseline = rideBaseline,
+                                     pedalMeasuredBaseline = pedalMeasuredBaseline,
+                                     pedalEstimatedBaseline = pedalEstimatedBaseline,
+                                     lastTripPedal = status.tripPedalEnergy ?: 0,
+                                     lastTripRide = status.tripTotalEnergy ?: 0.0,
+                                     lastOdo = resolvedOdo,
+                                     lastTotalBattery = status.totalBattery ?: originalProfile.lastTotalMotorEnergy
+                                 )
                             }
                         }
                     }
@@ -407,6 +417,17 @@ class EBikeBackgroundService : Service() {
                                     val newPedalBaseline = profile.totalPedalEnergyBaseline + prevPedal
                                     val newRideBaseline = profile.totalRideEnergyBaseline + prevTotal
                                     
+                                    val updatedProfile = profile.copy(
+                                        totalPedalEnergyBaseline = newPedalBaseline,
+                                        totalRideEnergyBaseline = newRideBaseline,
+                                        totalPedalEnergyMeasuredBaseline = newPedalMeasuredBaseline,
+                                        lastTripPedalEnergy = currentTripPedal,
+                                        lastTripRideEnergy = currentTripTotal,
+                                        lastOdometer = status.totalDistance ?: profile.lastOdometer,
+                                        lastTotalMotorEnergy = status.totalBattery ?: profile.lastTotalMotorEnergy
+                                    )
+                                    activeProfile = updatedProfile
+
                                     app.applicationScope.launch {
                                         settings.updateBikeBaselines(
                                             mac = mac,
@@ -445,15 +466,28 @@ class EBikeBackgroundService : Service() {
                             val currentTripPedal = status.tripPedalEnergy ?: startupTripPedal ?: 0
                             val currentTripTotal = status.tripTotalEnergy ?: startupTripTotal ?: 0.0
                             if (currentOdo != null && currentBattery != null) {
-                                settings.updateActiveRideReferences(
-                                     mac = mac,
-                                     currentOdo = currentOdo,
-                                     currentTotalBattery = currentBattery,
-                                     currentTripPedal = currentTripPedal,
-                                     currentTripRide = currentTripTotal,
-                                     tripDistPerMode = status.tripDistPerMode,
-                                     usageRecords = status.sortedUsageRecordsB
-                                 )
+                                 val profile = activeProfile
+                                 if (profile != null) {
+                                     val updatedProfile = profile.copy(
+                                         lastOdometer = currentOdo,
+                                         lastTotalMotorEnergy = currentBattery,
+                                         lastTripPedalEnergy = currentTripPedal,
+                                         lastTripRideEnergy = currentTripTotal,
+                                         lastTripDistPerMode = if (status.tripDistPerMode.isNotEmpty()) status.tripDistPerMode else profile.lastTripDistPerMode,
+                                         lastUsageRecords = if (status.sortedUsageRecordsB.isNotEmpty() && status.sortedUsageRecordsB.all { it != null }) status.sortedUsageRecordsB else profile.lastUsageRecords
+                                     )
+                                     activeProfile = updatedProfile
+                                 }
+
+                                 settings.updateActiveRideReferences(
+                                      mac = mac,
+                                      currentOdo = currentOdo,
+                                      currentTotalBattery = currentBattery,
+                                      currentTripPedal = currentTripPedal,
+                                      currentTripRide = currentTripTotal,
+                                      tripDistPerMode = status.tripDistPerMode,
+                                      usageRecords = status.sortedUsageRecordsB
+                                  )
                             }
                         }
                     }
@@ -697,23 +731,57 @@ class EBikeBackgroundService : Service() {
         val profile = activeProfile
         if (profile != null) {
             val currentTripPedal = status.tripPedalEnergy ?: startupTripPedal ?: 0
-            val measuredTotal = profile.totalPedalEnergyMeasuredBaseline + currentTripPedal
-            val estimatedTotal = profile.totalPedalEnergyEstimatedBaseline
-            val overallTotal = measuredTotal + estimatedTotal
+            var measuredTotal = profile.totalPedalEnergyMeasuredBaseline + currentTripPedal
+            var estimatedTotal = profile.totalPedalEnergyEstimatedBaseline
+            var overallTotal = measuredTotal + estimatedTotal
+
+            // Enforce strict monotonicity against previously published values in this service session
+            if (deviceId != maxPublishedMac) {
+                maxPublishedMeasuredTotal = null
+                maxPublishedEstimatedTotal = null
+                maxPublishedOverallTotal = null
+                maxPublishedMac = deviceId
+            }
+
+            maxPublishedMeasuredTotal?.let {
+                if (measuredTotal < it) {
+                    FileLogger.log("EBikeBackgroundService: [MONOTONICITY GUARD] measuredTotal ($measuredTotal kcal) is less than max published ($it kcal). Overriding to prevent drop.")
+                    measuredTotal = it
+                }
+            }
+            maxPublishedEstimatedTotal?.let {
+                if (estimatedTotal < it) {
+                    FileLogger.log("EBikeBackgroundService: [MONOTONICITY GUARD] estimatedTotal ($estimatedTotal kcal) is less than max published ($it kcal). Overriding to prevent drop.")
+                    estimatedTotal = it
+                }
+            }
+            maxPublishedOverallTotal?.let {
+                if (overallTotal < it) {
+                    FileLogger.log("EBikeBackgroundService: [MONOTONICITY GUARD] overallTotal ($overallTotal kcal) is less than max published ($it kcal). Overriding to prevent drop.")
+                    overallTotal = it
+                }
+            }
+
+            maxPublishedMeasuredTotal = measuredTotal
+            maxPublishedEstimatedTotal = estimatedTotal
+            maxPublishedOverallTotal = overallTotal
 
             val lastMeasuredTotal = if (last != null) {
                 val lastTripPedal = last.tripPedalEnergy ?: 0
-                profile.totalPedalEnergyMeasuredBaseline + lastTripPedal
+                val lastCalc = profile.totalPedalEnergyMeasuredBaseline + lastTripPedal
+                if (maxPublishedMeasuredTotal != null && lastCalc < maxPublishedMeasuredTotal!!) maxPublishedMeasuredTotal else lastCalc
             } else {
                 null
             }
             val lastEstimatedTotal = if (last != null) {
-                profile.totalPedalEnergyEstimatedBaseline
+                val lastCalc = profile.totalPedalEnergyEstimatedBaseline
+                if (maxPublishedEstimatedTotal != null && lastCalc < maxPublishedEstimatedTotal!!) maxPublishedEstimatedTotal else lastCalc
             } else {
                 null
             }
             val lastOverallTotal = if (lastMeasuredTotal != null && lastEstimatedTotal != null) {
-                lastMeasuredTotal + lastEstimatedTotal
+                val lastCalc = lastMeasuredTotal + lastEstimatedTotal
+                if (maxPublishedOverallTotal != null && lastCalc < maxPublishedOverallTotal!!) maxPublishedOverallTotal else lastCalc
             } else {
                 null
             }
@@ -991,14 +1059,34 @@ class EBikeBackgroundService : Service() {
         isSyncComplete = false
         usedPedalFallbackOnStartup = false
         usedTotalFallbackOnStartup = false
+
+        // Pre-populate telemetry cache from database profile
+        val app = application as EBikeApplication
+        val bleManager = app.bleManager
+        val settings = app.settingsRepository
+        serviceScope.launch {
+            try {
+                val mac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first()
+                if (!mac.isNullOrEmpty()) {
+                    val profiles = settings.bikeProfiles.first()
+                    val profile = profiles.find { it.macAddress == mac }
+                    if (profile != null) {
+                        activeProfile = profile
+                        FileLogger.log("EBikeBackgroundService: Pre-populating status on connection/reconnection for $mac")
+                        bleManager.prePopulateFromProfile(profile)
+                    }
+                }
+            } catch (e: Exception) {
+                FileLogger.log("EBikeBackgroundService: Error pre-populating BLE status: ${e.message}")
+            }
+        }
         
         // Start 30-second safety timeout
         syncTimeoutJob?.cancel()
         syncTimeoutJob = serviceScope.launch {
             kotlinx.coroutines.delay(30000)
-            val app = application as EBikeApplication
-            val currentStatus = app.bleManager.bikeStatus.value
-            val activeMac = app.settingsRepository.activeBikeMac.first() ?: app.settingsRepository.bleMacAddress.first()
+            val currentStatus = bleManager.bikeStatus.value
+            val activeMac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first()
             if (activeMac != null) {
                 val profiles = app.settingsRepository.bikeProfiles.first()
                 val profile = profiles.find { it.macAddress == activeMac }
@@ -1242,6 +1330,18 @@ class EBikeBackgroundService : Service() {
                     }
                 }
                 
+                val updatedProfile = profile.copy(
+                    totalPedalEnergyBaseline = pedalBaseline,
+                    totalRideEnergyBaseline = rideBaseline,
+                    totalPedalEnergyMeasuredBaseline = pedalMeasuredBaseline,
+                    totalPedalEnergyEstimatedBaseline = pedalEstimatedBaseline,
+                    lastTripPedalEnergy = currentTripPedal,
+                    lastTripRideEnergy = currentTripTotal,
+                    lastOdometer = currentOdo,
+                    lastTotalMotorEnergy = currentTotalBattery
+                )
+                activeProfile = updatedProfile
+
                 settings.updateBikeBaselines(
                     mac = mac,
                     pedalBaseline = pedalBaseline,
@@ -1386,16 +1486,25 @@ class EBikeBackgroundService : Service() {
                     }
                 }
                 
-                // Write final references on disconnect to prevent offline double-counting
-                settings.updateActiveRideReferences(
-                    mac = mac,
-                    currentOdo = currentOdo,
-                    currentTotalBattery = endBattery ?: profile.lastTotalMotorEnergy,
-                    currentTripPedal = currentTripPedal,
-                    currentTripRide = currentTripTotal,
-                    tripDistPerMode = status.tripDistPerMode,
-                    usageRecords = status.sortedUsageRecordsB
-                )
+                val updatedProfile = profile.copy(
+                     lastOdometer = currentOdo,
+                     lastTotalMotorEnergy = endBattery ?: profile.lastTotalMotorEnergy,
+                     lastTripPedalEnergy = currentTripPedal,
+                     lastTripRideEnergy = currentTripTotal,
+                     lastTripDistPerMode = if (status.tripDistPerMode.isNotEmpty()) status.tripDistPerMode else profile.lastTripDistPerMode,
+                     lastUsageRecords = if (status.sortedUsageRecordsB.isNotEmpty() && status.sortedUsageRecordsB.all { it != null }) status.sortedUsageRecordsB else profile.lastUsageRecords
+                 )
+                 activeProfile = updatedProfile
+
+                 settings.updateActiveRideReferences(
+                     mac = mac,
+                     currentOdo = currentOdo,
+                     currentTotalBattery = endBattery ?: profile.lastTotalMotorEnergy,
+                     currentTripPedal = currentTripPedal,
+                     currentTripRide = currentTripTotal,
+                     tripDistPerMode = status.tripDistPerMode,
+                     usageRecords = status.sortedUsageRecordsB
+                 )
                 
                 val errorPct = if (pedalDelta > 0) {
                     ((simulatedKcalSum - pedalDelta) / pedalDelta) * 100.0

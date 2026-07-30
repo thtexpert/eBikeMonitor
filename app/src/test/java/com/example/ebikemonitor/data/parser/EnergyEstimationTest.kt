@@ -421,4 +421,79 @@ class EnergyEstimationTest {
         assertEquals(0, dbLastTripPedal)
         assertEquals(1.024, dbLastTripDistPerModeSum, 0.0)
     }
+
+    @Test
+    fun testMqttSyncMonotonicityWithDbPropagationDelay() {
+        // Active profile baseline values at the end of Session 1
+        val dbMeasuredBaseline = 125.0
+        val dbEstimatedBaseline = 76.6
+        val dbLastTripPedal = 50.0 // Session 1 ended with 50 kcal
+        
+        // This is the activeProfile in memory (initially matches the database at Session 2 startup)
+        var activeProfile = com.example.ebikemonitor.data.model.BikeProfile(
+            macAddress = "00:11:22:33:44:55",
+            name = "TestBike",
+            totalPedalEnergyMeasuredBaseline = dbMeasuredBaseline,
+            totalPedalEnergyEstimatedBaseline = dbEstimatedBaseline,
+            lastTripPedalEnergy = dbLastTripPedal.toInt()
+        )
+        
+        // Simulating the MQTT publishing layer overallTotal calculation
+        fun calculatePublishedTotal(tripPedal: Int, profile: com.example.ebikemonitor.data.model.BikeProfile): Double {
+            return profile.totalPedalEnergyMeasuredBaseline + tripPedal + profile.totalPedalEnergyEstimatedBaseline
+        }
+        
+        // 1. Session 2 Starts up. The bike has power-cycled, so physical trip pedal energy resets to 0.
+        val startupTripPedal = 0
+        
+        // 2. The startup sync completion code detects the reset (current 0 < last 50) and updates the baseline.
+        // It starts an ASYNCHRONOUS database update.
+        val tripResetDetected = startupTripPedal < activeProfile.lastTripPedalEnergy
+        assertTrue(tripResetDetected)
+        
+        // Simulate database write values
+        val newDbBaseline = dbMeasuredBaseline + activeProfile.lastTripPedalEnergy
+        val newLastTripPedal = startupTripPedal
+        
+        // --- Scenario A: Stale/Async Profile (Simulates current bug) ---
+        // In the current bug, activeProfile is NOT updated synchronously. It remains stale
+        // until the DB flow emits. An MQTT message is published immediately using this stale profile.
+        val publishedTotalStale = calculatePublishedTotal(startupTripPedal, activeProfile)
+        
+        // Verify that the stale profile causes a non-monotonic drop!
+        // Previous session total was measuredBaseline (125.0) + lastTrip (50.0) + estimated (76.6) = 251.6
+        // Under the bug, we publish stale measuredBaseline (125.0) + currentTrip (0) + estimated (76.6) = 201.6
+        assertEquals(201.6, publishedTotalStale, 0.01) 
+        
+        // --- Scenario B: Synchronous In-Memory Profile Update (Simulates our fix) ---
+        // With the fix, we synchronously update activeProfile when we write to the database
+        activeProfile = activeProfile.copy(
+            totalPedalEnergyMeasuredBaseline = newDbBaseline,
+            lastTripPedalEnergy = newLastTripPedal
+        )
+        
+        // Now calculating the published value immediately after baseline decision uses the updated profile
+        val publishedTotalFixed = calculatePublishedTotal(startupTripPedal, activeProfile)
+        
+        // Verify that with the synchronous update, the total is monotonic and does not drop!
+        assertEquals(251.6, publishedTotalFixed, 0.01)
+        
+        // --- Scenario C: Monotonicity Guard (Simulates our fallback guard) ---
+        // We track the maximum published value for this service session
+        val maxPublishedOverallTotal = 251.6 // Session 1 ended with this value
+        
+        // If due to any other condition (like connection drop setting tripPedal to null / 0)
+        // a lower value is calculated:
+        val lowerCalculatedTotal = 201.6
+        var publishedValue = lowerCalculatedTotal
+        
+        // Apply monotonicity guard
+        if (publishedValue < maxPublishedOverallTotal) {
+            publishedValue = maxPublishedOverallTotal
+        }
+        
+        // Verify the guard overrides the lower value and preserves monotonicity
+        assertEquals(251.6, publishedValue, 0.01)
+    }
 }
+

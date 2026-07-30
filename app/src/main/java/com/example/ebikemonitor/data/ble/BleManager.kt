@@ -12,6 +12,7 @@ import android.os.Looper
 import android.util.Log
 import com.example.ebikemonitor.data.model.BikeStatus
 import com.example.ebikemonitor.data.model.UsageRecord
+import com.example.ebikemonitor.data.model.BikeProfile
 import com.example.ebikemonitor.data.parser.BoschParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -592,6 +593,45 @@ class BleManager(private val context: Context) {
             _bikeStatus.value = _bikeStatus.value.copy(persistentBaselines = baselines)
             Log.d("BleManager", "Persistent baselines loaded: $baselines")
         }
+    }
+
+    fun prePopulateFromProfile(profile: BikeProfile) {
+        val currentStatus = _bikeStatus.value
+        val expectedCount = profile.lastUsageRecords.size
+        
+        // Calculate persistent baselines from usage history
+        val baselines = if (profile.lastUsageRecords.isNotEmpty()) {
+            profile.lastUsageRecords.mapIndexed { i, usage ->
+                val trip = profile.lastTripDistPerMode.getOrNull(i) ?: 0
+                (usage?.distance ?: 0) - trip
+            }
+        } else {
+            null
+        }
+
+        val hasValidUsage = profile.lastUsageRecords.isNotEmpty() && profile.lastUsageRecords.all { it != null }
+        
+        _bikeStatus.value = currentStatus.copy(
+            totalDistance = if (currentStatus.totalDistance == null || currentStatus.totalDistance == 0.0) profile.lastOdometer else currentStatus.totalDistance,
+            tripPedalEnergy = if (currentStatus.tripPedalEnergy == null) profile.lastTripPedalEnergy else currentStatus.tripPedalEnergy,
+            tripTotalEnergy = if (currentStatus.tripTotalEnergy == null) profile.lastTripRideEnergy else currentStatus.tripTotalEnergy,
+            totalBattery = if (currentStatus.totalBattery == null) profile.lastTotalMotorEnergy else currentStatus.totalBattery,
+            tripDistPerMode = if (currentStatus.tripDistPerMode.isEmpty()) profile.lastTripDistPerMode else currentStatus.tripDistPerMode,
+            sortedUsageRecordsB = if (currentStatus.sortedUsageRecordsB.isEmpty() && hasValidUsage) profile.lastUsageRecords.toList() else currentStatus.sortedUsageRecordsB,
+            persistentBaselines = baselines,
+            // If we successfully pre-populated usage records, set confirmed indices and mapping
+            confirmedModeIndices = if (currentStatus.confirmedModeIndices.isEmpty() && hasValidUsage && expectedCount > 0) {
+                (0 until expectedCount).toSet()
+            } else {
+                currentStatus.confirmedModeIndices
+            },
+            modeToInitialIndex = if (currentStatus.modeToInitialIndex.isEmpty() && hasValidUsage && expectedCount > 0) {
+                (0 until expectedCount).map { it to it }.toMap()
+            } else {
+                currentStatus.modeToInitialIndex
+            }
+        )
+        Log.d("BleManager", "Pre-populated BLE status from profile: totalDistance=${_bikeStatus.value.totalDistance}, tripPedal=${_bikeStatus.value.tripPedalEnergy}, persistentBaselines=${_bikeStatus.value.persistentBaselines}")
     }
 
     fun forceStartupDecodingWithFallback(fallbackTripDists: List<Int>): Boolean {
