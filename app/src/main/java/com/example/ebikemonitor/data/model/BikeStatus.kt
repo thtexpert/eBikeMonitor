@@ -14,6 +14,7 @@ data class BikeStatus(
     val assistMode: Int? = null,
     val totalDistance: Double? = null,
     val totalBattery: Double? = null,
+    val totalElectricEnergy: Double? = null,
     val ledRemoteSoftwareVersion: String? = null,
     val batterySoftwareVersion: String? = null,
     val batteryPartNumber: String? = null,

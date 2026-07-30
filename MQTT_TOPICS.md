@@ -15,7 +15,7 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | `assistmode` | Assist Mode | `sensor.<name>_assist_mode` | - | Current assist level name. |
 | `totaldistance` | Total Distance | `sensor.<name>_total_distance` | km | Total odometer from the drive unit. (**Retained**) |
 | `totalenergy` | Total Energy | `sensor.<name>_total_energy` | kWh | Cumulative motor energy usage. (**Retained**) |
-| `totalbattery` | Total Battery | `sensor.<name>_total_battery` | kWh | Cumulative battery energy usage. (**Retained**) |
+| `totalbattery` | Total Battery Mechanical Energy | `sensor.<name>_total_battery` | kWh | Cumulative battery mechanical energy throughput (matching `0x809C`). (**Retained**) |
 | `stateofcharge` | Battery Level | `sensor.<name>_battery_level` | % | Current UI battery percentage. |
 | `status` | App Status | `sensor.<name>_app_status` | - | LWT status (`online`/`offline`). |
 | `blestatus` | BLE Status | `sensor.<name>_ble_status` | - | BLE connection state (non-retained: publishes `"connected"` or `"disconnected"`). |
@@ -61,7 +61,8 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | Topic | Sensor Name | HA Entity ID (Default) | Unit | Description |
 |-------|-------------|-------------------------|------|-------------|
 | `stateofcharge` | Charge Level | `sensor.bosch_<model>_charge_level` | % | Current charge level of this pack. |
-| `totalbattery` | Total Energy Used | `sensor.bosch_<model>_total_energy_used` | kWh | Lifetime total energy discharged (`0x809C`). (**Retained**) |
+| `totalbattery` | Total Mechanical Energy | `sensor.bosch_<model>_total_mechanical_energy` | kWh | Lifetime total mechanical energy delivered by the motor (`0x809C`). (**Retained**) |
+| `totalelectricenergy` | Total Electric Energy | `sensor.bosch_<model>_total_electric_energy` | kWh | Lifetime total electrical energy throughput of the cell pack (`0x80B0`). (**Retained**) |
 | `usable_energy_remaining` | Usable Energy Remaining | `sensor.bosch_<model>_usable_energy_remaining` | Wh | Remaining usable motor energy (`0x8091`). (**Retained**) |
 | `nominal_capacity` | Nominal Design Capacity | `sensor.bosch_<model>_nominal_design_capacity` | Wh | Nominal factory design capacity (`0x80B4`). (**Retained**) |
 | `usable_capacity` | Actual Usable Capacity | `sensor.bosch_<model>_actual_usable_capacity` | Wh | Actual maximum healthy usable capacity / SOH (`0x80D9`). (**Retained**) |

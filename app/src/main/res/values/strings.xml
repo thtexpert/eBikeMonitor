@@ -50,7 +50,8 @@
     <string name="sensor_name_soc">SoC</string>
     <string name="sensor_name_total_distance">Total Distance</string>
     <string name="sensor_name_total_energy">Total Energy</string>
-    <string name="sensor_name_total_battery">Total Battery</string>
+    <string name="sensor_name_total_battery">Total Mechanical Energy</string>
+    <string name="sensor_name_total_electric_energy">Total Electric Energy</string>
     
     <!-- Action Button Labels -->
     <string name="btn_mqtt">MQTT</string>

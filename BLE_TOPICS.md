@@ -9,6 +9,30 @@ All messages received from the Bosch BLE characteristic (`00000011-eaa2-11e9-81b
 - `Byte 2-3`: Message ID (Big Endian)
 - `Byte 4-N`: Payload (encoded as Varints, Strings, or Protobuf-like structures)
 
+## Electrical vs. Mechanical Energy
+
+To correctly interpret telemetry, it is vital to distinguish between two distinct energy realms in the reported data:
+
+1. **Electrical Energy (BMS-based)**
+   - Tracks chemical/electrical capacity and energy stored inside or discharged directly from the battery cells.
+   - **Key Topics**:
+     - `0x80B0` (Lifetime Total Energy Throughput): Cumulative electrical energy throughput (in 0.1 kWh / 100 Wh units).
+     - `0x8092` / `0x80C5` / `0x8091` (Remaining Energy): Remaining electrical energy in the pack (in 0.1 Wh units).
+     - `0x80E2` / `0x80B4` / `0x80D9` (SOH Capacities): Usable/nominal electrical energy capacity in Wh/Ah.
+     - `0x8096` (Charge Cycles): Cumulative number of full charge cycles (increments only during charging, representing one complete charge of the battery pack's usable capacity).
+
+2. **Mechanical Energy (Motor-based)**
+   - Tracks actual mechanical work delivered at the spindle/crankshaft.
+   - **Key Topics**:
+     - `0x108C` (Usage Record Energy): Cumulative mechanical energy delivered by the motor per assist mode (in Wh).
+     - `0x809C` (Lifetime Total Mechanical Energy): Cumulative motor mechanical work over the lifespan of the battery pack (matches the sum of all `0x108C` mode energies).
+     - `0xA243` (Trip Total Energy): Total mechanical work done by both the motor and the rider during the current trip (in 0.05 Wh units).
+
+3. **Connecting Efficiency**
+   The two realms are related directly by the electromechanical efficiency of the motor/drivetrain ($\approx 78\%$):
+   $$\text{Mechanical Energy} = \text{Electrical Energy} \times 0.78$$
+   For example, if your trip reports consuming **100 Wh (mechanical)** of motor work, the battery cell pack will have discharged **~133 Wh (electrical)**, which corresponds to a **~19% SOC drop** on a 702 Wh usable battery pack.
+
 ## BLE Topics (Message IDs)
 
 The following tables group the BLE topics (Message IDs) by hardware unit and functional category:
@@ -26,10 +50,10 @@ The following tables group the BLE topics (Message IDs) by hardware unit and fun
 | `0x808B` | Battery Temperature | `Int` / 20.0 (°C) | Current battery cell temperature. (from BMS) |
 | `0x808E` | Battery State | `Int` (Enum) | Current battery operating mode. 2 = Discharging/Ride, 12 = Charging. (from BMS) |
 | `0x8092` | Total Battery Energy | `Int` / 10.0 (Wh) | Total remaining battery energy. Exactly 30.0 Wh higher than 0x8091 (reserved lights buffer). (from BMS) |
-| `0x8096` | Charge Cycles | `Int` / 10.0 | Cumulative number of full charge cycles. (from BMS) |
+| `0x8096` | Charge Cycles | `Int` / 10.0 | Cumulative number of full charge cycles (increments only during charging). (from BMS) |
 | `0x8097` | BMS Chip Serial | Protobuf submessage | Diagnostic battery serial / hardware ID (nested structure `1a0a08...`). |
-| `0x809C` | Lifetime Total Energy | `Int` (Wh) | Cumulative total energy discharged from the battery over its lifetime. (from BMS) |
-| `0x80B0` | Lifetime Total Discharged | `Int` / 0.5 (Ah) | Cumulative capacity discharged from the battery over its lifetime. **(Not implemented in app)** |
+| `0x809C` | Lifetime Total Mechanical Energy | `Int` (Wh) | Cumulative total mechanical energy delivered by the motor over the lifetime of this battery pack (from BMS, matches motor mechanical work). |
+| `0x80B0` | Lifetime Total Energy Throughput | `Int` / 10.0 (kWh) | Cumulative electrical energy throughput over the battery pack's lifetime. 1 raw unit = 0.1 kWh. **(Not implemented in app)** |
 | `0x80B1` | SOH Parameter | Semi-static | BMS capacity calibration index (updates step-wise as SOH degrades). |
 | `0x80B4` | Actual Capacity (Wh) | `Int` / 10.0 (Wh) | Actual maximum healthy usable capacity of the battery cell pack in Wh (e.g. 743.0 Wh). Calculated internally by the BMS as Ah (0x80E2) * 36.0V nominal. |
 | `0x80C5` | Usable Motor Energy (BMS)| `Int` / 10.0 (Wh) | Alternate/redundant usable motor energy. (from BMS) |
@@ -104,7 +128,7 @@ Used for most numeric fields and protobuf tags. It uses a standard LEB128 encodi
 | Tag (Hex) | Field | Decoding |
 | :--- | :--- | :--- |
 | `0x08` (Tag 1) | Distance | Varint (meters) |
-| `0x10` (Tag 2) | Energy | Varint (Wh) |
+| `0x10` (Tag 2) | Energy | Varint (mechanical Wh) |
 
 ### Assist Modes (0x180C)
 The payload contains multiple consecutive string blocks. Each block starts with `0x0A` (Tag 1, Wire Type 2), followed by a length byte and the UTF-8 string data.
@@ -124,13 +148,13 @@ To convert in reverse (from mechanical Wh on pedals to calories burned):
 $$\text{Pedal Energy} (\text{kcal}) = E_{\text{rider, mech}} (\text{Wh}) \times 3.44 \quad \left(\text{since } \frac{1}{0.29075} \approx 3.44\right)$$
 
 ### 2. Motor Mechanical Work
-Motor electrical consumption from the battery ($E_{\text{motor, elec}}$ in `Wh`) is converted to mechanical assist force on the drivetrain using an average brushless DC motor efficiency of **79%**:
-$$E_{\text{motor, mech}} (\text{Wh}) = E_{\text{motor, elec}} (\text{Wh}) \times 0.79$$
+Motor mechanical work ($E_{\text{motor, mech}}$ in `Wh`) is reported directly by the Drive Unit via `0x108C` (Usage Records) and cumulative lifetime `0x809C`. It is related to the electrical energy throughput of the battery cells ($E_{\text{battery, elec\_throughput}}$ from `0x80B0` in Wh) using an average electromechanical drivetrain efficiency of **~78%**:
+$$E_{\text{motor, mech}} (\text{Wh}) = E_{\text{battery, elec\_throughput}} (\text{Wh}) \times 0.78$$
 
 ### 3. Trip Total Energy (Mechanical Wh)
 Corresponds to BLE topic `0xA243`. It is the sum of mechanical work done by both the motor and the rider:
 $$E_{\text{trip\_total, mech}} (\text{Wh}) = E_{\text{motor, mech}} (\text{Wh}) + E_{\text{rider, mech}} (\text{Wh})$$
-$$E_{\text{trip\_total, mech}} (\text{Wh}) = \left( E_{\text{motor, elec}} (\text{Wh}) \times 0.79 \right) + \left( E_{\text{rider, metabolic}} (\text{kcal}) \times 0.29075 \right)$$
+$$E_{\text{trip\_total, mech}} (\text{Wh}) = E_{\text{motor, mech}} (\text{Wh}) + \left( E_{\text{rider, metabolic}} (\text{kcal}) \times 0.29075 \right)$$
 
 ### 4. Trip Human Percentage (%)
 Corresponds to BLE topic `0xA254`. It represents the proportion of total mechanical energy contributed by the rider:

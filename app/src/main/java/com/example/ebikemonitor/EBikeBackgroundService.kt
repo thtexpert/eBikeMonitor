@@ -836,6 +836,7 @@ class EBikeBackgroundService : Service() {
             val battTopic = "powertube/$batterySerial"
             pubIfDiff("$battTopic/stateofcharge", status.batteryLevel, last?.batteryLevel, true)
             pubIfDiff("$battTopic/totalbattery", status.totalBattery, last?.totalBattery, true)
+            pubIfDiff("$battTopic/totalelectricenergy", status.totalElectricEnergy, last?.totalElectricEnergy, true)
             pubIfDiff("$battTopic/chargecycles", status.chargeCycles, last?.chargeCycles, true)
             pubIfDiff("$battTopic/serial", batterySerial, last?.batterySerialNumber, true)
 

@@ -2,6 +2,12 @@
 
 All notable changes to the **eBikeMonitor** project will be documented in this file.
 
+## [1.15.3] - 2026-07-30
+### Added
+- **Total Electric Energy (`0x80B0`)**: Decoded and integrated lifetime electrical energy throughput (in kWh) from the battery BMS.
+- **Total Mechanical Energy (`0x809C`)**: Renamed the friendly sensor names in Home Assistant from `"Total Battery"` / `"Total Energy Used"` to `"Total Mechanical Energy"` to clearly distinguish mechanical crankshaft work from electrical cell throughput.
+- **Home Assistant Discovery Version Bump**: Incremented both bike and battery discovery versions (to 6 and 5 respectively) to trigger automatic entities update on dashboard reload.
+
 ## [1.15.2] - 2026-07-30
 ### Added
 - **BLE Status Topic (`blestatus`)**: Published BLE connection status (`connected`/`disconnected`) to the `ebikemonitor/<device_id>/blestatus` topic in real-time.

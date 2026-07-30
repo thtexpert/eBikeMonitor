@@ -315,6 +315,7 @@ fun PortraitLayout(
                     SensorRow(stringResource(R.string.sensor_name_total_distance), bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
                     SensorRow(stringResource(R.string.sensor_name_total_energy), bikeStatus.totalEnergyFromMotor?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalEnergyFromMotor != null)
                     SensorRow(stringResource(R.string.sensor_name_total_battery), bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
+                    SensorRow(stringResource(R.string.sensor_name_total_electric_energy), bikeStatus.totalElectricEnergy?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalElectricEnergy != null)
                 }
             }
 
@@ -376,6 +377,7 @@ fun LandscapeLayout(
                 SensorRow(stringResource(R.string.sensor_name_total_distance), bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
                 SensorRow(stringResource(R.string.sensor_name_total_energy), bikeStatus.totalEnergyFromMotor?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalEnergyFromMotor != null)
                 SensorRow(stringResource(R.string.sensor_name_total_battery), bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
+                SensorRow(stringResource(R.string.sensor_name_total_electric_energy), bikeStatus.totalElectricEnergy?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalElectricEnergy != null)
             }
         }
         item {

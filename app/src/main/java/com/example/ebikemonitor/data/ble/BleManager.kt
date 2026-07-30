@@ -142,7 +142,7 @@ class BleManager(private val context: Context) {
         var currentStatus = _bikeStatus.value
         
         for (msg in messages) {
-            if (msg.messageId in listOf(0x808A, 0x80C4, 0x808E, 0x808B, 0x8091, 0x8092, 0x809C)) {
+            if (msg.messageId in listOf(0x808A, 0x80C4, 0x808E, 0x808B, 0x8091, 0x8092, 0x809C, 0x80B0)) {
                 val lastVal = lastLoggedDiagnosticValues[msg.messageId]
                 if (lastVal != msg.value) {
                     lastLoggedDiagnosticValues[msg.messageId] = msg.value
@@ -154,6 +154,7 @@ class BleManager(private val context: Context) {
                         0x8091 -> "Usable Motor Energy (0x8091)"
                         0x8092 -> "Total Battery Energy (0x8092)"
                         0x809C -> "Lifetime Discharged Energy (0x809C)"
+                        0x80B0 -> "Total Electric Energy (0x80B0)"
                         else -> "Unknown"
                     }
                     Log.d("BleManager", "[DIAGNOSTIC] $desc = ${msg.value}")
@@ -249,6 +250,7 @@ class BleManager(private val context: Context) {
                 }
                 0x9819 -> currentStatus = currentStatus.copy(driveUnitHours = msg.value)
                 0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
+                0x80B0 -> currentStatus = currentStatus.copy(totalElectricEnergy = msg.value * 0.1)
                 0x206B -> {
                     val rawVersion = msg.decodeStringField()
                     val softwareVersion = com.example.ebikemonitor.data.parser.BoschParser.formatSoftwareVersion(rawVersion)

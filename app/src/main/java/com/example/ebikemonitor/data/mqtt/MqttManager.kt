@@ -252,7 +252,7 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "Assist Mode", "assist_mode", "assistmode", stateClass = null, icon = "mdi:bicycle-electric")
         publishConfig("sensor", "Cadence", "cadence", "cadence", "rpm", icon = "mdi:bike-fast")
         publishConfig("sensor", "Total Distance", "total_dist", "totaldistance", "km", "distance", "total_increasing")
-        publishConfig("sensor", "Total Battery", "total_batt", "totalbattery", "kWh", "energy", "total_increasing")
+        publishConfig("sensor", "Total Battery Mechanical Energy", "total_batt", "totalbattery", "kWh", "energy", "total_increasing")
         publishConfig("sensor", "Total Energy", "total_energy", "totalenergy", "kWh", "energy", "total_increasing")
         publishConfig("sensor", "Battery Serial Number", "battery_serial", "batteryserialnumber", icon = "mdi:barcode-scan", stateClass = null)
         publishConfig("sensor", "LED Remote Software Version", "led_remote_sw_version", "ledremotesoftwareversion", icon = "mdi:information-outline", stateClass = null)
@@ -327,7 +327,8 @@ class MqttManager(private val context: Context) {
         }
 
         publishConfig("sensor", "Charge Level", "battery", "stateofcharge", "%", "battery")
-        publishConfig("sensor", "Total Energy Used", "total_energy", "totalbattery", "kWh", "energy", "total_increasing")
+        publishConfig("sensor", "Total Mechanical Energy", "total_energy", "totalbattery", "kWh", "energy", "total_increasing")
+        publishConfig("sensor", "Total Electric Energy", "total_electric_energy", "totalelectricenergy", "kWh", "energy", "total_increasing")
         publishConfig("sensor", "Usable Energy Remaining", "usable_energy_remaining", "usable_energy_remaining", "Wh", "energy")
         publishConfig("sensor", "Nominal Design Capacity", "nominal_capacity", "nominal_capacity", "Wh", "energy", stateClass = null)
         publishConfig("sensor", "Actual Usable Capacity", "usable_capacity", "usable_capacity", "Wh", "energy", stateClass = null)
