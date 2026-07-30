@@ -316,7 +316,10 @@ class MainViewModel(
             val name = settingsRepository.eBikeName.first()
 
             val deviceId = mac.lowercase().replace(":", "")
-            mqttManager.sendBikeDiscovery(deviceId, name, uiState.value.assistModeNames)
+            val sw = uiState.value.driveUnitSoftwareVersion ?: uiState.value.ledRemoteSoftwareVersion
+            val hw = uiState.value.driveUnitProductCode
+            val modelName = uiState.value.driveUnitModel
+            mqttManager.sendBikeDiscovery(deviceId, name, uiState.value.assistModeNames, sw, hw, modelName)
             
             settingsRepository.updateBikeDiscoveryVersion(mac, CURRENT_BIKE_DISCOVERY_VERSION)
         }
@@ -326,8 +329,10 @@ class MainViewModel(
         viewModelScope.launch {
             val serial = uiState.value.batterySerialNumber ?: return@launch
             val model = uiState.value.batteryModel
+            val sw = uiState.value.batterySoftwareVersion
+            val hw = uiState.value.batteryPartNumber
             
-            mqttManager.sendPowerTubeDiscovery(serial, model)
+            mqttManager.sendPowerTubeDiscovery(serial, model, sw, hw)
             
             settingsRepository.updateBatteryDiscoveryVersion(serial, CURRENT_BATTERY_DISCOVERY_VERSION, model)
         }

@@ -76,7 +76,10 @@
     <string name="debug_sensor_human_calories">Trip Pedal Energy (kcal)</string>
     <string name="debug_sensor_cadence">Cadence</string>
     <string name="debug_sensor_charge_cycles">Charge Cycles</string>
-    <string name="debug_sensor_led_version">eBike LED Software Version</string>
+    <string name="debug_sensor_led_version">LED Remote Software Version</string>
+    <string name="debug_sensor_battery_sw_version">Battery Software Version</string>
+    <string name="debug_sensor_drive_unit_sw_version">Drive Unit Software Version</string>
+    <string name="debug_sensor_display_sw_version">Display Software Version</string>
     <string name="debug_sensor_mqtt_time">last MQTT Connect Time</string>
     <string name="debug_sensor_total_hours">Total Hours</string>
     <string name="debug_header_delta_discovery">V-B: Delta Discovery</string>

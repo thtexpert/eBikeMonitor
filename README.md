@@ -30,7 +30,7 @@ For decoding see [BLE TOPICS](BLE_TOPICS.md).
 <img src="images/SettingsScreen.jpg" width="200">
 
 1. **Pairing**: Ensure your eBike is paired (bonded) with your Android device via the system Bluetooth settings.
-2. **Permissions**: The app requires **Usage Access** permission to detect if the Bosch Flow app is running. The dashboard will display a warning and prompt you to grant this if it is missing. Also, ensure Bluetooth is enabled.
+2. **Permissions**: The app requires **Notification Access** to automatically detect when the Bosch Flow app connects in the background. If this is missing, the dashboard will display a warning banner allowing you to grant it directly. Also, ensure Bluetooth is enabled.
 3. **Settings Configuration**:
    - Open the **Settings** screen (gear icon).
    - **eBike Name**: Enter a name for your eBike. This name will be used for the MQTT device in Home Assistant.
@@ -39,7 +39,7 @@ For decoding see [BLE TOPICS](BLE_TOPICS.md).
    - **Automation**: Configure "Auto-Connect MQTT", "Background Startup", "Direct eBike Detection (Fallback)", "Hardware Connection Trigger (Fast Startup)", and **"Home Sync Window"** to manage how the app runs automatically in the background.
 
 ### Privacy & Permissions Note
-To detect if the Bosch Flow app is running, this app requires the **Usage Access** (`PACKAGE_USAGE_STATS`) permission. Additionally, it uses the **Query All Packages** (`QUERY_ALL_PACKAGES`) permission to locate the Flow app on your device. For background automation, the app requires **Notification Access** to read when the Flow app connects to your eBike. It also utilizes the Android **Companion Device Manager** to directly detect your eBike's Bluetooth hardware presence. These permissions are used exclusively for local state detection and automation (auto-launching/stopping). No personal browsing data or package lists are transmitted or collected.
+For background automation, the app requires **Notification Access** to read when the Flow app connects to your eBike. If this is missing, a prominent warning banner is displayed on the dashboard to prompt you to grant it, as it is critical for auto-startup. The app also optionally utilizes **Usage Access** (`PACKAGE_USAGE_STATS`) and **Query All Packages** (`QUERY_ALL_PACKAGES`) to check if the Flow app is currently active, and utilizes the Android **Companion Device Manager** to directly detect your eBike's Bluetooth hardware presence for fast direct startup triggers. These permissions are used exclusively for local state detection and automation (auto-launching/stopping). No personal browsing data or package lists are transmitted or collected.
 
 ### 2. First Ride
 

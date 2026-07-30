@@ -139,6 +139,20 @@ data class BoschMessage(
 object BoschParser {
     private const val TAG = "BoschParser"
 
+    fun formatSoftwareVersion(rawVersion: String?): String? {
+        if (rawVersion == null) return null
+        val parts = rawVersion.split(".")
+        if (parts.size < 2) return rawVersion
+        val last = parts.last()
+        if (last.length == 2 && last.all { it.isDigit() }) {
+            val truncatedLast = last.take(1)
+            val prefix = parts.dropLast(1).joinToString(".")
+            return "$prefix.$truncatedLast"
+        }
+        return rawVersion
+    }
+
+
     fun parse(bytes: ByteArray): Pair<List<BoschMessage>, Int> {
         val messages = mutableListOf<BoschMessage>()
         var index = 0

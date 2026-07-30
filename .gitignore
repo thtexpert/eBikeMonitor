@@ -43,6 +43,7 @@ local.properties
 /analysis/*
 !/analysis/hex_extractor.py
 !/analysis/hex_analyser.py
+!/analysis/README.md
 /tmp
 
 # Local agent configurations

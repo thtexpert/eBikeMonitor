@@ -18,8 +18,8 @@ The following tables group the BLE topics (Message IDs) by hardware unit and fun
 | Key (Hex) | Sensor Name | Data Type / Decoding | Comment |
 | :--- | :--- | :--- | :--- |
 | `0x0081` | Battery Serial Number | String (`decodeStringField`) | Decoded from UTF-8 bytes. |
-| `0x0083` | Battery Part Number | String | Part/model number of the battery pack (e.g. `BBP3770`). |
-| `0x0086` | Battery Software Version | String | Firmware version of the battery BMS (e.g. `19.17.1`). |
+| `0x0083` | Battery Part Number | String (`decodeStringField`) | Part/model number of the battery pack (e.g. `BBP3770`). |
+| `0x0086` | Battery Software Version | String (`decodeStringField`) | Firmware version of the battery BMS (e.g. `19.17.1`). |
 | `0x009B` | Battery Model | String (`decodeStringField`) | Decoded from UTF-8 bytes. |
 | `0x8088` | BMS Battery Level | `Int` (%) | Raw Battery State of Charge (SOC) reported directly by the BMS. Typically maintains a +1% to +2% offset above the UI Battery Level (0x80BC). (from BMS) |
 | `0x808A` | Charging Active | `Int` (Boolean) | 1 = Charging active/power drawing, 0/Absent = inactive. (from BMS) |
@@ -27,12 +27,14 @@ The following tables group the BLE topics (Message IDs) by hardware unit and fun
 | `0x808E` | Battery State | `Int` (Enum) | Current battery operating mode. 2 = Discharging/Ride, 12 = Charging. (from BMS) |
 | `0x8092` | Total Battery Energy | `Int` / 10.0 (Wh) | Total remaining battery energy. Exactly 30.0 Wh higher than 0x8091 (reserved lights buffer). (from BMS) |
 | `0x8096` | Charge Cycles | `Int` / 10.0 | Cumulative number of full charge cycles. (from BMS) |
+| `0x8097` | BMS Chip Serial | Protobuf submessage | Diagnostic battery serial / hardware ID (nested structure `1a0a08...`). |
 | `0x809C` | Lifetime Total Energy | `Int` (Wh) | Cumulative total energy discharged from the battery over its lifetime. (from BMS) |
-| `0x80B0` | Lifetime Total Discharged | `Int` / 0.5 (Ah) | Cumulative capacity discharged from the battery over its lifetime. (from BMS) |
-| `0x80B4` | Nominal Factory Capacity| `Int` / 10.0 (Wh) | Nominal design capacity of the battery at the factory (e.g. 743.0 Wh for PowerTube 750). (from BMS) |
+| `0x80B0` | Lifetime Total Discharged | `Int` / 0.5 (Ah) | Cumulative capacity discharged from the battery over its lifetime. **(Not implemented in app)** |
+| `0x80B1` | SOH Parameter | Semi-static | BMS capacity calibration index (updates step-wise as SOH degrades). |
+| `0x80B4` | Actual Capacity (Wh) | `Int` / 10.0 (Wh) | Actual maximum healthy usable capacity of the battery cell pack in Wh (e.g. 743.0 Wh). Calculated internally by the BMS as Ah (0x80E2) * 36.0V nominal. |
 | `0x80C5` | Usable Motor Energy (BMS)| `Int` / 10.0 (Wh) | Alternate/redundant usable motor energy. (from BMS) |
-| `0x80CA` | BMS Battery Level | `Int` (%) | Raw Battery State of Charge (SOC) reported by the BMS, matching UI level 0x80BC. (from BMS) |
-| `0x80D9` | Actual Usable Capacity | `Int` / 10.0 (Wh) | Current maximum healthy usable capacity (SOH capacity) of the battery cells (e.g. 713.0 Wh). (from BMS) |
+| `0x80CA` | BMS Battery Level | `Int` (%) | Raw Battery State of Charge (SOC) reported by the BMS. **(Not implemented in app)** |
+| `0x80D9` | Usable Motor Capacity | `Int` / 10.0 (Wh) | Maximum healthy capacity usable by the motor drive unit in Wh (e.g. 713.0 Wh). Exactly 30.0 Wh lower than Actual Capacity (0x80B4), representing the safety reserve for lights/system. |
 | `0x80E2` | Actual Usable Capacity (Ah) | `Int` / 100.0 (Ah) | Actual maximum healthy usable capacity of the battery cells in Ampere-hours (e.g. 20.60 Ah). |
 
 ### Drive Unit (DU) / Motor
@@ -41,8 +43,9 @@ The following tables group the BLE topics (Message IDs) by hardware unit and fun
 | :--- | :--- | :--- | :--- |
 | `0x1801` | Drive Unit Serial Number | String | Serial number of the motor unit (e.g. `12345-6789-01-A01-00-0000`). |
 | `0x1802` | Drive Unit Part Number | String | Part number of the motor unit (e.g. `EB11 100 001`). |
-| `0x1803` | Drive Unit Product Code | String | Product code of the motor unit (e.g. `BDU3741`). |
-| `0x1806` | Drive Unit Software Version | String | Firmware version of the motor drive unit (e.g. `19.54.0`). |
+| `0x1803` | Drive Unit Product Code | String (`decodeStringField`) | Product code of the motor unit (e.g. `BDU3741`). |
+| `0x1806` | Drive Unit Software Version | String (`decodeStringField`) | Firmware version of the motor drive unit (e.g. `19.54.0`). |
+| `0x182E` | Drive Unit Model | String (`decodeStringField`) | Model name of the motor unit (e.g. `Drive Unit Performance Line CX`). |
 | `0x180C` | Assist Mode Names | List of Strings (`decodeAssistModes`) | Length-delimited UTF-8 strings. Typically starts with 'Off', followed by active support modes from lowest to highest support (e.g. Eco, Tour, Sport, Turbo). |
 | `0x8091` | Usable Motor Energy (DU)| `Int` / 10.0 (Wh) | Remaining usable motor energy. Correlates linearly with SOC. (from Drive Unit) |
 | `0x9818` | Total Distance | `Int` / 1000.0 (km) | System odometer. |
@@ -69,7 +72,7 @@ The following tables group the BLE topics (Message IDs) by hardware unit and fun
 | `0x0D01` | Display Serial Number | String | Serial number of the display (e.g. `12345-6789-01-A01-00-0000`). |
 | `0x0D02` | Display Part Number | String | Part number of the display (e.g. `EB13 100 003`). |
 | `0x0D03` | Display Product Code | String | Product code of the display mount / system controller mount (e.g. `BHU3600`). |
-| `0x0D06` | Display Software Version | String | Firmware version of the display (e.g. `19.11.0`). |
+| `0x0D06` | Display Software Version | String (`decodeStringField`) | Firmware version of the display (e.g. `19.11.0`). |
 | `0x0D09` | Display Model Name | String | Model name of the display unit (e.g. `Kiox 300`). |
 | `0x80BC` | Battery Level | `Int` (%) | Current UI state of charge in percent. (from Display / System Controller) |
 | `0x80C4` | Charger Connected | `Int` (Boolean) | 1 = Charger connected, 0/Absent = disconnected. (from BMS/System Controller) |

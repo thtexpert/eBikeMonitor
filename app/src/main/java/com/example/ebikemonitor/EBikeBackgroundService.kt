@@ -668,6 +668,17 @@ class EBikeBackgroundService : Service() {
                 } else {
                     onBleDisconnected()
                 }
+
+                try {
+                    val mac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first()
+                    if (!mac.isNullOrEmpty()) {
+                        val deviceId = mac.lowercase().replace(":", "")
+                        val statusStr = if (connected) "connected" else "disconnected"
+                        mqttManager.publish("ebikemonitor/$deviceId/blestatus", statusStr, false)
+                    }
+                } catch (e: Exception) {
+                    FileLogger.log("EBikeBackgroundService: Error publishing BLE status: ${e.message}")
+                }
             }
         }
     }
@@ -707,7 +718,9 @@ class EBikeBackgroundService : Service() {
         pubIfDiff("$bikeTopic/totalbattery", status.totalBattery, last?.totalBattery, true)
 
         // Metadata & Versions (Retained)
-        pubIfDiff("$bikeTopic/ebikeledsoftwareversion", status.ebikeLedSoftwareVersion, last?.ebikeLedSoftwareVersion, true)
+        pubIfDiff("$bikeTopic/ledremotesoftwareversion", status.ledRemoteSoftwareVersion, last?.ledRemoteSoftwareVersion, true)
+        pubIfDiff("$bikeTopic/driveunitsoftwareversion", status.driveUnitSoftwareVersion, last?.driveUnitSoftwareVersion, true)
+        pubIfDiff("$bikeTopic/displaysoftwareversion", status.displaySoftwareVersion, last?.displaySoftwareVersion, true)
         pubIfDiff("$bikeTopic/batteryserialnumber", status.batterySerialNumber, last?.batterySerialNumber, true)
         pubIfDiff("$bikeTopic/totalhours", status.driveUnitHours, last?.driveUnitHours, true)
 
@@ -831,6 +844,7 @@ class EBikeBackgroundService : Service() {
             pubIfDiff("$battTopic/nominal_capacity", status.nominalCapacity, last?.nominalCapacity, true)
             pubIfDiff("$battTopic/usable_capacity", status.usableCapacity, last?.usableCapacity, true)
             pubIfDiff("$battTopic/temperature", status.batteryTemperature, last?.batteryTemperature)
+            pubIfDiff("$battTopic/softwareversion", status.batterySoftwareVersion, last?.batterySoftwareVersion, true)
 
             // Charging State binary sensor
             val isChargingVal = if (status.isCharging) "ON" else "OFF"
@@ -840,6 +854,29 @@ class EBikeBackgroundService : Service() {
                 null
             }
             pubIfDiff("$battTopic/charging", isChargingVal, lastIsChargingVal)
+        }
+
+        // Auto-Discovery updates on metadata/version changes
+        val currentSwVersion = status.driveUnitSoftwareVersion ?: status.ledRemoteSoftwareVersion
+        val lastSwVersion = last?.driveUnitSoftwareVersion ?: last?.ledRemoteSoftwareVersion
+        val currentHwVersion = status.driveUnitProductCode
+        val lastHwVersion = last?.driveUnitProductCode
+        val currentModel = status.driveUnitModel
+        val lastModel = last?.driveUnitModel
+        if (currentSwVersion != lastSwVersion || currentHwVersion != lastHwVersion || currentModel != lastModel) {
+            val name = app.settingsRepository.eBikeName.first()
+            app.mqttManager.sendBikeDiscovery(deviceId, name, status.assistModeNames, currentSwVersion, currentHwVersion, currentModel)
+        }
+        if (!batterySerial.isNullOrEmpty()) {
+            val currentBattSw = status.batterySoftwareVersion
+            val lastBattSw = last?.batterySoftwareVersion
+            val currentBattHw = status.batteryPartNumber
+            val lastBattHw = last?.batteryPartNumber
+            val currentBattModel = status.batteryModel
+            val lastBattModel = last?.batteryModel
+            if (currentBattSw != lastBattSw || currentBattHw != lastBattHw || currentBattModel != lastBattModel) {
+                app.mqttManager.sendPowerTubeDiscovery(batterySerial, currentBattModel, currentBattSw, currentBattHw)
+            }
         }
 
         lastPublishedStatus = status

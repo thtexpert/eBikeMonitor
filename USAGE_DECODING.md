@@ -42,8 +42,6 @@ This strategy uses the Trip Distance per Mode (`0xA252`) as a reference.
 - **Benefit**: Immune to consumption fluctuations and allows for perfect mode identification even if consumption is similar across modes.
 - **Note on Discovery**: For a complete mapping, the bike must be ridden a short distance (approx. 50-100 meters) in **each assist mode**. Until a mode has moved, the system cannot mathematically "confirm" its identity through delta-matching.
 
----
-
 ## 5. New Installation & First-Run Flow
 
 When eBikeMonitor is installed for the first time, it undergoes a "Discovery Ritual" to establish baselines:
@@ -55,5 +53,21 @@ When eBikeMonitor is installed for the first time, it undergoes a "Discovery Rit
 3.  **Persistent Storage**: These baselines are saved in the app's encrypted internal storage.
 4.  **Session Recovery**: On all subsequent app restarts, the saved baselines are loaded. This allows the app to immediately identify modes and calculate "Current Ride" metrics even if the app was closed during the ride.
 
+## 6. Resiliency, Reset Handling & Database Guards (v1.15.2 Updates)
+
+To guarantee database integrity and prevent telemetry glitches across a variety of real-world scenarios, the system employs three robust guard mechanisms:
+
+### A. Self-Healing Database Repair
+If the local database's persistent profile references ever get corrupted, cleared, or are found to be empty upon startup, the app automatically runs a self-healing protocol on the first complete incoming BLE batch of usage records. It sorts the incoming records by consumption rate ($\text{Wh} / \text{meter}$) to mathematically reconstruct and restore the missing baselines, enabling delta discovery to continue without requiring a full manual recalibration ride.
+
+### B. Mid-Ride Trip Reset Support
+If you perform a trip reset directly on the Kiox unit mid-ride, the trip distance values reset to `0` while the master odometer continues to accumulate. To prevent telemetry from locking up or freezing, the BLE manager:
+1. Detects when current trip pedal energy or total energy drops below previously recorded values.
+2. Commits the accumulated session calories and work baseline to the database as a new offset.
+3. Synchronizes its internal session baselines and notifies the BLE manager to align starting references so that further accumulation is tracked seamlessly.
+
+### C. Transient Connection Guards & Baseline Integrity
+During short connection sessions or power cycles (e.g., stationary power cycles where the phone connects to a turned-on eBike, but the Kiox unit does not broadcast full characteristics), the system keeps active ride references cached in the database. Instead of defaulting to `0` or blanking out when characteristics are missing, the repository falls back to these database-cached active metrics. This prevents negative calorie computations or database baseline corruptions when BLE connections are transient.
+
 ---
-*Document Version: 1.1 - April 2026*
+*Document Version: 1.2 - July 2026*

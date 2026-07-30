@@ -18,9 +18,11 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | `totalbattery` | Total Battery | `sensor.<name>_total_battery` | kWh | Cumulative battery energy usage. (**Retained**) |
 | `stateofcharge` | Battery Level | `sensor.<name>_battery_level` | % | Current UI battery percentage. |
 | `status` | App Status | `sensor.<name>_app_status` | - | LWT status (`online`/`offline`). |
-| `blestatus` | BLE Status | `sensor.<name>_ble_status` | - | BLE connection state. |
+| `blestatus` | BLE Status | `sensor.<name>_ble_status` | - | BLE connection state (non-retained: publishes `"connected"` or `"disconnected"`). |
 | `mqttconnecttimestamp`| MQTT Connect Time | `sensor.<name>_last_mqtt_connect_time` | ISO8601 | Last MQTT connection timestamp. (**Retained**) |
-| `ebikeledsoftwareversion`| LED Version | `sensor.<name>_ebike_led_software_version` | - | Firmware version of the remote. |
+| `ledremotesoftwareversion`| LED Remote Version | `sensor.<name>_led_remote_software_version` | - | Firmware version of the remote. (**Retained**) |
+| `driveunitsoftwareversion`| Drive Unit Version | `sensor.<name>_drive_unit_software_version` | - | Firmware version of the motor drive unit. (**Retained**) |
+| `displaysoftwareversion` | Display Version | `sensor.<name>_display_software_version` | - | Firmware version of the display. (**Retained**) |
 | `batteryserialnumber` | Battery Serial | `sensor.<name>_battery_serial_number` | - | Serial of the current battery pack. |
 | `totalhours` | Total Hours | `sensor.<name>_total_hours` | h | Lifetime drive unit operation hours. (**Retained**) |
 | `pedal_energy_measured` | Pedal Energy (Measured) | `sensor.<name>_pedal_energy_measured` | kcal | Active-session cumulative human effort. (**Retained**) |
@@ -45,6 +47,9 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 - `sensor.<name>_<mode>_range`: Dynamic remaining range in this mode (km), generated dynamically for all active support modes (derived from BLE topic `0x9857` range list index `r` mapped to Assist Mode index `r + 1` of decoded names).
 
 > [!NOTE]
+> **Raw Topic Suffix Format**: The raw MQTT topic path for per-mode metrics does not include an underscore between the sanitized mode and the metric name (e.g., `ebikemonitor/<device_id>/ecodistance`, `ebikemonitor/<device_id>/ecoenergy`, `ebikemonitor/<device_id>/ecorange`). The only exception is when a special character in the mode name is sanitized to an underscore (e.g., `Tour+` $\rightarrow$ `tour_distance`). Home Assistant automatically converts these to underscore-spaced entity IDs (e.g., `sensor.<name>_<mode>_dist`).
+
+> [!NOTE]
 > Per-mode statistics, as well as **Total Distance**, **Total Energy**, **Total Battery**, and **MQTT Connect Time**, are published as **retained** MQTT messages. This ensures that their last known values are immediately available to Home Assistant even if it restarts.
 
 ---
@@ -64,6 +69,7 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | `temperature` | Battery Temperature | `sensor.bosch_<model>_battery_temperature` | °C | Current battery cell temperature (`0x808B`). |
 | `charging` | Charging State | `binary_sensor.bosch_<model>_charging` | - | Charging active binary state (state is `12` or charging active flag is `1`). |
 | `serial` | Hardware Serial | `sensor.bosch_<model>_hardware_serial` | - | The unique hardware serial identifier (`0x0081`). (**Retained**) |
+| `softwareversion` | Software Version | `sensor.bosch_<model>_software_version` | - | Firmware version of the battery BMS. (**Retained**) |
 
 > [!NOTE]
 > `<model>` is the decoded battery model (e.g., `powertube_750`). Home Assistant uses the device name (e.g., `Bosch PowerTube 750`) to create these entity IDs.

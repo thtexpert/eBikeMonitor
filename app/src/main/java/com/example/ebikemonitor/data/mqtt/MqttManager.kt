@@ -205,11 +205,25 @@ class MqttManager(private val context: Context) {
         return input.lowercase().replace(Regex("[^a-z0-9]"), "_")
     }
 
-    fun sendBikeDiscovery(deviceId: String, deviceDisplayName: String, assistModeNames: List<String> = emptyList()) {
+    fun sendBikeDiscovery(
+        deviceId: String, 
+        deviceDisplayName: String, 
+        assistModeNames: List<String> = emptyList(),
+        swVersion: String? = null,
+        hwVersion: String? = null,
+        model: String? = null
+    ) {
         val discoveryPrefix = "homeassistant"
         val stateTopic = "ebikemonitor/$deviceId"
         
-        val deviceJson = "{\"identifiers\":[\"ebikemonitor_$deviceId\"],\"name\":\"$deviceDisplayName\",\"manufacturer\":\"eBikeMonitor\",\"model\":\"Bosch Smart System eBike\"}"
+        // Purge obsolete LED Software Version sensor config topic
+        val oldConfigTopic = "$discoveryPrefix/sensor/ebikemonitor_${deviceId}_ebike_led_sw_version/config"
+        publish(oldConfigTopic, "", retained = true)
+        
+        val swPart = if (swVersion != null) ",\"sw_version\":\"$swVersion\"" else ""
+        val hwPart = if (hwVersion != null) ",\"hw_version\":\"$hwVersion\"" else ""
+        val modelName = model ?: "Smart System eBike"
+        val deviceJson = "{\"identifiers\":[\"ebikemonitor_$deviceId\"],\"name\":\"$deviceDisplayName\",\"manufacturer\":\"Bosch\",\"model\":\"$modelName\"$swPart$hwPart}"
 
         fun publishConfig(component: String, name: String, sensorId: String, topicPath: String, unit: String? = null, deviceClass: String? = null, stateClass: String? = "measurement", icon: String? = null) {
             val configTopic = "$discoveryPrefix/$component/ebikemonitor_${deviceId}_$sensorId/config"
@@ -241,7 +255,9 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "Total Battery", "total_batt", "totalbattery", "kWh", "energy", "total_increasing")
         publishConfig("sensor", "Total Energy", "total_energy", "totalenergy", "kWh", "energy", "total_increasing")
         publishConfig("sensor", "Battery Serial Number", "battery_serial", "batteryserialnumber", icon = "mdi:barcode-scan", stateClass = null)
-        publishConfig("sensor", "eBike LED Software Version", "ebike_led_sw_version", "ebikeledsoftwareversion", icon = "mdi:information-outline", stateClass = null)
+        publishConfig("sensor", "LED Remote Software Version", "led_remote_sw_version", "ledremotesoftwareversion", icon = "mdi:information-outline", stateClass = null)
+        publishConfig("sensor", "Drive Unit Software Version", "drive_unit_sw_version", "driveunitsoftwareversion", icon = "mdi:information-outline", stateClass = null)
+        publishConfig("sensor", "Display Software Version", "display_sw_version", "displaysoftwareversion", icon = "mdi:information-outline", stateClass = null)
         publishConfig("sensor", "Total Hours", "total_hours", "totalhours", "h", icon = "mdi:timer-outline", stateClass = "total_increasing")
 
         // Cumulative Human Effort Sensors
@@ -281,13 +297,15 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "App Status", "app_status", "status",  stateClass = null)
     }
 
-    fun sendPowerTubeDiscovery(serial: String, modelName: String?) {
+    fun sendPowerTubeDiscovery(serial: String, modelName: String?, swVersion: String? = null, hwVersion: String? = null) {
         val discoveryPrefix = "homeassistant"
         val deviceId = sanitize(serial)
         val stateTopic = "powertube/$serial"
         
         val displayModel = modelName ?: "PowerTube"
-        val deviceJson = "{\"identifiers\":[\"powertube_$deviceId\"],\"name\":\"Bosch $displayModel\",\"manufacturer\":\"Bosch\",\"model\":\"$displayModel\"}"
+        val swPart = if (swVersion != null) ",\"sw_version\":\"$swVersion\"" else ""
+        val hwPart = if (hwVersion != null) ",\"hw_version\":\"$hwVersion\"" else ""
+        val deviceJson = "{\"identifiers\":[\"powertube_$deviceId\"],\"name\":\"Bosch $displayModel\",\"manufacturer\":\"Bosch\",\"model\":\"$displayModel\"$swPart$hwPart}"
 
         fun publishConfig(component: String, name: String, sensorId: String, topicPath: String, unit: String? = null, deviceClass: String? = null, stateClass: String? = "measurement", icon: String? = null) {
             val configTopic = "$discoveryPrefix/$component/powertube_${deviceId}_$sensorId/config"
@@ -317,6 +335,7 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "Battery Temperature", "temperature", "temperature", "°C", "temperature")
         publishConfig("binary_sensor", "Charging State", "charging", "charging", deviceClass = "battery_charging", stateClass = null)
         publishConfig("sensor", "Hardware Serial", "serial", "serial", icon = "mdi:barcode-scan", stateClass = null)
+        publishConfig("sensor", "Software Version", "software_version", "softwareversion", icon = "mdi:information-outline", stateClass = null)
     }
 
     fun disconnect() {

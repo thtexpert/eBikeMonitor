@@ -119,7 +119,8 @@ fun DashboardScreen(
             // Version Info at Bottom
             val versionText = buildString {
                 append(stringResource(R.string.text_version_format, com.example.ebikemonitor.BuildConfig.VERSION_NAME))
-                bikeStatus.ebikeLedSoftwareVersion?.let { append(stringResource(R.string.text_led_info_format, it)) }
+                bikeStatus.driveUnitSoftwareVersion?.let { append(" | DU: $it") }
+                bikeStatus.batterySoftwareVersion?.let { append(" | Bat: $it") }
             }
             Text(
                 text = versionText,
@@ -168,7 +169,10 @@ fun AllSensorsDebugCard(
             sensors.add(stringResource(R.string.debug_sensor_human_calories) to (bikeStatus.tripPedalEnergy?.let { "$it kcal" } ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_cadence) to (bikeStatus.cadence?.toString() ?: "--") + " rpm")
             sensors.add(stringResource(R.string.debug_sensor_charge_cycles) to (bikeStatus.chargeCycles?.toString() ?: "--"))
-            sensors.add(stringResource(R.string.debug_sensor_led_version) to (bikeStatus.ebikeLedSoftwareVersion ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_led_version) to (bikeStatus.ledRemoteSoftwareVersion ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_battery_sw_version) to (bikeStatus.batterySoftwareVersion ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_drive_unit_sw_version) to (bikeStatus.driveUnitSoftwareVersion ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_display_sw_version) to (bikeStatus.displaySoftwareVersion ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_mqtt_time) to (mqttConnectTime ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_total_hours) to (bikeStatus.driveUnitHours?.toString() ?: "--") + " h")
             

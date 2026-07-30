@@ -2,8 +2,14 @@
 
 All notable changes to the **eBikeMonitor** project will be documented in this file.
 
-## [1.16.0] - 2026-07-16
+## [1.15.2] - 2026-07-30
 ### Added
+- **BLE Status Topic (`blestatus`)**: Published BLE connection status (`connected`/`disconnected`) to the `ebikemonitor/<device_id>/blestatus` topic in real-time.
+- **Dynamic Calibration Loop (Self-Learning)**: Automatically refines battery Usable Capacity (Wh) during SoC drops, calculates average Wh/km consumption rates per assist mode, and calibrates the effort coefficient (Gamma) based on physical work.
+- **PowerTube Battery Diagnostics**: Integrated detailed battery health telemetry including Actual Usable Capacity (SOH), Nominal Capacity, Usable Energy Remaining, Temperature, and a binary Charging State sensor.
+- **Remaining Mode Ranges**: Publishes dynamic remaining battery range in km (`0x9857`) for each active assist mode to MQTT.
+- **Trip Performance Dynamics**: Added trip diagnostics to MQTT including average/maximum speeds, cadences, human power outputs, trip total mechanical energy, and human contribution split percentage.
+- **Monotonicity Guard**: Prevents cumulative energy and calorie sensors from experiencing downward steps in Home Assistant due to reconnection delays or database baseline latency.
 - **Human Energy Estimator**: Real-time integration of rider human pedal energy (measured via BLE when online, and automatically estimated based on Usable Motor Capacity, assist mode ranges, and effort coefficient when offline).
 - **Offline Ride Recovery**: Automatically detects offline segments by comparing odometer increments when reconnecting, calculates the unmonitored distance, and injects the estimated calorie metrics seamlessly into Home Assistant.
 - **Self-Healing Database Repair**: If database profile records ever get corrupted or wiped, the app automatically repairs them from the first complete incoming BLE batch using consumption-rate sorting.

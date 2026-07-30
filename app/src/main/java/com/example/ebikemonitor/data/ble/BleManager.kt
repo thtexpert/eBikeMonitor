@@ -250,11 +250,63 @@ class BleManager(private val context: Context) {
                 0x9819 -> currentStatus = currentStatus.copy(driveUnitHours = msg.value)
                 0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
                 0x206B -> {
-                    val softwareVersion = msg.decodeStringField()
+                    val rawVersion = msg.decodeStringField()
+                    val softwareVersion = com.example.ebikemonitor.data.parser.BoschParser.formatSoftwareVersion(rawVersion)
                     if (softwareVersion != null) {
-                        currentStatus = currentStatus.copy(ebikeLedSoftwareVersion = softwareVersion)
-                        Log.d("BleManager", "LED Software Version decoded: $softwareVersion")
-                        com.example.ebikemonitor.FileLogger.log("BleManager: LED Software Version decoded: $softwareVersion")
+                        currentStatus = currentStatus.copy(ledRemoteSoftwareVersion = softwareVersion)
+                        Log.d("BleManager", "LED Remote Software Version decoded: $softwareVersion (raw: $rawVersion)")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: LED Remote Software Version decoded: $softwareVersion")
+                    }
+                }
+                0x0086 -> {
+                    val rawVersion = msg.decodeStringField()
+                    val softwareVersion = com.example.ebikemonitor.data.parser.BoschParser.formatSoftwareVersion(rawVersion)
+                    if (softwareVersion != null) {
+                        currentStatus = currentStatus.copy(batterySoftwareVersion = softwareVersion)
+                        Log.d("BleManager", "Battery Software Version decoded: $softwareVersion (raw: $rawVersion)")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Battery Software Version decoded: $softwareVersion")
+                    }
+                }
+                0x1806 -> {
+                    val rawVersion = msg.decodeStringField()
+                    val softwareVersion = com.example.ebikemonitor.data.parser.BoschParser.formatSoftwareVersion(rawVersion)
+                    if (softwareVersion != null) {
+                        currentStatus = currentStatus.copy(driveUnitSoftwareVersion = softwareVersion)
+                        Log.d("BleManager", "Drive Unit Software Version decoded: $softwareVersion (raw: $rawVersion)")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Drive Unit Software Version decoded: $softwareVersion")
+                    }
+                }
+                0x0D06 -> {
+                    val rawVersion = msg.decodeStringField()
+                    val softwareVersion = com.example.ebikemonitor.data.parser.BoschParser.formatSoftwareVersion(rawVersion)
+                    if (softwareVersion != null) {
+                        currentStatus = currentStatus.copy(displaySoftwareVersion = softwareVersion)
+                        Log.d("BleManager", "Display Software Version decoded: $softwareVersion (raw: $rawVersion)")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Display Software Version decoded: $softwareVersion")
+                    }
+                }
+                0x182E -> {
+                    val model = msg.decodeStringField()
+                    if (model != null) {
+                        currentStatus = currentStatus.copy(driveUnitModel = model)
+                        Log.d("BleManager", "Drive Unit Model decoded: $model")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Drive Unit Model decoded: $model")
+                    }
+                }
+                0x1803 -> {
+                    val code = msg.decodeStringField()
+                    if (code != null) {
+                        currentStatus = currentStatus.copy(driveUnitProductCode = code)
+                        Log.d("BleManager", "Drive Unit Product Code decoded: $code")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Drive Unit Product Code decoded: $code")
+                    }
+                }
+                0x0083 -> {
+                    val partNum = msg.decodeStringField()
+                    if (partNum != null) {
+                        currentStatus = currentStatus.copy(batteryPartNumber = partNum)
+                        Log.d("BleManager", "Battery Part Number decoded: $partNum")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Battery Part Number decoded: $partNum")
                     }
                 }
                 0x0081 -> {

@@ -91,7 +91,10 @@ class LogPlaybackTest {
         println("Bat Level:     ${status.batteryLevel ?: "N/A"} %")
         println("Bat Energy:    ${status.totalBattery ?: "N/A"} kWh")
         println("Charge Cycles: ${status.chargeCycles ?: "N/A"}")
-        println("Software Ver:  ${status.ebikeLedSoftwareVersion ?: "N/A"}")
+        println("LED Remote SW: ${status.ledRemoteSoftwareVersion ?: "N/A"}")
+        println("Battery SW:    ${status.batterySoftwareVersion ?: "N/A"}")
+        println("Drive Unit SW: ${status.driveUnitSoftwareVersion ?: "N/A"}")
+        println("Display SW:    ${status.displaySoftwareVersion ?: "N/A"}")
         println("Bat Serial:    ${status.batterySerialNumber ?: "N/A"}")
         println("Usage Records: ${uniqueRecords.size} unique found")
         println("===============================================\n")
@@ -116,7 +119,13 @@ class LogPlaybackTest {
             0x8096 -> current.copy(chargeCycles = msg.value / 10.0)
             0x80BC -> current.copy(batteryLevel = msg.value)
             0x9809 -> current.copy(assistMode = msg.value)
-            0x206B -> msg.decodeStringField()?.let { current.copy(ebikeLedSoftwareVersion = it) } ?: current
+            0x206B -> msg.decodeStringField()?.let { BoschParser.formatSoftwareVersion(it) }?.let { current.copy(ledRemoteSoftwareVersion = it) } ?: current
+            0x0086 -> msg.decodeStringField()?.let { BoschParser.formatSoftwareVersion(it) }?.let { current.copy(batterySoftwareVersion = it) } ?: current
+            0x1806 -> msg.decodeStringField()?.let { BoschParser.formatSoftwareVersion(it) }?.let { current.copy(driveUnitSoftwareVersion = it) } ?: current
+            0x0D06 -> msg.decodeStringField()?.let { BoschParser.formatSoftwareVersion(it) }?.let { current.copy(displaySoftwareVersion = it) } ?: current
+            0x182E -> msg.decodeStringField()?.let { current.copy(driveUnitModel = it) } ?: current
+            0x1803 -> msg.decodeStringField()?.let { current.copy(driveUnitProductCode = it) } ?: current
+            0x0083 -> msg.decodeStringField()?.let { current.copy(batteryPartNumber = it) } ?: current
             0x0081 -> msg.decodeStringField()?.let { current.copy(batterySerialNumber = it) } ?: current
             0x009B -> msg.decodeStringField()?.let { current.copy(batteryModel = it) } ?: current
             0x108C -> msg.decodeUsageRecord()?.let { current.copy(unsortedUsageRecords = current.unsortedUsageRecords + it) } ?: current
