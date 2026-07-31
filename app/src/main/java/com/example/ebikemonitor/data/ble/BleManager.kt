@@ -630,6 +630,8 @@ class BleManager(private val context: Context) {
             remainingRanges = emptyList(),
             persistentBaselines = null
         )
+        unsortedModeUsageList.clear()
+        lastLoggedDiagnosticValues.clear()
     }
 
     fun isBluetoothEnabled(): Boolean {
@@ -667,8 +669,8 @@ class BleManager(private val context: Context) {
         
         _bikeStatus.value = currentStatus.copy(
             totalDistance = if (currentStatus.totalDistance == null || currentStatus.totalDistance == 0.0) profile.lastOdometer else currentStatus.totalDistance,
-            tripPedalEnergy = if (currentStatus.tripPedalEnergy == null) profile.lastTripPedalEnergy else currentStatus.tripPedalEnergy,
-            tripTotalEnergy = if (currentStatus.tripTotalEnergy == null) profile.lastTripRideEnergy else currentStatus.tripTotalEnergy,
+            tripPedalEnergy = currentStatus.tripPedalEnergy,
+            tripTotalEnergy = currentStatus.tripTotalEnergy,
             totalBattery = if (currentStatus.totalBattery == null) profile.lastTotalMotorEnergy else currentStatus.totalBattery,
             tripDistPerMode = if (currentStatus.tripDistPerMode.isEmpty()) profile.lastTripDistPerMode else currentStatus.tripDistPerMode,
             sortedUsageRecordsB = if (currentStatus.sortedUsageRecordsB.isEmpty() && hasValidUsage) profile.lastUsageRecords.toList() else currentStatus.sortedUsageRecordsB,
@@ -743,13 +745,16 @@ class BleManager(private val context: Context) {
         val expectedCount = _bikeStatus.value.assistModeNames.size
         if (sortedUsageRecords.size == expectedCount && sortedUsageRecords.all { it != null }) {
             val newBaselines = sortedUsageRecords.map { it!!.distance }
+            val newMapping = BoschParser.reconstructModeMapping(sortedUsageRecords, _bikeStatus.value.unsortedUsageRecords)
             _bikeStatus.value = _bikeStatus.value.copy(
                 persistentBaselines = newBaselines,
                 initialTripDistPerMode = newTripDists.toList(),
                 initialUnsortedUsageRecords = _bikeStatus.value.unsortedUsageRecords.toList(),
-                tripDistPerMode = newTripDists.toList()
+                tripDistPerMode = newTripDists.toList(),
+                modeToInitialIndex = newMapping,
+                confirmedModeIndices = newMapping.keys
             )
-            Log.d("BleManager", "Version B: Mid-ride reset handled. New baselines: $newBaselines")
+            Log.d("BleManager", "Version B: Mid-ride reset handled. New baselines: $newBaselines, mapping: $newMapping")
         }
     }
 
@@ -759,4 +764,5 @@ class BleManager(private val context: Context) {
             activeEstError = errorPct
         )
     }
+
 }

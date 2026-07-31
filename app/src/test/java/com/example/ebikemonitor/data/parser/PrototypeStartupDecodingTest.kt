@@ -221,4 +221,32 @@ class PrototypeStartupDecodingTest {
         list[i] = list[j]
         list[j] = temp
     }
+
+    @Test
+    fun testReconstructModeMappingOnMidRideReset() {
+        val sortedRecords = listOf(
+            UsageRecord(1697241, 50),  // OFF
+            UsageRecord(332110, 10),   // ECO
+            UsageRecord(4014065, 120), // TOUR
+            UsageRecord(4728828, 180), // SPORT
+            UsageRecord(5623501, 250)  // TURBO
+        )
+        // Shuffled raw records
+        val unsortedRecords = listOf(
+            UsageRecord(332110, 10),   // ECO (index 0)
+            UsageRecord(4014065, 120), // TOUR (index 1)
+            UsageRecord(1697241, 50),  // OFF (index 2)
+            UsageRecord(4728828, 180), // SPORT (index 3)
+            UsageRecord(5623501, 250)  // TURBO (index 4)
+        )
+
+        val mapping = BoschParser.reconstructModeMapping(sortedRecords, unsortedRecords)
+
+        assertEquals(2, mapping[0])
+        assertEquals(0, mapping[1])
+        assertEquals(1, mapping[2])
+        assertEquals(3, mapping[3])
+        assertEquals(4, mapping[4])
+    }
 }
+

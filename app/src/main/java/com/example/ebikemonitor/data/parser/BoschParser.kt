@@ -479,4 +479,24 @@ object BoschParser {
         
         return Triple(newSortedList, newConfirmedIndices, newModeToInitialIndex)
     }
+
+    fun reconstructModeMapping(
+        sortedUsageRecords: List<UsageRecord?>,
+        unsortedUsageRecords: List<UsageRecord?>
+    ): Map<Int, Int> {
+        val mapping = mutableMapOf<Int, Int>()
+        sortedUsageRecords.forEachIndexed { modeIdx, sortedRec ->
+            if (sortedRec != null) {
+                val unsortedIdx = unsortedUsageRecords.indexOfFirst {
+                    it?.distance == sortedRec.distance && it?.energy == sortedRec.energy
+                }
+                if (unsortedIdx != -1) {
+                    mapping[modeIdx] = unsortedIdx
+                }
+            }
+        }
+        return mapping
+    }
+
 }
+

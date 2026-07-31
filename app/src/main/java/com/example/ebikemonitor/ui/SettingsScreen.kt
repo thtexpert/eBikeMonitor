@@ -179,16 +179,32 @@ fun SettingsScreen(
                  Text(stringResource(R.string.header_bluetooth), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                  
                  Text(text = stringResource(R.string.text_target_mac, bleMac ?: stringResource(R.string.text_not_set)), style = MaterialTheme.typography.bodyMedium)
-                Button(
-                    onClick = { 
-                        viewModel.bleManager.startScan()
-                        showDeviceDialog = true 
-                    },
-                    modifier = Modifier.height(38.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
-                ) {
-                    Text(stringResource(R.string.btn_select_bonded_device))
-                }
+                 Row(
+                     verticalAlignment = Alignment.CenterVertically
+                 ) {
+                     Button(
+                         onClick = { 
+                             viewModel.bleManager.startScan()
+                             showDeviceDialog = true 
+                         },
+                         modifier = Modifier.height(38.dp),
+                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                     ) {
+                         Text(stringResource(R.string.btn_select_bonded_device))
+                     }
+                     Spacer(modifier = Modifier.width(8.dp))
+                     Button(
+                         onClick = {
+                             viewModel.deleteBikeProfiles()
+                             Toast.makeText(context, "Saved bike profiles reset!", Toast.LENGTH_SHORT).show()
+                         },
+                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                         modifier = Modifier.height(38.dp),
+                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                     ) {
+                         Text("Reset Profiles")
+                     }
+                 }
              }
              
              // MQTT

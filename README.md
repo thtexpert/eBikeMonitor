@@ -69,6 +69,13 @@ You can start your ride even if you are away from home. Once your eBike turns of
 - **Debug Info**: Swiping up (scrolling down) on the main dashboard reveals detailed diagnostic and debugging information, including raw sensor payloads, BLE characteristics, and assist mode discovery metrics. A persistent debug log file is written to the device storage — see [LOG REFERENCE](LOG_REFERENCE.md) for a full description of all log entries and states.
 - **Versions**: The lower-left corner of the UI displays the eBikeMonitor version and the LED remote software version.
 
+### 5. Troubleshooting & Profile Reset
+- **Reset Profiles**: If your per-mode telemetry (distance or energy) gets scrambled (e.g. Eco showing up as Sport due to an invalid calibration after a trip reset), you can reset the profiles selectively:
+  1. Go to the **Settings** screen.
+  2. Scroll down to the **Bluetooth** section.
+  3. Tap the red **"Reset Profiles"** button. This will clear the scrambled mode-specific data and baselines in the database, but **keep your MQTT credentials, selected BLE MAC address, and learned battery capacity/user effort calibration intact**.
+  4. On the next connection, the app will automatically perform a fresh startup decoding and re-learn the correct mode mapping.
+
 Charging curve example:
 
 <img src="images/HA_Battery_Charge.png" width="400">

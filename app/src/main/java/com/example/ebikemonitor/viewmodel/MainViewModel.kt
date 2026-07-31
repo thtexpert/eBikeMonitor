@@ -382,6 +382,15 @@ class MainViewModel(
         }
     }
 
+    fun deleteBikeProfiles() {
+        viewModelScope.launch {
+            FileLogger.log("MainViewModel: [USER ACTION] Resetting saved eBike profiles")
+            settingsRepository.clearBikeProfiles()
+            bleManager.clearTelemetryCache()
+        }
+    }
+
+
     fun toggleDirectDetection(enabled: Boolean, context: Context) {
         viewModelScope.launch {
             settingsRepository.saveUseDirectDetection(enabled)

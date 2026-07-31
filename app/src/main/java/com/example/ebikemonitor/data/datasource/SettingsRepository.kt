@@ -290,4 +290,26 @@ class SettingsRepository(private val context: Context) {
             }
         }
     }
+
+    suspend fun clearBikeProfiles() {
+        profilesMutex.withLock {
+            val profiles = bikeProfiles.first().map { profile ->
+                profile.copy(
+                    lastDiscoveryVersion = 0,
+                    lastUsageRecords = emptyList(),
+                    lastTripDistPerMode = emptyList(),
+                    totalPedalEnergyBaseline = 0.0,
+                    totalRideEnergyBaseline = 0.0,
+                    totalPedalEnergyMeasuredBaseline = 0.0,
+                    totalPedalEnergyEstimatedBaseline = 0.0,
+                    lastTripPedalEnergy = 0,
+                    lastTripRideEnergy = 0.0,
+                    lastOdometer = 0.0,
+                    lastTotalMotorEnergy = 0.0,
+                    learnedMotorConsumptionRates = listOf(0.0f, 5.0f, 7.0f, 10.0f, 12.0f)
+                )
+            }
+            saveBikeProfiles(profiles)
+        }
+    }
 }
