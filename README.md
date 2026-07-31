@@ -74,7 +74,7 @@ You can start your ride even if you are away from home. Once your eBike turns of
   1. Go to the **Settings** screen.
   2. Scroll down to the **Bluetooth** section.
   3. Tap the red **"Reset Profiles"** button. This will clear the scrambled mode-specific data and baselines in the database, but **keep your MQTT credentials, selected BLE MAC address, and learned battery capacity/user effort calibration intact**.
-  4. On the next connection, the app will automatically perform a fresh startup decoding and re-learn the correct mode mapping.
+  4. On the next connection, the app will automatically perform a fresh startup decoding and re-learn the correct mode mapping. **Note**: Re-learning requires you to ride in each assist mode for at least a few hundred meters so that the discovery algorithm can gather enough distance delta to distinguish them.
 
 Charging curve example:
 
