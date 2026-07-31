@@ -16,6 +16,7 @@ import com.example.ebikemonitor.data.model.BikeProfile
 import com.example.ebikemonitor.data.parser.BoschParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
 import com.example.ebikemonitor.FileLogger
 
@@ -39,6 +40,37 @@ class BleManager(private val context: Context) {
 
     private val _bikeStatus = MutableStateFlow(BikeStatus())
     val bikeStatus = _bikeStatus.asStateFlow()
+
+    private var rawTotalElectricEnergy: Double? = null
+    private var rawChargeCycles: Double? = null
+    private var batteryProfilesList = emptyList<com.example.ebikemonitor.data.model.BatteryProfile>()
+
+    init {
+        val app = context.applicationContext as com.example.ebikemonitor.EBikeApplication
+        app.applicationScope.launch {
+            app.settingsRepository.batteryProfiles.collect { profiles ->
+                batteryProfilesList = profiles
+                _bikeStatus.value = applyBatteryOffsets(_bikeStatus.value)
+            }
+        }
+    }
+
+    private fun applyBatteryOffsets(status: BikeStatus): BikeStatus {
+        val serial = status.batterySerialNumber ?: return status
+        val profile = batteryProfilesList.find { it.hardwareSerial == serial } ?: return status
+        
+        var updated = status.copy(
+            rawTotalElectricEnergy = rawTotalElectricEnergy,
+            rawChargeCycles = rawChargeCycles
+        )
+        if (rawTotalElectricEnergy != null) {
+            updated = updated.copy(totalElectricEnergy = rawTotalElectricEnergy!! + profile.totalElectricEnergyOffset)
+        }
+        if (rawChargeCycles != null) {
+            updated = updated.copy(chargeCycles = rawChargeCycles!! + profile.chargeCyclesOffset)
+        }
+        return updated
+    }
 
     private val unsortedModeUsageList = mutableListOf<UsageRecord>()
     private val lastLoggedDiagnosticValues = mutableMapOf<Int, Int>()
@@ -205,7 +237,10 @@ class BleManager(private val context: Context) {
                     currentStatus = currentStatus.copy(totalDistance = odo)
                     Log.d("BleManager", "Raw Odometer received: ${"%.3f".format(odo)} km (raw: ${msg.value})")
                 }
-                0x8096 -> currentStatus = currentStatus.copy(chargeCycles = msg.value / 10.0)
+                0x8096 -> {
+                    rawChargeCycles = msg.value / 10.0
+                    currentStatus = applyBatteryOffsets(currentStatus)
+                }
                 0x8091 -> {
                     val usableEnergy = msg.value / 10.0
                     currentStatus = currentStatus.copy(usableEnergyRemaining = usableEnergy)
@@ -250,7 +285,10 @@ class BleManager(private val context: Context) {
                 }
                 0x9819 -> currentStatus = currentStatus.copy(driveUnitHours = msg.value)
                 0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
-                0x80B0 -> currentStatus = currentStatus.copy(totalElectricEnergy = msg.value * 0.1)
+                0x80B0 -> {
+                    rawTotalElectricEnergy = msg.value * 0.1
+                    currentStatus = applyBatteryOffsets(currentStatus)
+                }
                 0x206B -> {
                     val rawVersion = msg.decodeStringField()
                     val softwareVersion = com.example.ebikemonitor.data.parser.BoschParser.formatSoftwareVersion(rawVersion)
@@ -315,6 +353,7 @@ class BleManager(private val context: Context) {
                     val batterySerial = msg.decodeStringField()
                     if (batterySerial != null) {
                         currentStatus = currentStatus.copy(batterySerialNumber = batterySerial)
+                        currentStatus = applyBatteryOffsets(currentStatus)
                         Log.d("BleManager", "Battery Serial decoded: ${currentStatus.batterySerialNumber}")
                     }
                 }

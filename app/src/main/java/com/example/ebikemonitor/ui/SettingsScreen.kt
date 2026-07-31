@@ -20,7 +20,8 @@ import com.example.ebikemonitor.R
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToCalibration: () -> Unit
 ) {
     val bleMac by viewModel.savedBleMac.collectAsState()
     val eBikeName by viewModel.savedEBikeName.collectAsState()
@@ -205,6 +206,16 @@ fun SettingsScreen(
                          Text("Reset Profiles")
                      }
                  }
+                  
+                  Spacer(modifier = Modifier.height(8.dp))
+                  
+                  OutlinedButton(
+                      onClick = onNavigateToCalibration,
+                      modifier = Modifier.fillMaxWidth().height(38.dp),
+                      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                  ) {
+                      Text("Calibration Offsets")
+                  }
              }
              
              // MQTT

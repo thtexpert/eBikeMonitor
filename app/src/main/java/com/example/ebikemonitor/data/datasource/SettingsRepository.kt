@@ -183,6 +183,24 @@ class SettingsRepository(private val context: Context) {
         saveBatteryProfiles(profiles)
     }
 
+    suspend fun updateBatteryOffsets(serial: String, energyOffset: Double, cyclesOffset: Double) {
+        val profiles = batteryProfiles.first().toMutableList()
+        val index = profiles.indexOfFirst { it.hardwareSerial == serial }
+        if (index != -1) {
+            profiles[index] = profiles[index].copy(
+                totalElectricEnergyOffset = energyOffset,
+                chargeCyclesOffset = cyclesOffset
+            )
+        } else {
+            profiles.add(BatteryProfile(
+                hardwareSerial = serial,
+                totalElectricEnergyOffset = energyOffset,
+                chargeCyclesOffset = cyclesOffset
+            ))
+        }
+        saveBatteryProfiles(profiles)
+    }
+
     suspend fun updateBikeUsageHistory(mac: String, usage: List<com.example.ebikemonitor.data.model.UsageRecord?>, trip: List<Int>) {
         profilesMutex.withLock {
             val profiles = bikeProfiles.first().toMutableList()

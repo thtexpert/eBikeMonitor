@@ -338,6 +338,12 @@ class MainViewModel(
         }
     }
 
+    fun updateBatteryOffsets(serial: String, energyOffset: Double, cyclesOffset: Double) {
+        viewModelScope.launch {
+            settingsRepository.updateBatteryOffsets(serial, energyOffset, cyclesOffset)
+        }
+    }
+
     fun sendHomeAssistantDiscovery() {
         // Legacy call redirected to new Bike Discovery
         updateBikeDiscovery()

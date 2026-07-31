@@ -34,5 +34,7 @@ data class BatteryProfile(
     val hardwareSerial: String,
     val modelName: String? = null,
     val lastKnownChargeCycles: Double? = null,
-    val lastDiscoveryVersion: Int = 0
+    val lastDiscoveryVersion: Int = 0,
+    val totalElectricEnergyOffset: Double = 0.0,
+    val chargeCyclesOffset: Double = 0.0
 )
