@@ -34,6 +34,7 @@ class EBikeBackgroundService : Service() {
     // Home Sync Window — keeps MQTT alive after bike-off to push end-of-ride data
     private var homeSyncJob: kotlinx.coroutines.Job? = null
     private var endOfRideSnapshot: com.example.ebikemonitor.data.model.BikeStatus? = null
+    private var lastKnownGoodStatus: com.example.ebikemonitor.data.model.BikeStatus? = null
 
     // Phase 1B: State tracking for event-driven synchronization
     private var isSyncing = false
@@ -178,6 +179,9 @@ class EBikeBackgroundService : Service() {
             bleManager.bikeStatus
                 .sample(1000)
                 .collect { status ->
+                    if (status.lastUpdateTimestamp > 0) {
+                        lastKnownGoodStatus = status
+                    }
                     if (status.isCharging) {
                         wasChargingInSession = true
                         if (status.batteryLevel != null) {
@@ -571,11 +575,11 @@ class EBikeBackgroundService : Service() {
                 // This must fire regardless of uiActive so the Home Sync Window starts
                 // even when shouldServiceRun=false (UI inactive + bike off simultaneously).
                 if (lastBikePresent == true && !bikePresent) {
-                    val snapshot = app.bleManager.bikeStatus.value
+                    val snapshot = lastKnownGoodStatus
                     FileLogger.log("EBikeBackgroundService: Bike disconnected. Disconnecting BLE.")
                     bleManager.disconnect()
                     val homeSyncMins = settings.homeSyncDurationMins.first()
-                    if (homeSyncMins > 0 && snapshot.lastUpdateTimestamp > 0 && !mqttManager.isConnected.value) {
+                    if (homeSyncMins > 0 && snapshot != null && snapshot.lastUpdateTimestamp > 0 && !mqttManager.isConnected.value) {
                         // MQTT not connected — Home Sync Window will push the snapshot when WiFi arrives
                         startHomeSyncWindow(snapshot, homeSyncMins * 60_000L)
                     } else {
@@ -625,13 +629,14 @@ class EBikeBackgroundService : Service() {
                         cancelHomeSyncWindow()
                         stopSelf()
                     } else {
-                        // Normal path: full sync of current BLE data — only if we have live data
-                        if (app.bleManager.bikeStatus.value.lastUpdateTimestamp > 0) {
+                        // Normal path: full sync of current BLE data — only if we have live data and sync is complete
+                        if (app.bleManager.bikeStatus.value.lastUpdateTimestamp > 0 && isSyncComplete) {
                             FileLogger.log("EBikeBackgroundService: MQTT Connected. Flagging for full sync.")
                             lastPublishedStatus = null
                             syncToMqtt(app.bleManager.bikeStatus.value)
                         } else {
-                            FileLogger.log("EBikeBackgroundService: MQTT Connected but no live BLE data yet — deferring sync.")
+                            val reason = if (isSyncComplete) "no live BLE data yet" else "sync not complete yet"
+                            FileLogger.log("EBikeBackgroundService: MQTT Connected but $reason — deferring sync.")
                         }
                     }
                 }
