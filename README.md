@@ -77,6 +77,19 @@ You can start your ride even if you are away from home. Once your eBike turns of
   4. On the next connection, the app will automatically perform a fresh startup decoding and re-learn the correct mode mapping. **Note**: Re-learning requires you to ride in each assist mode for at least a few hundred meters so that the discovery algorithm can gather enough distance delta to distinguish them.
 - **Battery Calibration**: If your battery's charge cycle and electrical energy counters have fallen out of sync with the motor's mechanical odometer work (only needed if the battery was run on very old BMS firmware for a long period of time), you can apply offsets to calibrate them. See [CALIBRATION](CALIBRATION.md) for full instructions.
 
+### 6. Synchronization Alerts & Error Notifications
+To ensure you are immediately informed of any synchronization issues when coming home, the app creates a dedicated Android notification channel named **eBike Sync Errors**.
+
+This channel is used to post two types of alerts:
+- **MQTT Sync Unsuccessful**: Triggered if the post-ride **Home Sync Window** expires without the app successfully connecting to your MQTT broker (e.g., if your phone did not reconnect to home WiFi in time or the MQTT broker was unreachable).
+- **MQTT Sync Data Warning**: Triggered at the end of a ride if a data mismatch is detected between the total odometer distance change and the sum of assist mode usage distances (usually caused by BLE connection dropouts during the ride). This alerts you that the data synced to MQTT may be incomplete or stale.
+
+**Bypassing Silent Mode / Do Not Disturb:**
+By default, the `eBike Sync Errors` channel is configured with **High Importance** to display heads-up alerts. If you want these critical warnings to vibrate/ring even when your phone is in silent mode or Do Not Disturb:
+1. Open your Android **Settings** -> **Apps** -> **eBikeMonitor** -> **Notifications** (or **Notification Categories**).
+2. Tap on the **eBike Sync Errors** category.
+3. Enable **Bypass Do Not Disturb** (or **Override Do Not Disturb**).
+
 Charging curve example:
 
 <img src="images/HA_Battery_Charge.png" width="400">

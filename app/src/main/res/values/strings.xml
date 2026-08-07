@@ -89,4 +89,11 @@
     <string name="debug_text_trip_missing">TRIP MISSING</string>
     <string name="debug_header_unsorted_incoming">Debug: Unsorted Incoming (%1$d/%2$d)</string>
     <string name="debug_text_pending">[Pending]</string>
+    <!-- Sync Notification Strings -->
+    <string name="notification_error_channel_name">eBike Sync Errors</string>
+    <string name="notification_error_channel_description">Alerts for unsuccessful or incorrect MQTT sync data</string>
+    <string name="notification_mqtt_sync_unsuccessful_title">MQTT Sync Unsuccessful</string>
+    <string name="notification_mqtt_sync_unsuccessful_message">Home sync window expired without connecting to MQTT broker.</string>
+    <string name="notification_mqtt_sync_data_warning_title">MQTT Sync Data Warning</string>
+    <string name="notification_mqtt_sync_data_warning_message">Ride data mismatch: Odometer delta (%1$.2f km) vs Mode Usage (%2$.2f km). Incomplete telemetry due to BLE disconnects.</string>
 </resources>

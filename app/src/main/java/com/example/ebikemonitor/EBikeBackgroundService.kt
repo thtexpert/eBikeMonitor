@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +70,8 @@ class EBikeBackgroundService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val CHANNEL_ID = "EBikeMonitorChannel"
     private val NOTIFICATION_ID = 1
+    private val ERROR_CHANNEL_ID = "EBikeMonitorErrorChannel"
+    private val ERROR_NOTIFICATION_ID = 2
 
     override fun onCreate() {
         super.onCreate()
@@ -908,8 +912,17 @@ class EBikeBackgroundService : Service() {
                 "eBike Monitor Service",
                 NotificationManager.IMPORTANCE_LOW
             )
+            val errorChannel = NotificationChannel(
+                ERROR_CHANNEL_ID,
+                getString(R.string.notification_error_channel_name),
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = getString(R.string.notification_error_channel_description)
+                enableVibration(true)
+            }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
+            manager.createNotificationChannel(errorChannel)
         }
     }
 
@@ -978,6 +991,41 @@ class EBikeBackgroundService : Service() {
         val notification = createNotification(text)
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, notification)
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun showErrorNotification(title: String, text: String) {
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            this, 0, intent,
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(this, ERROR_CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(ERROR_NOTIFICATION_ID, notification)
+    }
+
+    private fun isWifiConnected(context: Context): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val network = connectivityManager.activeNetwork ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+            return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        } else {
+            @Suppress("DEPRECATION")
+            val wifiInfo = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI)
+            return wifiInfo?.isConnected == true
+        }
     }
 
     private var reconnectionJob: kotlinx.coroutines.Job? = null
@@ -1079,6 +1127,14 @@ class EBikeBackgroundService : Service() {
 
             // Window expired without a successful sync
             FileLogger.log("EBikeBackgroundService: [HOME SYNC] Window expired without MQTT sync. Stopping service.")
+            if (isWifiConnected(app)) {
+                showErrorNotification(
+                    getString(R.string.notification_mqtt_sync_unsuccessful_title),
+                    getString(R.string.notification_mqtt_sync_unsuccessful_message)
+                )
+            } else {
+                FileLogger.log("EBikeBackgroundService: [HOME SYNC] Skipping expiration error notification because WiFi is not connected.")
+            }
             endOfRideSnapshot = null
             stopSelf()
         }
@@ -1445,6 +1501,10 @@ class EBikeBackgroundService : Service() {
                 
                 if (!isDataConsistent) {
                     FileLogger.log("EBikeBackgroundService: End-of-session calibration skipped due to Odo/Usage mismatch (OdoDelta: ${"%.3f".format(odoDelta)} km, UsageSum: ${"%.3f".format(usageSum)} km). Startup sync will reconcile.")
+                    showErrorNotification(
+                        getString(R.string.notification_mqtt_sync_data_warning_title),
+                        getString(R.string.notification_mqtt_sync_data_warning_message, odoDelta, usageSum)
+                    )
                 }
                 
                 var totalMotorEnergyDelta = 0.0

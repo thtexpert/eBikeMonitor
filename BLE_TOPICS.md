@@ -52,8 +52,8 @@ The following tables group the BLE topics (Message IDs) by hardware unit and fun
 | `0x8092` | Total Battery Energy | `Int` / 10.0 (Wh) | Total remaining battery energy. Exactly 30.0 Wh higher than 0x8091 (reserved lights buffer). (from BMS) |
 | `0x8096` | Charge Cycles | `Int` / 10.0 | Cumulative number of full charge cycles (increments only during charging). (from BMS) |
 | `0x8097` | BMS Chip Serial | Protobuf submessage | Diagnostic battery serial / hardware ID (nested structure `1a0a08...`). |
-| `0x809C` | Lifetime Total Mechanical Energy | `Int` (Wh) | Cumulative total mechanical energy delivered by the motor over the lifetime of this battery pack (from BMS, matches motor mechanical work). |
-| `0x80B0` | Lifetime Total Energy Throughput | `Int` / 10.0 (kWh) | Cumulative electrical energy throughput over the battery pack's lifetime. 1 raw unit = 0.1 kWh. **(Not implemented in app)** |
+| `0x809C` | Lifetime Total Mechanical Energy | `Int` (Wh) | Cumulative mechanical energy delivered by the motor over the battery pack's lifetime. Derived from cumulative electrical discharge energy scaled by the **79% Drive Unit efficiency**. |
+| `0x80B0` | Lifetime Total Electrical Charge Energy | `Int` / 10.0 (kWh) | Cumulative electrical energy charged into the battery over its lifetime (1 raw unit = 0.1 kWh). Corresponds to output mechanical work (`0x809C`) via the 79% Drive Unit efficiency. |
 | `0x80B1` | SOH Parameter | Semi-static | BMS capacity calibration index (updates step-wise as SOH degrades). |
 | `0x80B4` | Actual Capacity (Wh) | `Int` / 10.0 (Wh) | Actual maximum healthy usable capacity of the battery cell pack in Wh (e.g. 743.0 Wh). Calculated internally by the BMS as Ah (0x80E2) * 36.0V nominal. |
 | `0x80C5` | Usable Motor Energy (BMS)| `Int` / 10.0 (Wh) | Alternate/redundant usable motor energy. (from BMS) |
