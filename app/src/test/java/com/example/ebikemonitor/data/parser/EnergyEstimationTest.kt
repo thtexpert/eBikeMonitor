@@ -495,5 +495,58 @@ class EnergyEstimationTest {
         // Verify the guard overrides the lower value and preserves monotonicity
         assertEquals(251.6, publishedValue, 0.01)
     }
+
+    @Test
+    fun testDeltaBasedMeasuredAccumulation() {
+        var cumulativeTotal = 0.0
+        var lastTripValue = 0
+
+        fun processIncomingPacket(currentTrip: Int) {
+            val delta = if (currentTrip >= lastTripValue) {
+                currentTrip - lastTripValue
+            } else {
+                currentTrip
+            }
+            cumulativeTotal += delta
+            lastTripValue = currentTrip
+        }
+
+        // Scenario 1: First session (starts at 1, goes to 92)
+        processIncomingPacket(1)
+        assertEquals(1.0, cumulativeTotal, 0.0)
+        assertEquals(1, lastTripValue)
+
+        processIncomingPacket(10)
+        processIncomingPacket(50)
+        processIncomingPacket(92)
+        assertEquals(92.0, cumulativeTotal, 0.0)
+        assertEquals(92, lastTripValue)
+
+        // Scenario 2: Power cycle restart (starts at 1, goes to 194)
+        processIncomingPacket(1)
+        assertEquals(93.0, cumulativeTotal, 0.0)
+        assertEquals(1, lastTripValue)
+
+        processIncomingPacket(100)
+        processIncomingPacket(194)
+        assertEquals(286.0, cumulativeTotal, 0.0)
+        assertEquals(194, lastTripValue)
+
+        // Scenario 3: Mid-ride reset (starts at 1, goes to 59, drops to 1, goes to 27)
+        processIncomingPacket(1)
+        assertEquals(287.0, cumulativeTotal, 0.0)
+        assertEquals(1, lastTripValue)
+
+        processIncomingPacket(59)
+        assertEquals(345.0, cumulativeTotal, 0.0)
+
+        processIncomingPacket(1)
+        assertEquals(346.0, cumulativeTotal, 0.0)
+        assertEquals(1, lastTripValue)
+
+        processIncomingPacket(27)
+        assertEquals(372.0, cumulativeTotal, 0.0)
+        assertEquals(27, lastTripValue)
+    }
 }
 

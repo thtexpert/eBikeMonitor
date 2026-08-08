@@ -330,4 +330,15 @@ class SettingsRepository(private val context: Context) {
             saveBikeProfiles(profiles)
         }
     }
+
+    suspend fun saveBikeProfile(profile: BikeProfile) {
+        profilesMutex.withLock {
+            val profiles = bikeProfiles.first().toMutableList()
+            val index = profiles.indexOfFirst { it.macAddress == profile.macAddress }
+            if (index != -1) {
+                profiles[index] = profile
+                saveBikeProfiles(profiles)
+            }
+        }
+    }
 }

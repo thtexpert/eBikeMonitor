@@ -25,9 +25,9 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | `displaysoftwareversion` | Display Version | `sensor.<name>_display_software_version` | - | Firmware version of the display. (**Retained**) |
 | `batteryserialnumber` | Battery Serial | `sensor.<name>_battery_serial_number` | - | Serial of the current battery pack. |
 | `totalhours` | Total Hours | `sensor.<name>_total_hours` | h | Lifetime drive unit operation hours. (**Retained**) |
-| `pedal_energy_measured` | Pedal Energy (Measured) | `sensor.<name>_pedal_energy_measured` | kcal | Active-session cumulative human effort. (**Retained**) |
-| `pedal_energy_estimated`| Pedal Energy (Estimated) | `sensor.<name>_pedal_energy_estimated` | kcal | Estimated human effort during offline segments. (**Retained**) |
-| `pedal_energy_total` | Pedal Energy (Total) | `sensor.<name>_pedal_energy_total` | kcal | Total cumulative human effort (measured + estimated). (**Retained**) |
+| `pedal_energy_measured` | Pedal Energy (Measured) | `sensor.<name>_pedal_energy_measured` | kcal | Lifetime cumulative measured human effort. (**Retained**) |
+| `pedal_energy_estimated`| Pedal Energy (Estimated) | `sensor.<name>_pedal_energy_estimated` | kcal | Lifetime cumulative estimated human effort during offline segments. (**Retained**) |
+| `pedal_energy_total` | Pedal Energy (Total) | `sensor.<name>_pedal_energy_total` | kcal | Lifetime cumulative human effort (measured + estimated). (**Retained**) |
 | `trip_pedal_energy` | Trip Pedal Energy | `sensor.<name>_trip_pedal_energy` | kcal | Rider effort for the current trip. |
 | `trip_total_energy` | Trip Total Energy | `sensor.<name>_trip_total_energy` | Wh | Total mechanical energy (rider + motor) for the trip. |
 | `trip_human_percentage`| Trip Human Percentage | `sensor.<name>_trip_human_percentage` | % | Rider contribution split percentage for the trip. |

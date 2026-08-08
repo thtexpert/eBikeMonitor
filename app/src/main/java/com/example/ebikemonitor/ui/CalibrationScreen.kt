@@ -36,6 +36,20 @@ fun CalibrationScreen(
     var energyOffsetStr by remember { mutableStateOf("") }
     var cyclesOffsetStr by remember { mutableStateOf("") }
 
+    val activeBikeMac by viewModel.activeBikeMac.collectAsState()
+    val bikeProfiles by viewModel.bikeProfiles.collectAsState()
+    val activeBikeProfile = bikeProfiles.find { it.macAddress == activeBikeMac }
+
+    var measuredEnergyStr by remember { mutableStateOf("") }
+    var estimatedEnergyStr by remember { mutableStateOf("") }
+
+    LaunchedEffect(activeBikeProfile) {
+        if (activeBikeProfile != null) {
+            measuredEnergyStr = String.format(Locale.US, "%.1f", activeBikeProfile.totalPedalEnergyMeasuredBaseline)
+            estimatedEnergyStr = String.format(Locale.US, "%.1f", activeBikeProfile.totalPedalEnergyEstimatedBaseline)
+        }
+    }
+
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -89,7 +103,7 @@ fun CalibrationScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "Please connect your eBike to calibrate the active battery.",
+                        "Please connect your eBike to configure calibration offsets.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -249,6 +263,26 @@ fun CalibrationScreen(
                                 }
                             }
                         }
+                            EBikeCalibrationCard(
+                                activeBikeProfile = activeBikeProfile,
+                                measuredEnergyStr = measuredEnergyStr,
+                                onMeasuredEnergyChange = { measuredEnergyStr = it },
+                                estimatedEnergyStr = estimatedEnergyStr,
+                                onEstimatedEnergyChange = { estimatedEnergyStr = it },
+                                onSaveClick = { mVal, eVal ->
+                                    val profile = activeBikeProfile
+                                    if (profile != null) {
+                                        val currentTripVal = viewModel.bleManager.bikeStatus.value.tripPedalEnergy ?: 0
+                                        val updatedProfile = profile.copy(
+                                            totalPedalEnergyMeasuredBaseline = mVal,
+                                            totalPedalEnergyEstimatedBaseline = eVal,
+                                            lastTripPedalEnergy = currentTripVal
+                                        )
+                                        viewModel.saveBikeProfile(updatedProfile)
+                                        Toast.makeText(context, "eBike rider energy saved!", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
                     }
                 } else {
                     // Portrait layout: Stacked
@@ -397,7 +431,91 @@ fun CalibrationScreen(
                                 }
                             }
                         }
+                        item {
+                            EBikeCalibrationCard(
+                                activeBikeProfile = activeBikeProfile,
+                                measuredEnergyStr = measuredEnergyStr,
+                                onMeasuredEnergyChange = { measuredEnergyStr = it },
+                                estimatedEnergyStr = estimatedEnergyStr,
+                                onEstimatedEnergyChange = { estimatedEnergyStr = it },
+                                onSaveClick = { mVal, eVal ->
+                                    val profile = activeBikeProfile
+                                    if (profile != null) {
+                                        val currentTripVal = viewModel.bleManager.bikeStatus.value.tripPedalEnergy ?: 0
+                                        val updatedProfile = profile.copy(
+                                            totalPedalEnergyMeasuredBaseline = mVal,
+                                            totalPedalEnergyEstimatedBaseline = eVal,
+                                            lastTripPedalEnergy = currentTripVal
+                                        )
+                                        viewModel.saveBikeProfile(updatedProfile)
+                                        Toast.makeText(context, "eBike rider energy saved!", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
+                        }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EBikeCalibrationCard(
+    activeBikeProfile: com.example.ebikemonitor.data.model.BikeProfile?,
+    measuredEnergyStr: String,
+    onMeasuredEnergyChange: (String) -> Unit,
+    estimatedEnergyStr: String,
+    onEstimatedEnergyChange: (String) -> Unit,
+    onSaveClick: (Double, Double) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text("eBike Rider Energy Calibration", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(4.dp))
+            if (activeBikeProfile == null) {
+                Text("No active eBike profile found.", style = MaterialTheme.typography.bodyMedium)
+            } else {
+                Text("Bike: ${activeBikeProfile.name} (${activeBikeProfile.macAddress})", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedTextField(
+                    value = measuredEnergyStr,
+                    onValueChange = onMeasuredEnergyChange,
+                    label = { Text("Measured Cumulative Total (kcal)", style = MaterialTheme.typography.labelSmall) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().height(62.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedTextField(
+                    value = estimatedEnergyStr,
+                    onValueChange = onEstimatedEnergyChange,
+                    label = { Text("Estimated Cumulative Total (kcal)", style = MaterialTheme.typography.labelSmall) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().height(62.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Button(
+                    onClick = {
+                        val mVal = measuredEnergyStr.toDoubleOrNull()
+                        val eVal = estimatedEnergyStr.toDoubleOrNull()
+                        if (mVal != null && eVal != null) {
+                            onSaveClick(mVal, eVal)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                ) {
+                    Text("Save Rider Energy")
                 }
             }
         }

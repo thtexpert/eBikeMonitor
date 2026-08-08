@@ -436,6 +436,12 @@ class MainViewModel(
         }
     }
 
+    fun saveBikeProfile(profile: com.example.ebikemonitor.data.model.BikeProfile) {
+        viewModelScope.launch {
+            settingsRepository.saveBikeProfile(profile)
+        }
+    }
+
     override fun onCleared() {
         // We no longer proactively disconnect here.
         // The EBikeBackgroundService state machine is the single source of truth 

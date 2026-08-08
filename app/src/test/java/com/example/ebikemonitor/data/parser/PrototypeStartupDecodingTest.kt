@@ -248,5 +248,80 @@ class PrototypeStartupDecodingTest {
         assertEquals(3, mapping[3])
         assertEquals(4, mapping[4])
     }
+
+    @Test
+    fun testStartupDecodingWithLateA252TripResetRace() {
+        // 1. Establish the profile stored state from a previous ride
+        // 2. Afternoon ride starts.
+        // On connection, the app pre-populates tripDistPerMode with last active trip values from the morning ride (stale database values).
+        // Since A252 has not arrived yet, the app captures the pre-populated values as initial trip distances.
+        
+        // Unsorted usage records at the start of afternoon ride (which are close to stored values, but bike has power cycled)
+        val initialBatch = listOf(
+            UsageRecord(4015653, 1000), // TURBO (index 0)
+            UsageRecord(1700196, 500),  // ECO (index 1)
+            UsageRecord(5672126, 4000), // SPORT (index 2)
+            UsageRecord(4745811, 2000), // TOUR (index 3)
+            UsageRecord(335317, 0)      // OFF (index 4)
+        )
+
+        // Initial mapping captured from the pre-populated state (assuming 0->0, 1->1, 2->2, 3->3, 4->4 dummy/stale mapping)
+        // This maps TOUR to index 3 (initial distance 4745811).
+        
+        // As the user rides, actual trip distances on the bike reset to 0 and start counting up from 0.
+        // But A252 hasn't arrived yet, so the app still uses prepopulatedTripDists as initial baseline.
+        // User rides in TOUR (actual TOUR distance goes from 0 to 500m).
+        // Actual Tour record in unsorted batch goes from 4745811 to 4746311.
+        val unsortedBatchMidRide = listOf(
+            UsageRecord(4015653, 1000), // TURBO (0m delta)
+            UsageRecord(1700196, 500),  // ECO (0m delta)
+            UsageRecord(5672126, 4000), // SPORT (0m delta)
+            UsageRecord(4746311, 2010), // TOUR (+500m delta)
+            UsageRecord(335317, 0)      // OFF (0m delta)
+        )
+
+        // Try mapping with stale baseline (no A252 yet, so totalTripDeltas = [0,0,0,0,0])
+        val totalTripDeltasStale = List(5) { 0 }
+        
+        // For TOUR (mapped to initial index 3), the app searches for a record in the batch close to 4745811.
+        // The actual TOUR record has increased to 4746311 (500m difference, > 30m tolerance).
+        // So the mapping fails for TOUR (returns null for TOUR).
+        val matchedTour = unsortedBatchMidRide.find { r ->
+            abs((r.distance - initialBatch[3].distance) - totalTripDeltasStale[2]) <= 30
+        }
+        org.junit.Assert.assertNull("Should fail to map TOUR when baseline is stale and TOUR has moved", matchedTour)
+
+        // 3. The real A252 (tripDistPerMode) finally arrives mid-ride!
+        // Actual trip distances from the bike: OFF=0, ECO=0, TOUR=500, SPORT=0, TURBO=0
+        val realTripDists = listOf(0, 0, 500, 0, 0)
+
+        // The app detects a trip reset because realTripDists < prepopulatedTripDists for almost all modes.
+        // It clears B history and establishes a new baseline from the current live state:
+        val correctedInitialTripDists = realTripDists.toList()
+        val correctedInitialUnsortedUsageRecords = unsortedBatchMidRide.toList()
+
+        // 4. Ride continues. TOUR mode increases by another 400m (total 900m trip distance).
+        // Tour record becomes 4746711.
+        val unsortedBatchLater = listOf(
+            UsageRecord(4015653, 1000), // TURBO
+            UsageRecord(1700196, 500),  // ECO
+            UsageRecord(5672126, 4000), // SPORT
+            UsageRecord(4746711, 2020), // TOUR (+900m)
+            UsageRecord(335317, 0)      // OFF
+        )
+        val currentRealTripDists = listOf(0, 0, 900, 0, 0)
+
+        // Calculate deltas relative to corrected baseline:
+        // totalDeltaTrip for TOUR is 900 - 500 = 400m
+        val totalDeltaTripTour = currentRealTripDists[2] - correctedInitialTripDists[2] // 400m
+        
+        // Find TOUR match in the new batch relative to corrected initial TOUR record (index 3 in correctedInitialUnsortedUsageRecords, which has distance 4746311)
+        val matchedTourCorrect = unsortedBatchLater.find { r ->
+            abs((r.distance - correctedInitialUnsortedUsageRecords[3].distance) - totalDeltaTripTour) <= 30
+        }
+
+        assertNotNull("Should successfully map TOUR using corrected baseline once trip reset is detected", matchedTourCorrect)
+        assertEquals(4746711, matchedTourCorrect!!.distance)
+    }
 }
 

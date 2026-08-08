@@ -44,6 +44,7 @@ class BleManager(private val context: Context) {
     private var rawTotalElectricEnergy: Double? = null
     private var rawChargeCycles: Double? = null
     private var batteryProfilesList = emptyList<com.example.ebikemonitor.data.model.BatteryProfile>()
+    private var hasReceivedRealA252 = false
 
     init {
         val app = context.applicationContext as com.example.ebikemonitor.EBikeApplication
@@ -373,6 +374,7 @@ class BleManager(private val context: Context) {
                 0xA252 -> {
                     val tripDists = msg.decodeTripDistPerMode()
                     if (tripDists != null) {
+                        hasReceivedRealA252 = true
                         currentStatus = currentStatus.copy(tripDistPerMode = tripDists)
                         Log.d("BleManager", "Trip distances updated: $tripDists")
                         
@@ -521,7 +523,7 @@ class BleManager(private val context: Context) {
                             }
 
                             // 2. Normal Capture/Fallback: Session baseline if still not established
-                            if (currentStatus.initialTripDistPerMode == null && currentStatus.tripDistPerMode.size == expectedCount) {
+                            if (currentStatus.initialTripDistPerMode == null && hasReceivedRealA252 && currentStatus.tripDistPerMode.size == expectedCount) {
                                 Log.d("BleManager", "Version B: Capturing initial trip baseline.")
                                 currentStatus = currentStatus.copy(
                                     initialTripDistPerMode = currentStatus.tripDistPerMode.toList(),
@@ -644,6 +646,7 @@ class BleManager(private val context: Context) {
     }
 
     fun clearTelemetryCache() {
+        hasReceivedRealA252 = false
         // Clear session tracking variables so the next connection starts fresh
         _bikeStatus.value = _bikeStatus.value.copy(
             initialTripDistPerMode = null,
@@ -772,6 +775,7 @@ class BleManager(private val context: Context) {
                 confirmedModeIndices = mapping.keys,
                 sortedUsageRecordsB = newSortedRecords
             )
+            hasReceivedRealA252 = true
             com.example.ebikemonitor.FileLogger.log("BleManager: Forced startup decoding successful with fallback! Status: ${result.status}_FALLBACK, Error: ${result.bestError}")
             return true
         } else {
@@ -793,6 +797,7 @@ class BleManager(private val context: Context) {
                 modeToInitialIndex = newMapping,
                 confirmedModeIndices = newMapping.keys
             )
+            hasReceivedRealA252 = true
             Log.d("BleManager", "Version B: Mid-ride reset handled. New baselines: $newBaselines, mapping: $newMapping")
         }
     }
