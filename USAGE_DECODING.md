@@ -67,7 +67,8 @@ If you perform a trip reset directly on the Kiox unit mid-ride, the trip distanc
 3. Synchronizes its internal session baselines and notifies the BLE manager to align starting references so that further accumulation is tracked seamlessly.
 
 ### C. Transient Connection Guards & Baseline Integrity
-During short connection sessions or power cycles (e.g., stationary power cycles where the phone connects to a turned-on eBike, but the Kiox unit does not broadcast full characteristics), the system keeps active ride references cached in the database. Instead of defaulting to `0` or blanking out when characteristics are missing, the repository falls back to these database-cached active metrics. This prevents negative calorie computations or database baseline corruptions when BLE connections are transient.
+During short connection sessions or power cycles, the system keeps active ride references cached in the database. Instead of defaulting to `0` or blanking out when characteristics are missing, the repository pre-populates these cached values to prevent `--` layouts. 
+However, to ensure baseline alignment and offline segment estimations are calculated using fresh data, the sync completion checklist gates strictly on receiving real BLE update notifications rather than using the pre-populated database records. This avoids stale baseline mapping failures when starting references are initialized.
 
 ---
 *Document Version: 1.2 - July 2026*
