@@ -44,7 +44,22 @@ class BleManager(private val context: Context) {
     private var rawTotalElectricEnergy: Double? = null
     private var rawChargeCycles: Double? = null
     private var batteryProfilesList = emptyList<com.example.ebikemonitor.data.model.BatteryProfile>()
-    private var hasReceivedRealA252 = false
+    
+    // Real BLE update flags for startup sync checklist gating
+    var hasReceivedRealOdo = false
+    var hasReceivedRealUsageRecords = false
+    var hasReceivedRealA252 = false
+    var hasReceivedRealPedalEnergy = false
+    var hasReceivedRealTripTotalEnergy = false
+
+    fun resetRealFlags() {
+        hasReceivedRealOdo = false
+        hasReceivedRealUsageRecords = false
+        hasReceivedRealA252 = false
+        hasReceivedRealPedalEnergy = false
+        hasReceivedRealTripTotalEnergy = false
+        Log.d("BleManager", "Resetting real BLE update flags on connection state change.")
+    }
 
     init {
         val app = context.applicationContext as com.example.ebikemonitor.EBikeApplication
@@ -108,6 +123,7 @@ class BleManager(private val context: Context) {
                 gatt.close()
                 bluetoothGatt = null
                 lastLoggedDiagnosticValues.clear()
+                resetRealFlags()
                 return
             }
 
@@ -121,6 +137,7 @@ class BleManager(private val context: Context) {
                 gatt.close()
                 bluetoothGatt = null
                 lastLoggedDiagnosticValues.clear()
+                resetRealFlags()
             }
         }
 
@@ -236,6 +253,7 @@ class BleManager(private val context: Context) {
                 0x9818 -> {
                     val odo = msg.value / 1000.0
                     currentStatus = currentStatus.copy(totalDistance = odo)
+                    hasReceivedRealOdo = true
                     Log.d("BleManager", "Raw Odometer received: ${"%.3f".format(odo)} km (raw: ${msg.value})")
                 }
                 0x8096 -> {
@@ -262,6 +280,7 @@ class BleManager(private val context: Context) {
                         humanCalories = msg.value / 10.0,
                         tripTotalEnergy = msg.value * 0.05
                     )
+                    hasReceivedRealTripTotalEnergy = true
                 }
                 0xA246 -> currentStatus = currentStatus.copy(tripSpeed = msg.value / 100.0)
                 0xA247 -> currentStatus = currentStatus.copy(tripMaxSpeed = msg.value / 100.0)
@@ -271,6 +290,7 @@ class BleManager(private val context: Context) {
                 0xA24B -> currentStatus = currentStatus.copy(tripMaxHumanPower = msg.value)
                 0xA251 -> {
                     currentStatus = currentStatus.copy(tripPedalEnergy = msg.value)
+                    hasReceivedRealPedalEnergy = true
                     Log.d("BleManager", "Trip Pedal Energy updated: ${msg.value} kcal")
                 }
                 0xA254 -> {
@@ -413,6 +433,7 @@ class BleManager(private val context: Context) {
                                     confirmedModeIndices = result.mapping.keys,
                                     sortedUsageRecordsB = newSortedRecords
                                 )
+                                hasReceivedRealUsageRecords = true
                                 
                                 // Also trigger Version B update with discovery
                                 val resultB = BoschParser.processVersionBWithDiscovery(unsortedModeUsageList, currentStatus)
@@ -514,6 +535,7 @@ class BleManager(private val context: Context) {
                                             confirmedModeIndices = result.mapping.keys,
                                             sortedUsageRecordsB = newSortedRecords
                                         )
+                                        hasReceivedRealUsageRecords = true
                                     } else {
                                         Log.w("BleManager", "Version B: Startup decoding ritual did not succeed: ${result.status}")
                                     }
@@ -776,6 +798,7 @@ class BleManager(private val context: Context) {
                 sortedUsageRecordsB = newSortedRecords
             )
             hasReceivedRealA252 = true
+            hasReceivedRealUsageRecords = true
             com.example.ebikemonitor.FileLogger.log("BleManager: Forced startup decoding successful with fallback! Status: ${result.status}_FALLBACK, Error: ${result.bestError}")
             return true
         } else {

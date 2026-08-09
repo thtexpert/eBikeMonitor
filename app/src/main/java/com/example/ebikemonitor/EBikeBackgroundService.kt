@@ -246,14 +246,13 @@ class EBikeBackgroundService : Service() {
                     if (bleManager.isConnected.value && isSyncing && !isSyncComplete) {
                         val expectedCount = status.assistModeNames.size
                         val checklistOk = expectedCount > 0 &&
-                                         status.totalDistance != null &&
-                                         status.sortedUsageRecordsB.size == expectedCount &&
-                                         status.sortedUsageRecordsB.all { it != null } &&
+                                         bleManager.hasReceivedRealOdo &&
+                                         bleManager.hasReceivedRealUsageRecords &&
+                                         bleManager.hasReceivedRealA252 &&
+                                         bleManager.hasReceivedRealPedalEnergy &&
+                                         bleManager.hasReceivedRealTripTotalEnergy &&
                                          status.totalBattery != null &&
-                                         status.tripDistPerMode.size == expectedCount &&
                                          status.remainingRanges.isNotEmpty() &&
-                                         status.tripPedalEnergy != null &&
-                                         status.tripTotalEnergy != null &&
                                          status.batteryLevel != null
                                          
                         if (checklistOk) {

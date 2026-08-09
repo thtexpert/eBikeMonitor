@@ -323,5 +323,167 @@ class PrototypeStartupDecodingTest {
         assertNotNull("Should successfully map TOUR using corrected baseline once trip reset is detected", matchedTourCorrect)
         assertEquals(4746711, matchedTourCorrect!!.distance)
     }
+
+    @Test
+    fun testStartupDecodingWithTodaysRealRideData() {
+        // 1. Stored database state at the end of Session 2
+        val storedUsage = listOf(
+            UsageRecord(336386, 0),     // OFF
+            UsageRecord(1701641, 0),    // ECO
+            UsageRecord(5686513, 0),    // TOUR
+            UsageRecord(4751513, 0),    // SPORT
+            UsageRecord(4016105, 0)     // TURBO
+        )
+        val lastTripDists = listOf(46, 188, 688, 0, 0)
+        val storedBaselines = storedUsage.zip(lastTripDists).map { (u, t) -> u.distance - t }
+
+        // 2. First batch at startup of Session 3
+        val batch1 = listOf(
+            UsageRecord(1701702, 0), // ECO
+            UsageRecord(5686513, 0), // TOUR
+            UsageRecord(336483, 0),  // OFF
+            UsageRecord(4752082, 0), // SPORT
+            UsageRecord(4016105, 0)  // TURBO
+        )
+
+        // --- Scenario A: Startup sync completes prematurely using stale trip distances (The Bug) ---
+        val staleTripDists = lastTripDists
+        val resultStale = BoschParser.findBestStartupMapping(batch1, staleTripDists, storedBaselines)
+        assertNotNull(resultStale.mapping)
+        
+        val mappingStale = resultStale.mapping!!
+        val sortedB1Stale = ArrayList<UsageRecord?>(List(5) { null })
+        mappingStale.forEach { (modeIdx, batchIdx) ->
+            sortedB1Stale[modeIdx] = batch1[batchIdx]
+        }
+
+        // Initialize status using the stale baseline
+        var statusStale = com.example.ebikemonitor.data.model.BikeStatus(
+            assistModeNames = listOf("OFF", "ECO", "TOUR", "SPORT", "TURBO"),
+            initialTripDistPerMode = staleTripDists.toList(),
+            initialUnsortedUsageRecords = batch1.toList(),
+            tripDistPerMode = staleTripDists.toList(),
+            modeToInitialIndex = mappingStale,
+            confirmedModeIndices = mappingStale.keys,
+            sortedUsageRecordsB = sortedB1Stale
+        )
+
+        // Now, second batch arrives, and real BLE trip distances also arrive (Sport has increased by 36m)
+        val batch2 = listOf(
+            UsageRecord(1701702, 0), // ECO (0m change)
+            UsageRecord(5686513, 0), // TOUR (0m change)
+            UsageRecord(336483, 0),  // OFF (0m change)
+            UsageRecord(4752118, 0), // SPORT (+36m change)
+            UsageRecord(4016105, 0)  // TURBO (0m change)
+        )
+        val realTripDists = listOf(143, 249, 688, 569, 0)
+        val realTripDists2 = listOf(143, 249, 688, 605, 0) // Sport increases by 36m (569 + 36 = 605)
+        statusStale = statusStale.copy(tripDistPerMode = realTripDists2)
+
+        val resultB2Stale = BoschParser.processVersionBWithDiscovery(batch2, statusStale)
+        // Since the baseline was stale, the delta for Sport is calculated as 605m, but usage records only changed by 36m.
+        // So processVersionBWithDiscovery fails to find a match for Sport, and it remains stuck at the batch 1 value.
+        assertNotNull(resultB2Stale)
+        val sortedStale = resultB2Stale!!.first
+        assertEquals(
+            "Sport usage record distance should remain stuck at the stale batch 1 value",
+            batch1[3].distance,
+            sortedStale[3]!!.distance
+        )
+
+
+        // --- Scenario B: Startup sync waits for real BLE trip distances (The Fix) ---
+        val resultReal = BoschParser.findBestStartupMapping(batch1, realTripDists, storedBaselines)
+        assertNotNull(resultReal.mapping)
+        
+        val mappingReal = resultReal.mapping!!
+        val sortedB1Real = ArrayList<UsageRecord?>(List(5) { null })
+        mappingReal.forEach { (modeIdx, batchIdx) ->
+            sortedB1Real[modeIdx] = batch1[batchIdx]
+        }
+
+        var statusReal = com.example.ebikemonitor.data.model.BikeStatus(
+            assistModeNames = listOf("OFF", "ECO", "TOUR", "SPORT", "TURBO"),
+            initialTripDistPerMode = realTripDists.toList(),
+            initialUnsortedUsageRecords = batch1.toList(),
+            tripDistPerMode = realTripDists.toList(),
+            modeToInitialIndex = mappingReal,
+            confirmedModeIndices = mappingReal.keys,
+            sortedUsageRecordsB = sortedB1Real
+        )
+
+        // Second batch arrives
+        statusReal = statusReal.copy(tripDistPerMode = realTripDists2)
+        val resultB2Real = BoschParser.processVersionBWithDiscovery(batch2, statusReal)
+        assertNotNull(resultB2Real)
+        
+        val sortedReal = resultB2Real!!.first
+        assertEquals(
+            "Sport usage record distance should successfully update to the new batch 2 value",
+            batch2[3].distance,
+            sortedReal[3]!!.distance
+        )
+    }
+
+    @Test
+    fun testSyncTimeoutBehaviorWithMissingUsageRecords() {
+        val storedUsage = listOf(
+            UsageRecord(336386, 0),     // OFF
+            UsageRecord(1701641, 0),    // ECO
+            UsageRecord(5686513, 0),    // TOUR
+            UsageRecord(4751513, 0),    // SPORT
+            UsageRecord(4016105, 0)     // TURBO
+        )
+        val lastTripDists = listOf(46, 188, 688, 0, 0)
+        val storedBaselines = storedUsage.zip(lastTripDists).map { (u, t) -> u.distance - t }
+
+        // Simulating sync timeout: usage records did not arrive on time, but fallback is triggered
+        // If fallback triggers, forceStartupDecodingWithFallback uses option 1 (no reset - lastTripDists) or option 2 (reset - zeros)
+        // Let's verify option 1 with lastTripDists (assuming stationary):
+        val stationaryBatch = listOf(
+            UsageRecord(4016105, 0), // TURBO
+            UsageRecord(5686513, 0), // TOUR
+            UsageRecord(1701641, 0), // ECO
+            UsageRecord(336386, 0),  // OFF
+            UsageRecord(4751513, 0)  // SPORT
+        )
+        val resultNoReset = BoschParser.findBestStartupMapping(stationaryBatch, lastTripDists, storedBaselines)
+        assertNotNull("Sync timeout fallback should succeed using last trip distances if stationary", resultNoReset.mapping)
+        val mapping = resultNoReset.mapping!!
+        assertEquals(3, mapping[0]) // OFF (336386) is at batch index 3
+        assertEquals(2, mapping[1]) // ECO (1701641) is at batch index 2
+    }
+
+    @Test
+    fun testSyncSucceedsBeforeTimeoutUnderNormalConditions() {
+        val storedUsage = listOf(
+            UsageRecord(336386, 0),     // OFF
+            UsageRecord(1701641, 0),    // ECO
+            UsageRecord(5686513, 0),    // TOUR
+            UsageRecord(4751513, 0),    // SPORT
+            UsageRecord(4016105, 0)     // TURBO
+        )
+        val lastTripDists = listOf(46, 188, 688, 0, 0)
+        val storedBaselines = storedUsage.zip(lastTripDists).map { (u, t) -> u.distance - t }
+
+        // Normal condition: all data arrives on time within 10-15 seconds.
+        val normalBatch = listOf(
+            UsageRecord(336386, 0),  // OFF
+            UsageRecord(1701641, 0), // ECO
+            UsageRecord(5686513, 0), // TOUR
+            UsageRecord(4751513, 0), // SPORT
+            UsageRecord(4016105, 0)  // TURBO
+        )
+        val normalTripDists = listOf(46, 188, 688, 0, 0)
+        
+        val resultNormal = BoschParser.findBestStartupMapping(normalBatch, normalTripDists, storedBaselines)
+        assertNotNull("Normal sync should succeed before timeout", resultNormal.mapping)
+        val mapping = resultNormal.mapping!!
+        assertEquals(0, mapping[0])
+        assertEquals(1, mapping[1])
+        assertEquals(2, mapping[2])
+        assertEquals(3, mapping[3])
+        assertEquals(4, mapping[4])
+    }
 }
 
