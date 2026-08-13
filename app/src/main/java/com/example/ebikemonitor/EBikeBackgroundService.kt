@@ -323,6 +323,10 @@ class EBikeBackgroundService : Service() {
                                     FileLogger.log("EBikeBackgroundService: Trip reset detected on late sync. Updating baselines.")
                                     pedalBaseline += originalProfile.lastTripPedalEnergy
                                     rideBaseline += originalProfile.lastTripRideEnergy
+                                } else if ((status.tripPedalEnergy ?: 0) > originalProfile.lastTripPedalEnergy) {
+                                    val unaccumulatedDelta = (status.tripPedalEnergy ?: 0) - originalProfile.lastTripPedalEnergy
+                                    pedalMeasuredBaseline += unaccumulatedDelta
+                                    FileLogger.log("EBikeBackgroundService: Late sync accumulated un-synced startup pedal energy delta: $unaccumulatedDelta kcal (measured baseline: $pedalMeasuredBaseline kcal)")
                                 }
                                 
                                 if (odoDelta > 0.20) {
@@ -1269,6 +1273,10 @@ class EBikeBackgroundService : Service() {
                     FileLogger.log("EBikeBackgroundService: Trip reset detected on startup. Updating baselines.")
                     pedalBaseline += profile.lastTripPedalEnergy
                     rideBaseline += profile.lastTripRideEnergy
+                } else if (currentTripPedal > profile.lastTripPedalEnergy) {
+                    val unaccumulatedDelta = currentTripPedal - profile.lastTripPedalEnergy
+                    pedalMeasuredBaseline += unaccumulatedDelta
+                    FileLogger.log("EBikeBackgroundService: Accumulated un-synced startup pedal energy delta: $unaccumulatedDelta kcal (measured baseline: $pedalMeasuredBaseline kcal)")
                 }
                 
                 // 2. Odometer Deduplication & Offline Recovery / Lifetime Initialization

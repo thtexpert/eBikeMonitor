@@ -548,5 +548,51 @@ class EnergyEstimationTest {
         assertEquals(372.0, cumulativeTotal, 0.0)
         assertEquals(27, lastTripValue)
     }
+
+    @Test
+    fun testStartupUnsyncedPedalEnergyCatchUp() {
+        var pedalMeasuredBaseline = 1158.0
+        var lastTripPedalEnergy = 186
+        val tripResetDetected = false
+
+        // Simulate BLE reconnect: while disconnected or syncing, trip pedal energy advanced from 186 to 191
+        val currentTripPedal = 191
+
+        if (tripResetDetected) {
+            // handle reset
+        } else if (currentTripPedal > lastTripPedalEnergy) {
+            val unaccumulatedDelta = currentTripPedal - lastTripPedalEnergy
+            pedalMeasuredBaseline += unaccumulatedDelta
+        }
+        lastTripPedalEnergy = currentTripPedal
+
+        // Verify catch-up accumulation
+        assertEquals(1163.0, pedalMeasuredBaseline, 0.0)
+        assertEquals(191, lastTripPedalEnergy)
+    }
+
+    @Test
+    fun testRealtimeAndSyncAccumulationMonotonicity() {
+        var pedalMeasuredBaseline = 1158.0
+        var lastTripPedalEnergy = 0
+
+        // Ride 1: 0 to 75 kcal
+        lastTripPedalEnergy = 75
+        pedalMeasuredBaseline += 75
+
+        // Disconnect at 75 kcal, reconnect when trip energy is 77 kcal (2 kcal accrued during startup sync)
+        val currentTripOnSync = 77
+        val unaccumulatedDelta = currentTripOnSync - lastTripPedalEnergy
+        pedalMeasuredBaseline += unaccumulatedDelta
+        lastTripPedalEnergy = currentTripOnSync
+
+        // Live riding continues from 77 to 189 (+112 kcal)
+        pedalMeasuredBaseline += (189 - 77)
+        lastTripPedalEnergy = 189
+
+        // Verify total measured baseline delta matches total trip calories (189 kcal) 1-to-1
+        assertEquals(1158.0 + 189.0, pedalMeasuredBaseline, 0.0)
+        assertEquals(189, lastTripPedalEnergy)
+    }
 }
 
