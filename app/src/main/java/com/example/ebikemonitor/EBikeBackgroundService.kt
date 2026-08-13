@@ -1433,14 +1433,25 @@ class EBikeBackgroundService : Service() {
                 } else {
                     0.0
                 }
-                val isDataConsistent = odoDelta <= 0.20 || kotlin.math.abs(odoDelta - usageSum) <= 0.20
+                val rawUsageSum = if (status.unsortedUsageRecords.size == expectedCount && localStartupUsageRecords.size == expectedCount) {
+                    val endDist = status.unsortedUsageRecords.sumOf { it.distance.toDouble() }
+                    val startDist = localStartupUsageRecords.sumOf { it?.distance?.toDouble() ?: 0.0 }
+                    (endDist - startDist) / 1000.0
+                } else {
+                    0.0
+                }
+                val isDataConsistent = odoDelta <= 0.20 || 
+                        kotlin.math.abs(odoDelta - usageSum) <= 0.20 || 
+                        kotlin.math.abs(odoDelta - rawUsageSum) <= 0.20
                 
                 if (!isDataConsistent) {
-                    FileLogger.log("EBikeBackgroundService: End-of-session calibration skipped due to Odo/Usage mismatch (OdoDelta: ${"%.3f".format(odoDelta)} km, UsageSum: ${"%.3f".format(usageSum)} km). Startup sync will reconcile.")
-                    showErrorNotification(
-                        getString(R.string.notification_mqtt_sync_data_warning_title),
-                        getString(R.string.notification_mqtt_sync_data_warning_message, odoDelta, usageSum)
-                    )
+                    FileLogger.log("EBikeBackgroundService: End-of-session calibration skipped due to Odo/Usage mismatch (OdoDelta: ${"%.3f".format(odoDelta)} km, UsageSum: ${"%.3f".format(usageSum)} km, RawSum: ${"%.3f".format(rawUsageSum)} km). Startup sync will reconcile.")
+                    if (!BikePresenceManager.isBikePresent.value || (status.speed ?: 0.0) <= 0.1) {
+                        showErrorNotification(
+                            getString(R.string.notification_mqtt_sync_data_warning_title),
+                            getString(R.string.notification_mqtt_sync_data_warning_message, odoDelta, usageSum)
+                        )
+                    }
                 }
                 
                 var totalMotorEnergyDelta = 0.0

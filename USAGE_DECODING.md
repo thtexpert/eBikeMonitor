@@ -70,5 +70,9 @@ If you perform a trip reset directly on the Kiox unit mid-ride, the trip distanc
 During short connection sessions or power cycles, the system keeps active ride references cached in the database. Instead of defaulting to `0` or blanking out when characteristics are missing, the repository pre-populates these cached values to prevent `--` layouts. 
 However, to ensure baseline alignment and offline segment estimations are calculated using fresh data, the sync completion checklist gates strictly on receiving real BLE update notifications rather than using the pre-populated database records. This avoids stale baseline mapping failures when starting references are initialized.
 
+### D. Raw Telemetry Invariance & Mid-Ride Disconnect Resiliency
+During mid-ride BLE drops, per-mode sorted usage records (`sortedUsageRecordsB`) may experience transient mapping lag if `0xA252` updates are delayed. However, the total distance sum across raw usage records (`unsortedUsageRecords.sumOf { it.distance }`) is **100% mathematically invariant to mode sorting permutations**. 
+The end-of-session calibration protocol evaluates `rawUsageSum` alongside `sortedUsageRecordsB` delta sum to prevent false positive data mismatch notifications when raw telemetry is complete. Furthermore, error notifications are suppressed during active riding (`shouldMonitor` / `speed > 0.1`) and logged to `FileLogger`, allowing startup sync to auto-reconcile seamlessly upon BLE reconnection.
+
 ---
-*Document Version: 1.2 - July 2026*
+*Document Version: 1.3 - August 2026*

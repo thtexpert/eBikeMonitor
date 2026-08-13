@@ -94,6 +94,6 @@
     <string name="notification_error_channel_description">Alerts for unsuccessful or incorrect MQTT sync data</string>
     <string name="notification_mqtt_sync_unsuccessful_title">MQTT Sync Unsuccessful</string>
     <string name="notification_mqtt_sync_unsuccessful_message">Home sync window expired without connecting to MQTT broker.</string>
-    <string name="notification_mqtt_sync_data_warning_title">MQTT Sync Data Warning</string>
-    <string name="notification_mqtt_sync_data_warning_message">Ride data mismatch: Odometer delta (%1$.2f km) vs Mode Usage (%2$.2f km). Incomplete telemetry due to BLE disconnects.</string>
+    <string name="notification_mqtt_sync_data_warning_title">Ride Telemetry Notice</string>
+    <string name="notification_mqtt_sync_data_warning_message">Incomplete telemetry recorded for segment (%1$.2f km vs %2$.2f km). Data will auto-reconcile on next ride.</string>
 </resources>

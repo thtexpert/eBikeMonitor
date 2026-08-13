@@ -2,12 +2,6 @@
 
 All notable changes to the **eBikeMonitor** project will be documented in this file.
 
-## [1.15.3] - 2026-07-30
-### Added
-- **Total Electric Energy (`0x80B0`)**: Decoded and integrated lifetime electrical energy throughput (in kWh) from the battery BMS.
-- **Total Mechanical Energy (`0x809C`)**: Renamed the friendly sensor names in Home Assistant from `"Total Battery"` / `"Total Energy Used"` to `"Total Mechanical Energy"` to clearly distinguish mechanical crankshaft work from electrical cell throughput.
-- **Home Assistant Discovery Version Bump**: Incremented both bike and battery discovery versions (to 6 and 5 respectively) to trigger automatic entities update on dashboard reload.
-
 ## [1.15.2] - 2026-07-30
 ### Added
 - **BLE Status Topic (`blestatus`)**: Published BLE connection status (`connected`/`disconnected`) to the `ebikemonitor/<device_id>/blestatus` topic in real-time.
@@ -20,6 +14,9 @@ All notable changes to the **eBikeMonitor** project will be documented in this f
 - **Offline Ride Recovery**: Automatically detects offline segments by comparing odometer increments when reconnecting, calculates the unmonitored distance, and injects the estimated calorie metrics seamlessly into Home Assistant.
 - **Self-Healing Database Repair**: If database profile records ever get corrupted or wiped, the app automatically repairs them from the first complete incoming BLE batch using consumption-rate sorting.
 - **Mid-Ride Reset Support**: Automatically detects Kiox trip resets mid-ride, propagates the reset to realign BLE manager session baselines, and prevents per-mode telemetry updates from freezing.
+- **Total Electric Energy (`0x80B0`)**: Decoded and integrated lifetime electrical energy throughput (in kWh) from the battery BMS.
+- **Total Mechanical Energy (`0x809C`)**: Renamed the friendly sensor names in Home Assistant from `"Total Battery"` / `"Total Energy Used"` to `"Total Mechanical Energy"` to clearly distinguish mechanical crankshaft work from electrical cell throughput.
+- **Home Assistant Discovery Version Bump**: Incremented both bike and battery discovery versions (to 6 and 5 respectively) to trigger automatic entities update on dashboard reload.
 
 ### Fixed
 - **Database Baseline Corruption**: Implemented repository guards to prevent transient connections (stationary power cycles with missing Kiox characteristics) from overwriting valid database references with empty lists.

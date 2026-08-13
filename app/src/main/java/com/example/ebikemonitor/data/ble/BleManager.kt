@@ -739,17 +739,11 @@ class BleManager(private val context: Context) {
             tripDistPerMode = if (currentStatus.tripDistPerMode.isEmpty()) profile.lastTripDistPerMode else currentStatus.tripDistPerMode,
             sortedUsageRecordsB = if (currentStatus.sortedUsageRecordsB.isEmpty() && hasValidUsage) profile.lastUsageRecords.toList() else currentStatus.sortedUsageRecordsB,
             persistentBaselines = baselines,
-            // If we successfully pre-populated usage records, set confirmed indices and mapping
-            confirmedModeIndices = if (currentStatus.confirmedModeIndices.isEmpty() && hasValidUsage && expectedCount > 0) {
-                (0 until expectedCount).toSet()
-            } else {
-                currentStatus.confirmedModeIndices
-            },
-            modeToInitialIndex = if (currentStatus.modeToInitialIndex.isEmpty() && hasValidUsage && expectedCount > 0) {
-                (0 until expectedCount).map { it to it }.toMap()
-            } else {
-                currentStatus.modeToInitialIndex
-            }
+            // Do not pre-populate confirmed indices or mappings with static identity maps (0->0, 1->1...),
+            // as BLE bursts arrive in arbitrary sequence on every new connection.
+            // Leave confirmedModeIndices and modeToInitialIndex empty until Startup Decoding or dynamic discovery resolves them.
+            confirmedModeIndices = currentStatus.confirmedModeIndices,
+            modeToInitialIndex = currentStatus.modeToInitialIndex
         )
         Log.d("BleManager", "Pre-populated BLE status from profile: totalDistance=${_bikeStatus.value.totalDistance}, tripPedal=${_bikeStatus.value.tripPedalEnergy}, persistentBaselines=${_bikeStatus.value.persistentBaselines}")
     }

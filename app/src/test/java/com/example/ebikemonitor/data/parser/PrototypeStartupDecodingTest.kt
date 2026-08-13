@@ -346,29 +346,15 @@ class PrototypeStartupDecodingTest {
             UsageRecord(4016105, 0)  // TURBO
         )
 
-        // --- Scenario A: Startup sync completes prematurely using stale trip distances (The Bug) ---
+        // --- Scenario A: Startup sync with high error is rejected by 100m sanity limit ---
         val staleTripDists = lastTripDists
         val resultStale = BoschParser.findBestStartupMapping(batch1, staleTripDists, storedBaselines)
-        assertNotNull(resultStale.mapping)
-        
-        val mappingStale = resultStale.mapping!!
-        val sortedB1Stale = ArrayList<UsageRecord?>(List(5) { null })
-        mappingStale.forEach { (modeIdx, batchIdx) ->
-            sortedB1Stale[modeIdx] = batch1[batchIdx]
-        }
+        assertEquals("HIGH_ERROR_REJECTED", resultStale.status)
+        org.junit.Assert.assertNull("High-error startup decoding mapping must be rejected", resultStale.mapping)
 
-        // Initialize status using the stale baseline
-        var statusStale = com.example.ebikemonitor.data.model.BikeStatus(
-            assistModeNames = listOf("OFF", "ECO", "TOUR", "SPORT", "TURBO"),
-            initialTripDistPerMode = staleTripDists.toList(),
-            initialUnsortedUsageRecords = batch1.toList(),
-            tripDistPerMode = staleTripDists.toList(),
-            modeToInitialIndex = mappingStale,
-            confirmedModeIndices = mappingStale.keys,
-            sortedUsageRecordsB = sortedB1Stale
-        )
-
-        // Now, second batch arrives, and real BLE trip distances also arrive (Sport has increased by 36m)
+        // --- Scenario B: Startup sync waits for real BLE trip distances (The Fix) ---
+        val realTripDists = listOf(143, 249, 688, 569, 0)
+        val realTripDists2 = listOf(143, 249, 688, 605, 0) // Sport increases by 36m (569 + 36 = 605)
         val batch2 = listOf(
             UsageRecord(1701702, 0), // ECO (0m change)
             UsageRecord(5686513, 0), // TOUR (0m change)
@@ -376,23 +362,7 @@ class PrototypeStartupDecodingTest {
             UsageRecord(4752118, 0), // SPORT (+36m change)
             UsageRecord(4016105, 0)  // TURBO (0m change)
         )
-        val realTripDists = listOf(143, 249, 688, 569, 0)
-        val realTripDists2 = listOf(143, 249, 688, 605, 0) // Sport increases by 36m (569 + 36 = 605)
-        statusStale = statusStale.copy(tripDistPerMode = realTripDists2)
 
-        val resultB2Stale = BoschParser.processVersionBWithDiscovery(batch2, statusStale)
-        // Since the baseline was stale, the delta for Sport is calculated as 605m, but usage records only changed by 36m.
-        // So processVersionBWithDiscovery fails to find a match for Sport, and it remains stuck at the batch 1 value.
-        assertNotNull(resultB2Stale)
-        val sortedStale = resultB2Stale!!.first
-        assertEquals(
-            "Sport usage record distance should remain stuck at the stale batch 1 value",
-            batch1[3].distance,
-            sortedStale[3]!!.distance
-        )
-
-
-        // --- Scenario B: Startup sync waits for real BLE trip distances (The Fix) ---
         val resultReal = BoschParser.findBestStartupMapping(batch1, realTripDists, storedBaselines)
         assertNotNull(resultReal.mapping)
         
@@ -485,5 +455,24 @@ class PrototypeStartupDecodingTest {
         assertEquals(3, mapping[3])
         assertEquals(4, mapping[4])
     }
+
+    @Test
+    fun testStartupDecodingRejectsHighErrorCandidate() {
+        val storedBaselines = listOf(336340, 1701453, 5685825, 4751513, 4016105)
+        // High error batch (e.g. 24.4 km drift)
+        val highErrorBatch = listOf(
+            UsageRecord(360386, 0),     // OFF + 24km drift
+            UsageRecord(1725641, 0),    // ECO + 24km drift
+            UsageRecord(5710513, 0),    // TOUR + 24km drift
+            UsageRecord(4775513, 0),    // SPORT + 24km drift
+            UsageRecord(4040105, 0)     // TURBO + 24km drift
+        )
+        val currentTrip = listOf(0, 0, 0, 0, 0)
+        
+        val result = BoschParser.findBestStartupMapping(highErrorBatch, currentTrip, storedBaselines)
+        assertEquals("HIGH_ERROR_REJECTED", result.status)
+        org.junit.Assert.assertNull("Mapping should be null when candidate is rejected due to high error", result.mapping)
+    }
 }
+
 
