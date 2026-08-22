@@ -40,7 +40,14 @@ local.properties
 /PROPOSAL_SESSION_DASHBOARD.md
 /venv
 /Wireshark
-/analysis
+/analysis/*
+!/analysis/hex_extractor.py
+!/analysis/hex_analyser.py
+!/analysis/README.md
 /tmp
+
+# Local agent configurations
+/.agents
+
 
 

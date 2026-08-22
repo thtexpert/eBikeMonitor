@@ -119,7 +119,8 @@ fun DashboardScreen(
             // Version Info at Bottom
             val versionText = buildString {
                 append(stringResource(R.string.text_version_format, com.example.ebikemonitor.BuildConfig.VERSION_NAME))
-                bikeStatus.ebikeLedSoftwareVersion?.let { append(stringResource(R.string.text_led_info_format, it)) }
+                bikeStatus.driveUnitSoftwareVersion?.let { append(" | DU: $it") }
+                bikeStatus.batterySoftwareVersion?.let { append(" | Bat: $it") }
             }
             Text(
                 text = versionText,
@@ -136,11 +137,15 @@ fun DashboardScreen(
 
 @Composable
 fun AllSensorsDebugCard(
+    viewModel: MainViewModel,
     bikeStatus: BikeStatus,
     isMqttConnected: Boolean,
     isBleConnected: Boolean,
     mqttConnectTime: String?
 ) {
+    val activeMac by viewModel.activeBikeMac.collectAsState()
+    val bikeProfiles by viewModel.bikeProfiles.collectAsState()
+    val activeProfile = bikeProfiles.find { it.macAddress == activeMac }
     Card(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -164,7 +169,10 @@ fun AllSensorsDebugCard(
             sensors.add(stringResource(R.string.debug_sensor_human_calories) to (bikeStatus.tripPedalEnergy?.let { "$it kcal" } ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_cadence) to (bikeStatus.cadence?.toString() ?: "--") + " rpm")
             sensors.add(stringResource(R.string.debug_sensor_charge_cycles) to (bikeStatus.chargeCycles?.toString() ?: "--"))
-            sensors.add(stringResource(R.string.debug_sensor_led_version) to (bikeStatus.ebikeLedSoftwareVersion ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_led_version) to (bikeStatus.ledRemoteSoftwareVersion ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_battery_sw_version) to (bikeStatus.batterySoftwareVersion ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_drive_unit_sw_version) to (bikeStatus.driveUnitSoftwareVersion ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_display_sw_version) to (bikeStatus.displaySoftwareVersion ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_mqtt_time) to (mqttConnectTime ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_total_hours) to (bikeStatus.driveUnitHours?.toString() ?: "--") + " h")
             
@@ -182,6 +190,50 @@ fun AllSensorsDebugCard(
             } else {
                 "--"
             })
+
+            val activeEstKcal = bikeStatus.activeEstKcal ?: 0.0
+            val activeEstError = bikeStatus.activeEstError ?: 0.0
+            val simulatedEstKcalStr = if (bikeStatus.tripPedalEnergy != null && bikeStatus.tripPedalEnergy!! > 0 && activeEstKcal > 0.0) {
+                "%.1f kcal (error: %.1f%%)".format(activeEstKcal, activeEstError)
+            } else {
+                "%.1f kcal".format(activeEstKcal)
+            }
+            sensors.add("Simulated Est. kcal" to simulatedEstKcalStr)
+            
+            sensors.add("Learned Capacity" to (activeProfile?.learnedUsableMotorCapacity?.let { "%.1f Wh".format(it) } ?: "--"))
+            sensors.add("Learned Gamma" to (activeProfile?.learnedUserEffortCoefficient?.let { "%.2f".format(it) } ?: "--"))
+            
+            val rates = activeProfile?.learnedMotorConsumptionRates
+            val ratesStr = if (rates != null && rates.size >= 5) {
+                "${"%.2f".format(rates[1])} / ${"%.2f".format(rates[2])} / ${"%.2f".format(rates[3])} / ${"%.2f".format(rates[4])} Wh/km"
+            } else {
+                "--"
+            }
+            sensors.add("Rates (E/T/S/T)" to ratesStr)
+
+            // Total human measured and estimated baselines
+            val totalMeasuredKcal = if (activeProfile != null) {
+                "%.1f kcal".format(activeProfile.totalPedalEnergyMeasuredBaseline)
+            } else {
+                "--"
+            }
+            sensors.add("Total Measured" to totalMeasuredKcal)
+
+            
+            val totalEstimatedKcal = if (activeProfile != null) {
+                "%.1f kcal".format(activeProfile.totalPedalEnergyEstimatedBaseline)
+            } else {
+                "--"
+            }
+            sensors.add("Total Estimated" to totalEstimatedKcal)
+
+            val dbEstimatedKcal = if (activeProfile != null) {
+                "%.1f kcal".format(activeProfile.totalPedalEnergyEstimatedBaseline)
+            } else {
+                "--"
+            }
+            sensors.add("Estimated Baseline (DB)" to dbEstimatedKcal)
+
 
             // Per-Mode
             val modeNames = bikeStatus.assistModeNames
@@ -250,6 +302,7 @@ fun PortraitLayout(
                     SensorRow(stringResource(R.string.sensor_name_total_distance), bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
                     SensorRow(stringResource(R.string.sensor_name_total_energy), bikeStatus.totalEnergyFromMotor?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalEnergyFromMotor != null)
                     SensorRow(stringResource(R.string.sensor_name_total_battery), bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
+                    SensorRow(stringResource(R.string.sensor_name_total_electric_energy), bikeStatus.totalElectricEnergy?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalElectricEnergy != null)
                 }
             }
 
@@ -269,6 +322,7 @@ fun PortraitLayout(
                 }
                 item {
                     AllSensorsDebugCard(
+                        viewModel = viewModel,
                         bikeStatus = bikeStatus,
                         isMqttConnected = isMqttConnected,
                         isBleConnected = isBleConnected,
@@ -310,6 +364,7 @@ fun LandscapeLayout(
                 SensorRow(stringResource(R.string.sensor_name_total_distance), bikeStatus.totalDistance?.let { "%.1f".format(it) } ?: "--", "km", Icons.Default.Route, isMqttConnected && (bikeStatus.totalDistance ?: 0.0) > 0.0)
                 SensorRow(stringResource(R.string.sensor_name_total_energy), bikeStatus.totalEnergyFromMotor?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalEnergyFromMotor != null)
                 SensorRow(stringResource(R.string.sensor_name_total_battery), bikeStatus.totalBattery?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.ElectricBike, isMqttConnected && bikeStatus.totalBattery != null)
+                SensorRow(stringResource(R.string.sensor_name_total_electric_energy), bikeStatus.totalElectricEnergy?.let { "%.3f".format(it) } ?: "--", "kWh", Icons.Default.Bolt, isMqttConnected && bikeStatus.totalElectricEnergy != null)
             }
         }
         item {
@@ -337,6 +392,7 @@ fun LandscapeLayout(
             }
             item {
                 AllSensorsDebugCard(
+                    viewModel = viewModel,
                     bikeStatus = bikeStatus,
                     isMqttConnected = isMqttConnected,
                     isBleConnected = isBleConnected,

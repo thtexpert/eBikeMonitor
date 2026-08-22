@@ -14,6 +14,12 @@ Bosch eBikes transmit usage records in a dense burst (typically 5 records within
 - **Timeout Logic**: A **2.0s timeout** is implemented. If a record arrives after a >2s gap, any partial/stale data from a previous interrupted burst is discarded.
 - **Selective Updating**: The system status is only updated with a new `totalEnergyFromMotor` value once a **complete** batch (defined by the number of assist modes) is successfully collected.
 
+### Connection Safety Timeout
+To prevent telemetry synchronization from blocking indefinitely when characteristics do not broadcast (e.g. `0xA252` when the bike is stationary), a **10-second safety timeout** is implemented.
+- If all other checklist parameters are received but `0xA252` is missing, the timeout forces synchronization completion after 10 seconds.
+- The system then falls back to Strategy A (Gap-Based Consumption Matching) to map the modes and publish initial telemetry to MQTT.
+- If the bike starts moving later and broadcasts `0xA252` packets, the late self-healing retry logic automatically re-evaluates the baselines.
+
 ## 2. Batch Validation & Accuracy
 
 Before any data is used for telemetry or per-mode mapping, the entire burst must pass two rigorous validation checks:
@@ -31,18 +37,17 @@ The `totalEnergyFromMotor` sensor in Home Assistant is derived from the sum of e
 
 Since the `0x108C` message does not contain a mode index, eBikeMonitor employs two parallel strategies to map records to their respective modes (Eco, Tour, Turbo, etc.):
 
-### Strategy A: Consumption-Based (Fallback)
-Records are sorted by their **instantaneous consumption** ($\text{Wh} / \text{meter}$). 
-- **Assumption**: Higher assist modes (Turbo) always have higher Wh/km than lower modes (Eco).
-- **Usage**: Used as a fallback when high-precision trip data is unavailable.
+### Strategy A: Gap-Based Consumption Matching (Fallback)
+Incoming raw usage records are mapped directly to last known database baseline records by checking their lifetime average consumption rates ($R_i = \text{energy} / \text{distance}$) against stored baseline rates.
+- **Neighbor Gap Tolerance**: To mathematically prevent matching overlap (ambiguity) between adjacent assist modes, tolerance windows are calculated dynamically relative to neighboring modes' rates ($G_{low}$ and $G_{high}$):
+  $$\text{Tolerance}_i = [R_i - 0.25 \times (R_i - R_{i-1}),\text{ } R_i + 0.25 \times (R_{i+1} - R_i)]$$
+- **Usage**: Invoked during forced startup decoding if delta-based matching fails (e.g. bike ridden offline and connected while stationary, causing trip baseline errors to exceed the 100m cap).
 
 ### Strategy B: Delta-Based Discovery (High Precision)
 This strategy uses the Trip Distance per Mode (`0xA252`) as a reference.
 - **Logic**: For each mode $i$, we know the Trip Distance $\Delta T_i$. We find the usage record $R_j$ whose distance delta relative to a stored baseline matches $\Delta T_i$ within a 30-meter tolerance.
 - **Benefit**: Immune to consumption fluctuations and allows for perfect mode identification even if consumption is similar across modes.
 - **Note on Discovery**: For a complete mapping, the bike must be ridden a short distance (approx. 50-100 meters) in **each assist mode**. Until a mode has moved, the system cannot mathematically "confirm" its identity through delta-matching.
-
----
 
 ## 5. New Installation & First-Run Flow
 
@@ -55,5 +60,29 @@ When eBikeMonitor is installed for the first time, it undergoes a "Discovery Rit
 3.  **Persistent Storage**: These baselines are saved in the app's encrypted internal storage.
 4.  **Session Recovery**: On all subsequent app restarts, the saved baselines are loaded. This allows the app to immediately identify modes and calculate "Current Ride" metrics even if the app was closed during the ride.
 
+## 6. Resiliency, Reset Handling & Database Guards (v1.15.2 Updates)
+
+To guarantee database integrity and prevent telemetry glitches across a variety of real-world scenarios, the system employs three robust guard mechanisms:
+
+### A. Self-Healing Database Repair
+If the local database's persistent profile references ever get corrupted, cleared, or are found to be empty upon startup, the app automatically runs a self-healing protocol on the first complete incoming BLE batch of usage records. It sorts the incoming records by consumption rate ($\text{Wh} / \text{meter}$) to mathematically reconstruct and restore the missing baselines, enabling delta discovery to continue without requiring a full manual recalibration ride.
+
+### B. Mid-Ride Trip Reset Support
+If you perform a trip reset directly on the Kiox unit mid-ride, the trip distance values reset to `0` while the master odometer continues to accumulate. To prevent telemetry from locking up or freezing, the BLE manager:
+1. Detects when current trip pedal energy or total energy drops below previously recorded values.
+2. Commits the accumulated session calories and work baseline to the database as a new offset.
+3. Synchronizes its internal session baselines and notifies the BLE manager to align starting references so that further accumulation is tracked seamlessly.
+
+### C. Transient Connection Guards & Baseline Integrity
+During short connection sessions or power cycles, the system keeps active ride references cached in the database. Instead of defaulting to `0` or blanking out when characteristics are missing, the repository pre-populates these cached values to prevent `--` layouts. 
+However, to ensure baseline alignment and offline segment estimations are calculated using fresh data, the sync completion checklist gates strictly on receiving real BLE update notifications rather than using the pre-populated database records. This avoids stale baseline mapping failures when starting references are initialized.
+
+### D. Raw Telemetry Invariance & Mid-Ride Disconnect Resiliency
+During mid-ride BLE drops, per-mode sorted usage records (`sortedUsageRecordsB`) may experience transient mapping lag if `0xA252` updates are delayed. However, the total distance sum across raw usage records (`unsortedUsageRecords.sumOf { it.distance }`) is **100% mathematically invariant to mode sorting permutations**. 
+The end-of-session calibration protocol evaluates `rawUsageSum` alongside `sortedUsageRecordsB` delta sum to prevent false positive data mismatch notifications when raw telemetry is complete. Furthermore, error notifications are suppressed during active riding (`shouldMonitor` / `speed > 0.1`) and logged to `FileLogger`, allowing startup sync to auto-reconcile seamlessly upon BLE reconnection.
+
+### E. Gap-Based Fallback & Late Self-Healing Retry
+When a bike is ridden offline and then connects while stationary (missing `0xA252` packets), forced startup decoding activates Option 3 (Gap-Based Consumption Matching). This resolves the mode mapping and estimates starting trip distances using `distance - storedBaseline` to avoid `HIGH_ERROR_REJECTED` lockups. As soon as the bike begins moving and broadcasts real `0xA252` packets, the late self-healing retry logic re-evaluates the startup decoding to replace the estimated baselines with exact high-precision baseline values, ensuring perfect synchronization alignment.
+
 ---
-*Document Version: 1.1 - April 2026*
+*Document Version: 1.4 - August 2026*

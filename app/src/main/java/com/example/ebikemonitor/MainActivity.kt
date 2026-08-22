@@ -19,6 +19,7 @@ import com.example.ebikemonitor.data.datasource.SettingsRepository
 import com.example.ebikemonitor.data.mqtt.MqttManager
 import com.example.ebikemonitor.ui.DashboardScreen
 import com.example.ebikemonitor.ui.SettingsScreen
+import com.example.ebikemonitor.ui.CalibrationScreen
 import com.example.ebikemonitor.ui.theme.EBikeMonitorTheme
 import com.example.ebikemonitor.viewmodel.MainViewModel
 import com.example.ebikemonitor.viewmodel.MainViewModelFactory
@@ -128,6 +129,13 @@ fun AppNavigation(viewModel: MainViewModel) {
         }
         composable("settings") {
             SettingsScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToCalibration = { navController.navigate("calibration") }
+            )
+        }
+        composable("calibration") {
+            CalibrationScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() }
             )

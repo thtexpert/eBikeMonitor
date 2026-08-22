@@ -78,4 +78,101 @@ class BoschParserTest {
         assertEquals(0x80BC, messages[0].messageId)
         assertEquals(85, messages[0].value)
     }
+
+    @Test
+    fun testParseBatteryTemperature() {
+        // Battery Temperature 0x808B, Value 458
+        // Type 0x08 (Varint)
+        // 458 = 0xCA, 0x03
+        val payload = byteArrayOf(
+            0x01,
+            0x05, // Length: ID(2) + Type(1) + Data(2) = 5
+            0x80.toByte(), 0x8B.toByte(),
+            0x08.toByte(),
+            0xCA.toByte(), 0x03.toByte()
+        )
+        
+        val (messages, _) = BoschParser.parse(payload)
+        assertEquals(1, messages.size)
+        assertEquals(0x808B, messages[0].messageId)
+        assertEquals(458, messages[0].value)
+    }
+
+    @Test
+    fun testParseNegativeBatteryTemperature() {
+        // Battery Temperature 0x808B, Value -100 (-5.0°C)
+        // -100 in 32-bit two's complement LEB128 is: 0x9C, 0xFF, 0xFF, 0xFF, 0x0F
+        val payload = byteArrayOf(
+            0x01,
+            0x08, // Length: ID(2) + Type(1) + Data(5) = 8
+            0x80.toByte(), 0x8B.toByte(),
+            0x08.toByte(),
+            0x9C.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x0F.toByte()
+        )
+        
+        val (messages, _) = BoschParser.parse(payload)
+        assertEquals(1, messages.size)
+        assertEquals(0x808B, messages[0].messageId)
+        assertEquals(-100, messages[0].value)
+    }
+
+    @Test
+    fun testParseRealBatteryTemperatureHex() {
+        // Battery Temperature from hex analysis: 30 05 80 8B 08 CC 02 (Value 332, 16.6°C)
+        val payload = byteArrayOf(
+            0x30.toByte(),
+            0x05.toByte(),
+            0x80.toByte(), 0x8B.toByte(),
+            0x08.toByte(),
+            0xCC.toByte(), 0x02.toByte()
+        )
+        
+        val (messages, _) = BoschParser.parse(payload)
+        assertEquals(1, messages.size)
+        assertEquals(0x808B, messages[0].messageId)
+        assertEquals(332, messages[0].value)
+    }
+
+    @Test
+    fun testParseBatteryUsableEnergyAndCapacities() {
+        // Test parsing of 0x8091 (Usable Motor Energy), 0x80B4 (Nominal Design Capacity), and 0x80D9 (Actual Usable Capacity)
+        // 1. Usable Motor Energy 0x8091. Raw value 5309 (530.9 Wh) -> Varint = 0xBD, 0x29
+        val payload8091 = byteArrayOf(
+            0x30.toByte(),
+            0x05.toByte(),
+            0x80.toByte(), 0x91.toByte(),
+            0x08.toByte(),
+            0xBD.toByte(), 0x29.toByte()
+        )
+        val (msgs8091, _) = BoschParser.parse(payload8091)
+        assertEquals(1, msgs8091.size)
+        assertEquals(0x8091, msgs8091[0].messageId)
+        assertEquals(5309, msgs8091[0].value)
+
+        // 2. Nominal Design Capacity 0x80B4. Raw value 7430 (743.0 Wh) -> Varint = 0x86, 0x3A
+        val payload80B4 = byteArrayOf(
+            0x30.toByte(),
+            0x05.toByte(),
+            0x80.toByte(), 0xB4.toByte(),
+            0x08.toByte(),
+            0x86.toByte(), 0x3A.toByte()
+        )
+        val (msgs80B4, _) = BoschParser.parse(payload80B4)
+        assertEquals(1, msgs80B4.size)
+        assertEquals(0x80B4, msgs80B4[0].messageId)
+        assertEquals(7430, msgs80B4[0].value)
+
+        // 3. Actual Usable Capacity 0x80D9. Raw value 7130 (713.0 Wh) -> Varint = 0xDA, 0x37
+        val payload80D9 = byteArrayOf(
+            0x30.toByte(),
+            0x05.toByte(),
+            0x80.toByte(), 0xD9.toByte(),
+            0x08.toByte(),
+            0xDA.toByte(), 0x37.toByte()
+        )
+        val (msgs80D9, _) = BoschParser.parse(payload80D9)
+        assertEquals(1, msgs80D9.size)
+        assertEquals(0x80D9, msgs80D9[0].messageId)
+        assertEquals(7130, msgs80D9[0].value)
+    }
 }

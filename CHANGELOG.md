@@ -2,6 +2,32 @@
 
 All notable changes to the **eBikeMonitor** project will be documented in this file.
 
+## [1.15.2] - 2026-08-22
+### Added
+- **BLE Status Topic (`blestatus`)**: Published BLE connection status (`connected`/`disconnected`) to the `ebikemonitor/<device_id>/blestatus` topic in real-time.
+- **Dynamic Calibration Loop (Self-Learning)**: Automatically refines battery Usable Capacity (Wh) during SoC drops, calculates average Wh/km consumption rates per assist mode, and calibrates the effort coefficient (Gamma) based on physical work.
+- **PowerTube Battery Diagnostics**: Integrated detailed battery health telemetry including Actual Usable Capacity (SOH), Nominal Capacity, Usable Energy Remaining, Temperature, and a binary Charging State sensor.
+- **Remaining Mode Ranges**: Publishes dynamic remaining battery range in km (`0x9857`) for each active assist mode to MQTT.
+- **Trip Performance Dynamics**: Added trip diagnostics to MQTT including average/maximum speeds, cadences, human power outputs, trip total mechanical energy, and human contribution split percentage.
+- **Monotonicity Guard**: Prevents cumulative energy and calorie sensors from experiencing downward steps in Home Assistant due to reconnection delays or database baseline latency.
+- **Human Energy Estimator**: Real-time integration of rider human pedal energy (measured via BLE when online, and automatically estimated based on Usable Motor Capacity, assist mode ranges, and effort coefficient when offline).
+- **Offline Ride Recovery**: Automatically detects offline segments by comparing odometer increments when reconnecting, calculates the unmonitored distance, and injects the estimated calorie metrics seamlessly into Home Assistant.
+- **Self-Healing Database Repair**: If database profile records ever get corrupted or wiped, the app automatically repairs them from the first complete incoming BLE batch using consumption-rate sorting.
+- **Mid-Ride Reset Support**: Automatically detects Kiox trip resets mid-ride, propagates the reset to realign BLE manager session baselines, and prevents per-mode telemetry updates from freezing.
+- **Total Electric Energy (`0x80B0`)**: Decoded and integrated lifetime electrical energy throughput (in kWh) from the battery BMS.
+- **Total Mechanical Energy (`0x809C`)**: Renamed the friendly sensor names in Home Assistant from `"Total Battery"` / `"Total Energy Used"` to `"Total Mechanical Energy"` to clearly distinguish mechanical crankshaft work from electrical cell throughput.
+- **Home Assistant Discovery Version Bump**: Incremented both bike and battery discovery versions (to 6 and 5 respectively) to trigger automatic entities update on dashboard reload.
+
+### Fixed
+- **Database Baseline Corruption**: Implemented repository guards to prevent transient connections (stationary power cycles with missing Kiox characteristics) from overwriting valid database references with empty lists.
+- **Calibration Safe Fallbacks**: Uses database-stored active ride metrics instead of defaulting to `0` during short sessions, preventing negative calorie outputs on disconnect.
+
+### Rider Guide: Resetting Kiox Trip Data
+To maintain clean baseline synchronization with Home Assistant:
+*   **Stationary Resets (Best Practice)**: Reset your trip distance **directly on the Kiox unit** while the bike is turned on.
+*   **Post-Offline Rides**: After riding offline (without the phone connected), the Kiox unit will keep its trip data hidden until it registers movement. **Roll/move the bike slightly at startup** to wake up the Kiox BLE broadcast; the app will immediately complete its sync and reconcile the offline distance.
+*   **Avoid Resetting via App**: Resetting the trip via the Bosch Flow App while the eBikeMonitor service is connected can cause brief data inconsistencies due to app notification conflicts. Direct Kiox reset is always preferred.
+
 ## [1.15.1] - 2026-06-17
 ### Added
 - **Hardware Connection Trigger**: Fast startup feature that directly listens to Android's low-level Bluetooth events (`ACTION_ACL_CONNECTED`), instantly starting the app ~250ms *before* the Bosch Flow app even posts a notification. Configurable in Settings → Automation.

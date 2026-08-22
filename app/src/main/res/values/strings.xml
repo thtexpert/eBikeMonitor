@@ -50,7 +50,8 @@
     <string name="sensor_name_soc">SoC</string>
     <string name="sensor_name_total_distance">Total Distance</string>
     <string name="sensor_name_total_energy">Total Energy</string>
-    <string name="sensor_name_total_battery">Total Battery</string>
+    <string name="sensor_name_total_battery">Total Mechanical Energy</string>
+    <string name="sensor_name_total_electric_energy">Total Electric Energy</string>
     
     <!-- Action Button Labels -->
     <string name="btn_mqtt">MQTT</string>
@@ -76,7 +77,10 @@
     <string name="debug_sensor_human_calories">Trip Pedal Energy (kcal)</string>
     <string name="debug_sensor_cadence">Cadence</string>
     <string name="debug_sensor_charge_cycles">Charge Cycles</string>
-    <string name="debug_sensor_led_version">eBike LED Software Version</string>
+    <string name="debug_sensor_led_version">LED Remote Software Version</string>
+    <string name="debug_sensor_battery_sw_version">Battery Software Version</string>
+    <string name="debug_sensor_drive_unit_sw_version">Drive Unit Software Version</string>
+    <string name="debug_sensor_display_sw_version">Display Software Version</string>
     <string name="debug_sensor_mqtt_time">last MQTT Connect Time</string>
     <string name="debug_sensor_total_hours">Total Hours</string>
     <string name="debug_header_delta_discovery">V-B: Delta Discovery</string>
@@ -85,4 +89,11 @@
     <string name="debug_text_trip_missing">TRIP MISSING</string>
     <string name="debug_header_unsorted_incoming">Debug: Unsorted Incoming (%1$d/%2$d)</string>
     <string name="debug_text_pending">[Pending]</string>
+    <!-- Sync Notification Strings -->
+    <string name="notification_error_channel_name">eBike Sync Errors</string>
+    <string name="notification_error_channel_description">Alerts for unsuccessful or incorrect MQTT sync data</string>
+    <string name="notification_mqtt_sync_unsuccessful_title">MQTT Sync Unsuccessful</string>
+    <string name="notification_mqtt_sync_unsuccessful_message">Home sync window expired without connecting to MQTT broker.</string>
+    <string name="notification_mqtt_sync_data_warning_title">Ride Telemetry Notice</string>
+    <string name="notification_mqtt_sync_data_warning_message">Incomplete telemetry recorded for segment (%1$.2f km vs %2$.2f km). Data will auto-reconcile on next ride.</string>
 </resources>

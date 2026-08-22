@@ -12,9 +12,11 @@ import android.os.Looper
 import android.util.Log
 import com.example.ebikemonitor.data.model.BikeStatus
 import com.example.ebikemonitor.data.model.UsageRecord
+import com.example.ebikemonitor.data.model.BikeProfile
 import com.example.ebikemonitor.data.parser.BoschParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
 import com.example.ebikemonitor.FileLogger
 
@@ -39,7 +41,55 @@ class BleManager(private val context: Context) {
     private val _bikeStatus = MutableStateFlow(BikeStatus())
     val bikeStatus = _bikeStatus.asStateFlow()
 
+    private var rawTotalElectricEnergy: Double? = null
+    private var rawChargeCycles: Double? = null
+    private var batteryProfilesList = emptyList<com.example.ebikemonitor.data.model.BatteryProfile>()
+    
+    // Real BLE update flags for startup sync checklist gating
+    var hasReceivedRealOdo = false
+    var hasReceivedRealUsageRecords = false
+    var hasReceivedRealA252 = false
+    var hasReceivedRealPedalEnergy = false
+    var hasReceivedRealTripTotalEnergy = false
+
+    fun resetRealFlags() {
+        hasReceivedRealOdo = false
+        hasReceivedRealUsageRecords = false
+        hasReceivedRealA252 = false
+        hasReceivedRealPedalEnergy = false
+        hasReceivedRealTripTotalEnergy = false
+        Log.d("BleManager", "Resetting real BLE update flags on connection state change.")
+    }
+
+    init {
+        val app = context.applicationContext as com.example.ebikemonitor.EBikeApplication
+        app.applicationScope.launch {
+            app.settingsRepository.batteryProfiles.collect { profiles ->
+                batteryProfilesList = profiles
+                _bikeStatus.value = applyBatteryOffsets(_bikeStatus.value)
+            }
+        }
+    }
+
+    private fun applyBatteryOffsets(status: BikeStatus): BikeStatus {
+        val serial = status.batterySerialNumber ?: return status
+        val profile = batteryProfilesList.find { it.hardwareSerial == serial } ?: return status
+        
+        var updated = status.copy(
+            rawTotalElectricEnergy = rawTotalElectricEnergy,
+            rawChargeCycles = rawChargeCycles
+        )
+        if (rawTotalElectricEnergy != null) {
+            updated = updated.copy(totalElectricEnergy = rawTotalElectricEnergy!! + profile.totalElectricEnergyOffset)
+        }
+        if (rawChargeCycles != null) {
+            updated = updated.copy(chargeCycles = rawChargeCycles!! + profile.chargeCyclesOffset)
+        }
+        return updated
+    }
+
     private val unsortedModeUsageList = mutableListOf<UsageRecord>()
+    private val lastLoggedDiagnosticValues = mutableMapOf<Int, Int>()
     private var lastUsageRecordTimestamp: Long = 0L
     private val BURST_TIMEOUT_MS = 2000L
     private val DISCOVERY_INTERVAL_MS = 150L
@@ -72,6 +122,8 @@ class BleManager(private val context: Context) {
                 _isConnected.value = false
                 gatt.close()
                 bluetoothGatt = null
+                lastLoggedDiagnosticValues.clear()
+                resetRealFlags()
                 return
             }
 
@@ -84,6 +136,8 @@ class BleManager(private val context: Context) {
                 _isConnected.value = false
                 gatt.close()
                 bluetoothGatt = null
+                lastLoggedDiagnosticValues.clear()
+                resetRealFlags()
             }
         }
 
@@ -138,7 +192,42 @@ class BleManager(private val context: Context) {
         var currentStatus = _bikeStatus.value
         
         for (msg in messages) {
+            if (msg.messageId in listOf(0x808A, 0x80C4, 0x808E, 0x808B, 0x8091, 0x8092, 0x809C, 0x80B0)) {
+                val lastVal = lastLoggedDiagnosticValues[msg.messageId]
+                if (lastVal != msg.value) {
+                    lastLoggedDiagnosticValues[msg.messageId] = msg.value
+                    val desc = when (msg.messageId) {
+                        0x808A -> "Charging Active (0x808A)"
+                        0x80C4 -> "Charger Connected (0x80C4)"
+                        0x808E -> "Battery State (0x808E)"
+                        0x808B -> "Battery Temperature (0x808B)"
+                        0x8091 -> "Usable Motor Energy (0x8091)"
+                        0x8092 -> "Total Battery Energy (0x8092)"
+                        0x809C -> "Lifetime Discharged Energy (0x809C)"
+                        0x80B0 -> "Total Electric Energy (0x80B0)"
+                        else -> "Unknown"
+                    }
+                    Log.d("BleManager", "[DIAGNOSTIC] $desc = ${msg.value}")
+                }
+            }
+
             when (msg.messageId) {
+                0x808E -> currentStatus = currentStatus.copy(isCharging = msg.value == 12)
+                0x808A -> {
+                    if (msg.value == 1) {
+                        currentStatus = currentStatus.copy(isCharging = true)
+                    }
+                }
+                0x80C4 -> {
+                    if (msg.value == 1) {
+                        currentStatus = currentStatus.copy(isCharging = true)
+                    }
+                }
+                0x808B -> {
+                    val rawTemp = msg.value
+                    val correctedTemp = if (rawTemp > 32767) (rawTemp - 65536) else rawTemp
+                    currentStatus = currentStatus.copy(batteryTemperature = correctedTemp / 20.0)
+                }
                 0x982D -> {
                     val speed = msg.value / 100.0
                     currentStatus = currentStatus.copy(speed = speed)
@@ -161,13 +250,37 @@ class BleManager(private val context: Context) {
                 }
                 0x80BC -> currentStatus = currentStatus.copy(batteryLevel = msg.value)
                 0x9809 -> currentStatus = currentStatus.copy(assistMode = msg.value)
-                0x9818 -> currentStatus = currentStatus.copy(totalDistance = msg.value / 1000.0)
-                0x8096 -> currentStatus = currentStatus.copy(chargeCycles = msg.value / 10.0)
+                0x9818 -> {
+                    val odo = msg.value / 1000.0
+                    currentStatus = currentStatus.copy(totalDistance = odo)
+                    hasReceivedRealOdo = true
+                    Log.d("BleManager", "Raw Odometer received: ${"%.3f".format(odo)} km (raw: ${msg.value})")
+                }
+                0x8096 -> {
+                    rawChargeCycles = msg.value / 10.0
+                    currentStatus = applyBatteryOffsets(currentStatus)
+                }
+                0x8091 -> {
+                    val usableEnergy = msg.value / 10.0
+                    currentStatus = currentStatus.copy(usableEnergyRemaining = usableEnergy)
+                    Log.d("BleManager", "Usable motor energy update: $usableEnergy Wh")
+                }
+                0x80B4 -> {
+                    val nominalCap = msg.value / 10.0
+                    currentStatus = currentStatus.copy(nominalCapacity = nominalCap)
+                    Log.d("BleManager", "Nominal capacity update: $nominalCap Wh")
+                }
+                0x80D9 -> {
+                    val usableCap = msg.value / 10.0
+                    currentStatus = currentStatus.copy(usableCapacity = usableCap)
+                    Log.d("BleManager", "Actual usable capacity update: $usableCap Wh")
+                }
                 0xA243 -> {
                     currentStatus = currentStatus.copy(
                         humanCalories = msg.value / 10.0,
                         tripTotalEnergy = msg.value * 0.05
                     )
+                    hasReceivedRealTripTotalEnergy = true
                 }
                 0xA246 -> currentStatus = currentStatus.copy(tripSpeed = msg.value / 100.0)
                 0xA247 -> currentStatus = currentStatus.copy(tripMaxSpeed = msg.value / 100.0)
@@ -177,6 +290,7 @@ class BleManager(private val context: Context) {
                 0xA24B -> currentStatus = currentStatus.copy(tripMaxHumanPower = msg.value)
                 0xA251 -> {
                     currentStatus = currentStatus.copy(tripPedalEnergy = msg.value)
+                    hasReceivedRealPedalEnergy = true
                     Log.d("BleManager", "Trip Pedal Energy updated: ${msg.value} kcal")
                 }
                 0xA254 -> {
@@ -192,18 +306,75 @@ class BleManager(private val context: Context) {
                 }
                 0x9819 -> currentStatus = currentStatus.copy(driveUnitHours = msg.value)
                 0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
+                0x80B0 -> {
+                    rawTotalElectricEnergy = msg.value * 0.1
+                    currentStatus = applyBatteryOffsets(currentStatus)
+                }
                 0x206B -> {
-                    val softwareVersion = msg.decodeStringField()
+                    val rawVersion = msg.decodeStringField()
+                    val softwareVersion = com.example.ebikemonitor.data.parser.BoschParser.formatSoftwareVersion(rawVersion)
                     if (softwareVersion != null) {
-                        currentStatus = currentStatus.copy(ebikeLedSoftwareVersion = softwareVersion)
-                        Log.d("BleManager", "LED Software Version decoded: $softwareVersion")
-                        com.example.ebikemonitor.FileLogger.log("BleManager: LED Software Version decoded: $softwareVersion")
+                        currentStatus = currentStatus.copy(ledRemoteSoftwareVersion = softwareVersion)
+                        Log.d("BleManager", "LED Remote Software Version decoded: $softwareVersion (raw: $rawVersion)")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: LED Remote Software Version decoded: $softwareVersion")
+                    }
+                }
+                0x0086 -> {
+                    val rawVersion = msg.decodeStringField()
+                    val softwareVersion = com.example.ebikemonitor.data.parser.BoschParser.formatSoftwareVersion(rawVersion)
+                    if (softwareVersion != null) {
+                        currentStatus = currentStatus.copy(batterySoftwareVersion = softwareVersion)
+                        Log.d("BleManager", "Battery Software Version decoded: $softwareVersion (raw: $rawVersion)")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Battery Software Version decoded: $softwareVersion")
+                    }
+                }
+                0x1806 -> {
+                    val rawVersion = msg.decodeStringField()
+                    val softwareVersion = com.example.ebikemonitor.data.parser.BoschParser.formatSoftwareVersion(rawVersion)
+                    if (softwareVersion != null) {
+                        currentStatus = currentStatus.copy(driveUnitSoftwareVersion = softwareVersion)
+                        Log.d("BleManager", "Drive Unit Software Version decoded: $softwareVersion (raw: $rawVersion)")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Drive Unit Software Version decoded: $softwareVersion")
+                    }
+                }
+                0x0D06 -> {
+                    val rawVersion = msg.decodeStringField()
+                    val softwareVersion = com.example.ebikemonitor.data.parser.BoschParser.formatSoftwareVersion(rawVersion)
+                    if (softwareVersion != null) {
+                        currentStatus = currentStatus.copy(displaySoftwareVersion = softwareVersion)
+                        Log.d("BleManager", "Display Software Version decoded: $softwareVersion (raw: $rawVersion)")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Display Software Version decoded: $softwareVersion")
+                    }
+                }
+                0x182E -> {
+                    val model = msg.decodeStringField()
+                    if (model != null) {
+                        currentStatus = currentStatus.copy(driveUnitModel = model)
+                        Log.d("BleManager", "Drive Unit Model decoded: $model")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Drive Unit Model decoded: $model")
+                    }
+                }
+                0x1803 -> {
+                    val code = msg.decodeStringField()
+                    if (code != null) {
+                        currentStatus = currentStatus.copy(driveUnitProductCode = code)
+                        Log.d("BleManager", "Drive Unit Product Code decoded: $code")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Drive Unit Product Code decoded: $code")
+                    }
+                }
+                0x0083 -> {
+                    val partNum = msg.decodeStringField()
+                    if (partNum != null) {
+                        currentStatus = currentStatus.copy(batteryPartNumber = partNum)
+                        Log.d("BleManager", "Battery Part Number decoded: $partNum")
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Battery Part Number decoded: $partNum")
                     }
                 }
                 0x0081 -> {
                     val batterySerial = msg.decodeStringField()
                     if (batterySerial != null) {
                         currentStatus = currentStatus.copy(batterySerialNumber = batterySerial)
+                        currentStatus = applyBatteryOffsets(currentStatus)
                         Log.d("BleManager", "Battery Serial decoded: ${currentStatus.batterySerialNumber}")
                     }
                 }
@@ -223,8 +394,64 @@ class BleManager(private val context: Context) {
                 0xA252 -> {
                     val tripDists = msg.decodeTripDistPerMode()
                     if (tripDists != null) {
+                        hasReceivedRealA252 = true
                         currentStatus = currentStatus.copy(tripDistPerMode = tripDists)
                         Log.d("BleManager", "Trip distances updated: $tripDists")
+                        
+                        // Retry Startup Decoding if it was previously deferred OR if startup status was a fallback
+                        val expectedCount = currentStatus.assistModeNames.size
+                        val needsDecoding = currentStatus.initialTripDistPerMode == null || 
+                                           currentStatus.startupDecodingStatus?.contains("FALLBACK") == true
+                        if (needsDecoding && 
+                            currentStatus.persistentBaselines != null && 
+                            unsortedModeUsageList.size == expectedCount && 
+                            expectedCount > 0) {
+                            
+                            val result = BoschParser.findBestStartupMapping(
+                                newBatch = unsortedModeUsageList,
+                                currentTrip = tripDists,
+                                storedBaselines = currentStatus.persistentBaselines!!
+                            )
+                            
+                            currentStatus = currentStatus.copy(
+                                startupDecodingStatus = result.status,
+                                startupError = result.bestError,
+                                startupSecondaryError = result.secondaryError
+                            )
+
+                            if (result.mapping != null) {
+                                Log.d("BleManager", "Version B: Startup decoding successful (${result.status}) via late A252! Initializing baseline from storage. Error: ${result.bestError}")
+                                com.example.ebikemonitor.FileLogger.log("BleManager: Startup decoding successful (${result.status}) via late A252! Error: ${result.bestError}")
+                                
+                                val newSortedRecords = ArrayList<UsageRecord?>(List(currentStatus.persistentBaselines!!.size) { null })
+                                result.mapping.forEach { (modeIdx, batchIdx) ->
+                                    newSortedRecords[modeIdx] = unsortedModeUsageList[batchIdx]
+                                }
+
+                                currentStatus = currentStatus.copy(
+                                    initialTripDistPerMode = tripDists.toList(),
+                                    initialUnsortedUsageRecords = unsortedModeUsageList.toList(),
+                                    modeToInitialIndex = result.mapping,
+                                    confirmedModeIndices = result.mapping.keys,
+                                    sortedUsageRecordsB = newSortedRecords
+                                )
+                                hasReceivedRealUsageRecords = true
+                                
+                                // Also trigger Version B update with discovery
+                                val resultB = BoschParser.processVersionBWithDiscovery(unsortedModeUsageList, currentStatus)
+                                if (resultB != null) {
+                                    val (sortedB, confirmed, mapping) = resultB
+                                    currentStatus = currentStatus.copy(
+                                        sortedUsageRecordsB = sortedB,
+                                        confirmedModeIndices = confirmed,
+                                        modeToInitialIndex = mapping
+                                    )
+                                    Log.d("BleManager", "Version B Late Update: Confirmed = $confirmed, Mappings = $mapping")
+                                }
+                            } else {
+                                Log.w("BleManager", "Version B: Startup decoding ritual did not succeed via late A252: ${result.status}")
+                            }
+                        }
                     }
                 }
                 0x108C -> {
@@ -269,7 +496,13 @@ class BleManager(private val context: Context) {
                             }
                             
                             if (unsortedModeUsageList.size == expectedCount) {
-                            Log.d("BleManager", "Batch of $expectedCount usage records complete: $unsortedModeUsageList")
+                             Log.d("BleManager", "Batch of $expectedCount usage records complete: $unsortedModeUsageList")
+                             val sumDist = unsortedModeUsageList.sumOf { it.distance.toDouble() } / 1000.0
+                             val sumEnergy = sumKWh ?: 0.0
+                             val modesDetail = unsortedModeUsageList.mapIndexed { idx, record ->
+                                 "Mode$idx: ${"%.3f".format(record.distance / 1000.0)} km"
+                             }.joinToString(", ")
+                             com.example.ebikemonitor.FileLogger.log("BleManager: Raw Usage Batch complete: SumDist = ${"%.3f".format(sumDist)} km ($modesDetail), SumEnergy = ${"%.3f".format(sumEnergy)} kWh, Valid = $batchValid, BikeOdo = ${currentStatus.totalDistance} km")
                             
                             // 1. Startup Decoding Ritual (Persistent Storage)
                             if (currentStatus.initialTripDistPerMode == null && currentStatus.persistentBaselines != null) {
@@ -304,6 +537,7 @@ class BleManager(private val context: Context) {
                                             confirmedModeIndices = result.mapping.keys,
                                             sortedUsageRecordsB = newSortedRecords
                                         )
+                                        hasReceivedRealUsageRecords = true
                                     } else {
                                         Log.w("BleManager", "Version B: Startup decoding ritual did not succeed: ${result.status}")
                                     }
@@ -313,7 +547,7 @@ class BleManager(private val context: Context) {
                             }
 
                             // 2. Normal Capture/Fallback: Session baseline if still not established
-                            if (currentStatus.initialTripDistPerMode == null && currentStatus.tripDistPerMode.size == expectedCount) {
+                            if (currentStatus.initialTripDistPerMode == null && hasReceivedRealA252 && currentStatus.tripDistPerMode.size == expectedCount) {
                                 Log.d("BleManager", "Version B: Capturing initial trip baseline.")
                                 currentStatus = currentStatus.copy(
                                     initialTripDistPerMode = currentStatus.tripDistPerMode.toList(),
@@ -432,7 +666,11 @@ class BleManager(private val context: Context) {
         bluetoothGatt?.close()
         bluetoothGatt = null
         _isConnected.value = false
-        
+        lastLoggedDiagnosticValues.clear()
+    }
+
+    fun clearTelemetryCache() {
+        hasReceivedRealA252 = false
         // Clear session tracking variables so the next connection starts fresh
         _bikeStatus.value = _bikeStatus.value.copy(
             initialTripDistPerMode = null,
@@ -444,8 +682,22 @@ class BleManager(private val context: Context) {
             startupSecondaryError = null,
             prevTripDistPerMode = null,
             prevUnsortedUsageRecords = null,
-            lastUpdateTimestamp = 0L
+            lastUpdateTimestamp = 0L,
+            // Clear telemetry cache to avoid corrupting next session startup decoding
+            tripDistPerMode = emptyList(),
+            sortedUsageRecordsB = emptyList(),
+            sortedUsageRecordsA = emptyList(),
+            unsortedUsageRecords = emptyList(),
+            totalDistance = null,
+            tripPedalEnergy = null,
+            tripTotalEnergy = null,
+            batteryLevel = null,
+            totalBattery = null,
+            remainingRanges = emptyList(),
+            persistentBaselines = null
         )
+        unsortedModeUsageList.clear()
+        lastLoggedDiagnosticValues.clear()
     }
 
     fun isBluetoothEnabled(): Boolean {
@@ -462,6 +714,199 @@ class BleManager(private val context: Context) {
         if (_bikeStatus.value.persistentBaselines == null) {
             _bikeStatus.value = _bikeStatus.value.copy(persistentBaselines = baselines)
             Log.d("BleManager", "Persistent baselines loaded: $baselines")
+        }
     }
+
+    fun prePopulateFromProfile(profile: BikeProfile) {
+        val currentStatus = _bikeStatus.value
+        val expectedCount = profile.lastUsageRecords.size
+        
+        // Calculate persistent baselines from usage history
+        val baselines = if (profile.lastUsageRecords.isNotEmpty()) {
+            profile.lastUsageRecords.mapIndexed { i, usage ->
+                val trip = profile.lastTripDistPerMode.getOrNull(i) ?: 0
+                (usage?.distance ?: 0) - trip
+            }
+        } else {
+            null
+        }
+
+        val hasValidUsage = profile.lastUsageRecords.isNotEmpty() && profile.lastUsageRecords.all { it != null }
+        
+        _bikeStatus.value = currentStatus.copy(
+            totalDistance = if (currentStatus.totalDistance == null || currentStatus.totalDistance == 0.0) profile.lastOdometer else currentStatus.totalDistance,
+            tripPedalEnergy = currentStatus.tripPedalEnergy,
+            tripTotalEnergy = currentStatus.tripTotalEnergy,
+            totalBattery = if (currentStatus.totalBattery == null) profile.lastTotalMotorEnergy else currentStatus.totalBattery,
+            tripDistPerMode = if (currentStatus.tripDistPerMode.isEmpty()) profile.lastTripDistPerMode else currentStatus.tripDistPerMode,
+            sortedUsageRecordsB = if (currentStatus.sortedUsageRecordsB.isEmpty() && hasValidUsage) profile.lastUsageRecords.toList() else currentStatus.sortedUsageRecordsB,
+            persistentBaselines = baselines,
+            // Do not pre-populate confirmed indices or mappings with static identity maps (0->0, 1->1...),
+            // as BLE bursts arrive in arbitrary sequence on every new connection.
+            // Leave confirmedModeIndices and modeToInitialIndex empty until Startup Decoding or dynamic discovery resolves them.
+            confirmedModeIndices = currentStatus.confirmedModeIndices,
+            modeToInitialIndex = currentStatus.modeToInitialIndex
+        )
+        Log.d("BleManager", "Pre-populated BLE status from profile: totalDistance=${_bikeStatus.value.totalDistance}, tripPedal=${_bikeStatus.value.tripPedalEnergy}, persistentBaselines=${_bikeStatus.value.persistentBaselines}")
     }
+
+    fun forceStartupDecodingWithFallback(fallbackTripDists: List<Int>): Boolean {
+        var statusCopy = _bikeStatus.value
+        val expectedCount = statusCopy.assistModeNames.size
+        if (expectedCount == 0 || statusCopy.unsortedUsageRecords.size != expectedCount || statusCopy.persistentBaselines == null) {
+            return false
+        }
+        
+        // Try Option 1: Assuming trip was NOT reset (use fallbackTripDists)
+        val result1 = com.example.ebikemonitor.data.parser.BoschParser.findBestStartupMapping(
+            newBatch = statusCopy.unsortedUsageRecords,
+            currentTrip = fallbackTripDists,
+            storedBaselines = statusCopy.persistentBaselines!!
+        )
+        
+        // Try Option 2: Assuming trip WAS reset (use zeros)
+        val result2 = com.example.ebikemonitor.data.parser.BoschParser.findBestStartupMapping(
+            newBatch = statusCopy.unsortedUsageRecords,
+            currentTrip = List(expectedCount) { 0 },
+            storedBaselines = statusCopy.persistentBaselines!!
+        )
+        
+        var result = result1
+        var finalTripDists = fallbackTripDists
+        
+        if (result1.mapping != null) {
+            result = result1
+            finalTripDists = fallbackTripDists
+        } else if (result2.mapping != null) {
+            result = result2
+            finalTripDists = List(expectedCount) { 0 }
+        } else {
+            com.example.ebikemonitor.FileLogger.log("BleManager: Delta-based options failed. Option 1 (No Reset) error: ${result1.bestError}m, status: ${result1.status}. Option 2 (Reset) error: ${result2.bestError}m, status: ${result2.status}.")
+            
+            // Try Option 3: Gap-Based Consumption-Rate Matching (Plan B Fallback)
+            val lastRecords = statusCopy.sortedUsageRecordsB
+            val hasValidLastRecords = lastRecords.size == expectedCount && lastRecords.all { it != null && it.distance > 0 }
+            if (hasValidLastRecords) {
+                // Calculate baseline rates (Wh/meter)
+                val baselineRates = lastRecords.map { it!!.energy.toDouble() / it.distance }
+                
+                // Check if baseline rates are sorted monotonically (OFF < ECO < TOUR+ < SPORT < TURBO)
+                var sorted = true
+                for (i in 0 until expectedCount - 1) {
+                    if (baselineRates[i] >= baselineRates[i + 1]) {
+                        sorted = false
+                        break
+                    }
+                }
+                
+                if (sorted) {
+                    val mapping = mutableMapOf<Int, Int>()
+                    val unmatchedRecordIndices = (0 until expectedCount).toMutableSet()
+                    
+                    for (modeIdx in 0 until expectedCount) {
+                        val lastRate = baselineRates[modeIdx]
+                        
+                        // Calculate lower and upper gaps to neighboring modes
+                        val gLow = if (modeIdx > 0) lastRate - baselineRates[modeIdx - 1] else 0.001
+                        val gHigh = if (modeIdx < expectedCount - 1) baselineRates[modeIdx + 1] - lastRate else 0.01
+                        
+                        val lowerBound = maxOf(0.0, lastRate - 0.25 * gLow)
+                        val upperBound = lastRate + 0.25 * gHigh
+                        
+                        // Find a matching record in the incoming unsorted list
+                        val matchingIdx = unmatchedRecordIndices.find { recIdx ->
+                            val record = statusCopy.unsortedUsageRecords[recIdx]
+                            if (record.distance <= 0) return@find false
+                            val currentRate = record.energy.toDouble() / record.distance
+                            currentRate >= lowerBound && currentRate <= upperBound
+                        }
+                        
+                        if (matchingIdx != null) {
+                            mapping[modeIdx] = matchingIdx
+                            unmatchedRecordIndices.remove(matchingIdx)
+                        } else {
+                            // If any mode fails to find a match, abort
+                            break
+                        }
+                    }
+                    
+                    if (mapping.size == expectedCount) {
+                        // Reconstruct/estimate trip distances based on the resolved mapping
+                        val estimatedTripDists = List(expectedCount) { modeIdx ->
+                            val recordIdx = mapping[modeIdx]!!
+                            val record = statusCopy.unsortedUsageRecords[recordIdx]
+                            val storedBaseline = statusCopy.persistentBaselines!![modeIdx]
+                            maxOf(0, (record.distance - storedBaseline).toInt())
+                        }
+                        
+                        result = com.example.ebikemonitor.data.parser.BoschParser.StartupDecodingResult(
+                            mapping = mapping,
+                            status = "CONSUMPTION",
+                            bestError = 0L
+                        )
+                        finalTripDists = estimatedTripDists
+                    } else {
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Fallback Option 3 (Gap-Based Consumption) failed - incomplete mapping resolved: $mapping")
+                    }
+                } else {
+                    com.example.ebikemonitor.FileLogger.log("BleManager: Fallback Option 3 aborted - baseline rates not monotonically sorted: $baselineRates")
+                }
+            } else {
+                com.example.ebikemonitor.FileLogger.log("BleManager: Fallback Option 3 aborted - invalid or empty last baseline usage records: $lastRecords")
+            }
+        }
+        
+        val mapping = result.mapping
+        if (mapping != null) {
+            val newSortedRecords = ArrayList<com.example.ebikemonitor.data.model.UsageRecord?>(List(expectedCount) { null })
+            mapping.forEach { (modeIdx, batchIdx) ->
+                newSortedRecords[modeIdx] = statusCopy.unsortedUsageRecords[batchIdx]
+            }
+            
+            _bikeStatus.value = statusCopy.copy(
+                startupDecodingStatus = result.status + "_FALLBACK",
+                startupError = result.bestError,
+                startupSecondaryError = result.secondaryError,
+                initialTripDistPerMode = finalTripDists.toList(),
+                tripDistPerMode = finalTripDists.toList(),
+                initialUnsortedUsageRecords = statusCopy.unsortedUsageRecords.toList(),
+                modeToInitialIndex = mapping,
+                confirmedModeIndices = mapping.keys,
+                sortedUsageRecordsB = newSortedRecords
+            )
+            hasReceivedRealA252 = true
+            hasReceivedRealUsageRecords = true
+            com.example.ebikemonitor.FileLogger.log("BleManager: Forced startup decoding successful with fallback! Status: ${result.status}_FALLBACK, Error: ${result.bestError}")
+            return true
+        } else {
+            com.example.ebikemonitor.FileLogger.log("BleManager: Forced startup decoding failed to resolve a mapping with fallback.")
+            return false
+        }
+    }
+
+    fun handleMidRideReset(newTripDists: List<Int>, sortedUsageRecords: List<UsageRecord?>) {
+        val expectedCount = _bikeStatus.value.assistModeNames.size
+        if (sortedUsageRecords.size == expectedCount && sortedUsageRecords.all { it != null }) {
+            val newBaselines = sortedUsageRecords.map { it!!.distance }
+            val newMapping = BoschParser.reconstructModeMapping(sortedUsageRecords, _bikeStatus.value.unsortedUsageRecords)
+            _bikeStatus.value = _bikeStatus.value.copy(
+                persistentBaselines = newBaselines,
+                initialTripDistPerMode = newTripDists.toList(),
+                initialUnsortedUsageRecords = _bikeStatus.value.unsortedUsageRecords.toList(),
+                tripDistPerMode = newTripDists.toList(),
+                modeToInitialIndex = newMapping,
+                confirmedModeIndices = newMapping.keys
+            )
+            hasReceivedRealA252 = true
+            Log.d("BleManager", "Version B: Mid-ride reset handled. New baselines: $newBaselines, mapping: $newMapping")
+        }
+    }
+
+    fun updateEstimatedCalories(estKcal: Double?, errorPct: Double?) {
+        _bikeStatus.value = _bikeStatus.value.copy(
+            activeEstKcal = estKcal,
+            activeEstError = errorPct
+        )
+    }
+
 }

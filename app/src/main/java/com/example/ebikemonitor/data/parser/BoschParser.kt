@@ -139,6 +139,20 @@ data class BoschMessage(
 object BoschParser {
     private const val TAG = "BoschParser"
 
+    fun formatSoftwareVersion(rawVersion: String?): String? {
+        if (rawVersion == null) return null
+        val parts = rawVersion.split(".")
+        if (parts.size < 2) return rawVersion
+        val last = parts.last()
+        if (last.length == 2 && last.all { it.isDigit() }) {
+            val truncatedLast = last.take(1)
+            val prefix = parts.dropLast(1).joinToString(".")
+            return "$prefix.$truncatedLast"
+        }
+        return rawVersion
+    }
+
+
     fun parse(bytes: ByteArray): Pair<List<BoschMessage>, Int> {
         val messages = mutableListOf<BoschMessage>()
         var index = 0
@@ -325,6 +339,11 @@ object BoschParser {
             return StartupDecodingResult(status = "NO_POSSIBLE_MAPPING", bestError = null)
         }
 
+        if (minTotalError > 100) {
+            Log.w("BoschParser", "Startup decoding candidate rejected! Best Error ($minTotalError m) exceeds 100m limit.")
+            return StartupDecodingResult(status = "HIGH_ERROR_REJECTED", bestError = minTotalError, secondaryError = if (secondaryMinError == Long.MAX_VALUE) null else secondaryMinError)
+        }
+
         // Stability Check: Avoid incorrect matching if multiple permutations are similar
         if (secondaryMinError != Long.MAX_VALUE) {
             val drift = secondaryMinError - minTotalError
@@ -399,6 +418,7 @@ object BoschParser {
         // 2. Discover/Update Modes by matching against the initial baseline and tracked indices
         for (modeIdx in 0 until numModes) {
             val totalDeltaTrip = totalTripDeltas[modeIdx]
+            val adaptiveTolerance = maxOf(MODE_MAPPING_TOLERANCE_METERS, (totalDeltaTrip * 0.005).toInt())
             
             if (newModeToInitialIndex.containsKey(modeIdx)) {
                 // CASE: ALREADY MAPPED
@@ -408,7 +428,7 @@ object BoschParser {
                 
                 // Find which record in the SHUFFLED new batch matches the delta from that initial record.
                 val match = newBatch.find { rNew ->
-                    kotlin.math.abs((rNew.distance - rInitial.distance) - totalDeltaTrip) <= MODE_MAPPING_TOLERANCE_METERS
+                    kotlin.math.abs((rNew.distance - rInitial.distance) - totalDeltaTrip) <= adaptiveTolerance
                 }
                 
                 if (match != null) {
@@ -428,7 +448,7 @@ object BoschParser {
                     for (i in 0 until numModes) {
                         val rNew = newBatch[i]
                         val usageDelta = rNew.distance - rInitial.distance
-                        if (kotlin.math.abs(usageDelta - totalDeltaTrip) <= MODE_MAPPING_TOLERANCE_METERS) {
+                        if (kotlin.math.abs(usageDelta - totalDeltaTrip) <= adaptiveTolerance) {
                             potentialMappings.add(j to i)
                         }
                     }
@@ -465,4 +485,24 @@ object BoschParser {
         
         return Triple(newSortedList, newConfirmedIndices, newModeToInitialIndex)
     }
+
+    fun reconstructModeMapping(
+        sortedUsageRecords: List<UsageRecord?>,
+        unsortedUsageRecords: List<UsageRecord?>
+    ): Map<Int, Int> {
+        val mapping = mutableMapOf<Int, Int>()
+        sortedUsageRecords.forEachIndexed { modeIdx, sortedRec ->
+            if (sortedRec != null) {
+                val unsortedIdx = unsortedUsageRecords.indexOfFirst {
+                    it?.distance == sortedRec.distance && it?.energy == sortedRec.energy
+                }
+                if (unsortedIdx != -1) {
+                    mapping[modeIdx] = unsortedIdx
+                }
+            }
+        }
+        return mapping
+    }
+
 }
+

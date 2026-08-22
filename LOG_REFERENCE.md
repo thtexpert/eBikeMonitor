@@ -1,6 +1,6 @@
 # eBikeMonitor — Log File Reference
 
-> Applies to **v1.15.1** and later.
+> Applies to **v1.15.2** and later.
 
 Log file location on device:
 `/storage/emulated/0/Android/data/com.example.ebikemonitor.debug/files/ebike_monitor_debug.txt`
@@ -155,6 +155,14 @@ Emitted by `MainActivity` on each Android lifecycle transition.
 |---|---|
 | `Reconnection Loop: Bike absent — exiting stale iteration` | Loop detected bike is off at start of iteration — exits cleanly (normal after bike-off race condition) |
 
+**Estimation & Resiliency Guards (`[ESTIMATOR_DIAGNOSTIC]`, `[MQTT_DRYRUN]`, `[MONOTONICITY GUARD]`):**
+
+| Entry / Prefix | Meaning |
+|---|---|
+| `[ESTIMATOR_DIAGNOSTIC] SessionEnded \| OdoDelta: ... \| ModeDists: ... \| RemainingRanges: ... \| SoC: ... \| UsableCap: ... \| LearnedGamma: ... \| ActualKcal: ... \| EstKcal: ... \| Error: ...%` | Logged at the end of a session when BLE disconnects. Details the delta odometer distance, per-mode distances, remaining battery ranges, State of Charge, learned Usable Capacity, learned effort coefficient ($\gamma$), actual calories from Kiox, estimated calories, and the percentage error between the two. |
+| `[MQTT_DRYRUN] Trigger: BLE Disconnect \| Odo: ... km \| Topics: pedal_energy_measured = ... kcal \| pedal_energy_estimated = ... kcal \| pedal_energy_total = ... kcal` | Logged during BLE disconnect to preview the data snapshot parameters that will be pushed to the MQTT broker for Measured, Estimated, and Total cumulative human effort. |
+| `[MONOTONICITY GUARD] <metric> (<val> kcal) is less than max published (<max> kcal). Overriding to prevent drop.` | Logged when a transient telemetry package drop or database baseline latency tries to publish a lower value than the session maximum. The guard overrides the value to enforce strict monotonicity. |
+
 ---
 
 ### `BikePresenceManager` — Flow Notification State
@@ -240,3 +248,6 @@ These entries distinguish user-triggered events from automatic background action
 | Reconnect storm indicator | rapid `Connection Lost` + `Connection Complete` pairs |
 | Home Sync Window events | `[HOME SYNC]` |
 | User UI actions (connect/disconnect) | `[USER ACTION]` |
+| Calorie Estimator diagnostics | `[ESTIMATOR_DIAGNOSTIC]` |
+| End-of-ride data snapshot previews | `[MQTT_DRYRUN]` |
+| Monotonicity guard overrides | `[MONOTONICITY GUARD]` |
