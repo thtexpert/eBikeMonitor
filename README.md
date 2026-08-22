@@ -45,23 +45,23 @@ graph TD
     Remote["LED Remote / Kiox"]:::device
     FlowApp["Bosch Flow App"]:::device
     
-    subgraph Android Device (sniffing pipeline)
-        Trigger["Connection Triggers<br/>(ACL Bluetooth / Companion Device / Notification Listener)"]:::app
-        Monitor["eBikeMonitor Service<br/>(Background Data Collector)"]:::app
-        DB[("Persistent SQLite<br/>(Baselines & Calibration)")]:::app
+    subgraph "Android Device (sniffing pipeline)"
+        Trigger["Connection Triggers<br>ACL Bluetooth / Companion Device / Notification Listener"]:::app
+        Monitor["eBikeMonitor Service<br>Background Data Collector"]:::app
+        DB[("Persistent SQLite<br>Baselines & Calibration")]:::app
     end
     
-    subgraph Smart Home
+    subgraph "Smart Home"
         Broker["MQTT Broker"]:::server
         HA["Home Assistant"]:::ha
     end
 
     %% Connections
-    Remote <-->|Bonded BLE Connection| FlowApp
-    FlowApp <-->|GATT Telemetry| Bike
+    Remote ---|Bonded BLE Connection| FlowApp
+    FlowApp ---|GATT Telemetry| Bike
     Trigger -->|Wake up Service| Monitor
     Bike -.->|Sniffed BLE Characteristic notifications| Monitor
-    Monitor <-->|Read/Write Baselines| DB
+    Monitor ---|Read/Write Baselines| DB
     Monitor -->|MQTT Discovery & Live Metrics| Broker
     Broker -->|Home Assistant Auto-Discovery| HA
 ```
