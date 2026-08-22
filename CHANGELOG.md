@@ -2,7 +2,7 @@
 
 All notable changes to the **eBikeMonitor** project will be documented in this file.
 
-## [1.15.2] - 2026-07-30
+## [1.15.2] - 2026-08-22
 ### Added
 - **BLE Status Topic (`blestatus`)**: Published BLE connection status (`connected`/`disconnected`) to the `ebikemonitor/<device_id>/blestatus` topic in real-time.
 - **Dynamic Calibration Loop (Self-Learning)**: Automatically refines battery Usable Capacity (Wh) during SoC drops, calculates average Wh/km consumption rates per assist mode, and calibrates the effort coefficient (Gamma) based on physical work.

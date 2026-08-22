@@ -398,9 +398,11 @@ class BleManager(private val context: Context) {
                         currentStatus = currentStatus.copy(tripDistPerMode = tripDists)
                         Log.d("BleManager", "Trip distances updated: $tripDists")
                         
-                        // Retry Startup Decoding if it was previously deferred
+                        // Retry Startup Decoding if it was previously deferred OR if startup status was a fallback
                         val expectedCount = currentStatus.assistModeNames.size
-                        if (currentStatus.initialTripDistPerMode == null && 
+                        val needsDecoding = currentStatus.initialTripDistPerMode == null || 
+                                           currentStatus.startupDecodingStatus?.contains("FALLBACK") == true
+                        if (needsDecoding && 
                             currentStatus.persistentBaselines != null && 
                             unsortedModeUsageList.size == expectedCount && 
                             expectedCount > 0) {
@@ -756,21 +758,102 @@ class BleManager(private val context: Context) {
         }
         
         // Try Option 1: Assuming trip was NOT reset (use fallbackTripDists)
-        var result = com.example.ebikemonitor.data.parser.BoschParser.findBestStartupMapping(
+        val result1 = com.example.ebikemonitor.data.parser.BoschParser.findBestStartupMapping(
             newBatch = statusCopy.unsortedUsageRecords,
             currentTrip = fallbackTripDists,
             storedBaselines = statusCopy.persistentBaselines!!
         )
-        var finalTripDists = fallbackTripDists
         
         // Try Option 2: Assuming trip WAS reset (use zeros)
-        if (result.mapping == null) {
-            result = com.example.ebikemonitor.data.parser.BoschParser.findBestStartupMapping(
-                newBatch = statusCopy.unsortedUsageRecords,
-                currentTrip = List(expectedCount) { 0 },
-                storedBaselines = statusCopy.persistentBaselines!!
-            )
+        val result2 = com.example.ebikemonitor.data.parser.BoschParser.findBestStartupMapping(
+            newBatch = statusCopy.unsortedUsageRecords,
+            currentTrip = List(expectedCount) { 0 },
+            storedBaselines = statusCopy.persistentBaselines!!
+        )
+        
+        var result = result1
+        var finalTripDists = fallbackTripDists
+        
+        if (result1.mapping != null) {
+            result = result1
+            finalTripDists = fallbackTripDists
+        } else if (result2.mapping != null) {
+            result = result2
             finalTripDists = List(expectedCount) { 0 }
+        } else {
+            com.example.ebikemonitor.FileLogger.log("BleManager: Delta-based options failed. Option 1 (No Reset) error: ${result1.bestError}m, status: ${result1.status}. Option 2 (Reset) error: ${result2.bestError}m, status: ${result2.status}.")
+            
+            // Try Option 3: Gap-Based Consumption-Rate Matching (Plan B Fallback)
+            val lastRecords = statusCopy.sortedUsageRecordsB
+            val hasValidLastRecords = lastRecords.size == expectedCount && lastRecords.all { it != null && it.distance > 0 }
+            if (hasValidLastRecords) {
+                // Calculate baseline rates (Wh/meter)
+                val baselineRates = lastRecords.map { it!!.energy.toDouble() / it.distance }
+                
+                // Check if baseline rates are sorted monotonically (OFF < ECO < TOUR+ < SPORT < TURBO)
+                var sorted = true
+                for (i in 0 until expectedCount - 1) {
+                    if (baselineRates[i] >= baselineRates[i + 1]) {
+                        sorted = false
+                        break
+                    }
+                }
+                
+                if (sorted) {
+                    val mapping = mutableMapOf<Int, Int>()
+                    val unmatchedRecordIndices = (0 until expectedCount).toMutableSet()
+                    
+                    for (modeIdx in 0 until expectedCount) {
+                        val lastRate = baselineRates[modeIdx]
+                        
+                        // Calculate lower and upper gaps to neighboring modes
+                        val gLow = if (modeIdx > 0) lastRate - baselineRates[modeIdx - 1] else 0.001
+                        val gHigh = if (modeIdx < expectedCount - 1) baselineRates[modeIdx + 1] - lastRate else 0.01
+                        
+                        val lowerBound = maxOf(0.0, lastRate - 0.25 * gLow)
+                        val upperBound = lastRate + 0.25 * gHigh
+                        
+                        // Find a matching record in the incoming unsorted list
+                        val matchingIdx = unmatchedRecordIndices.find { recIdx ->
+                            val record = statusCopy.unsortedUsageRecords[recIdx]
+                            if (record.distance <= 0) return@find false
+                            val currentRate = record.energy.toDouble() / record.distance
+                            currentRate >= lowerBound && currentRate <= upperBound
+                        }
+                        
+                        if (matchingIdx != null) {
+                            mapping[modeIdx] = matchingIdx
+                            unmatchedRecordIndices.remove(matchingIdx)
+                        } else {
+                            // If any mode fails to find a match, abort
+                            break
+                        }
+                    }
+                    
+                    if (mapping.size == expectedCount) {
+                        // Reconstruct/estimate trip distances based on the resolved mapping
+                        val estimatedTripDists = List(expectedCount) { modeIdx ->
+                            val recordIdx = mapping[modeIdx]!!
+                            val record = statusCopy.unsortedUsageRecords[recordIdx]
+                            val storedBaseline = statusCopy.persistentBaselines!![modeIdx]
+                            maxOf(0, (record.distance - storedBaseline).toInt())
+                        }
+                        
+                        result = com.example.ebikemonitor.data.parser.BoschParser.StartupDecodingResult(
+                            mapping = mapping,
+                            status = "CONSUMPTION",
+                            bestError = 0L
+                        )
+                        finalTripDists = estimatedTripDists
+                    } else {
+                        com.example.ebikemonitor.FileLogger.log("BleManager: Fallback Option 3 (Gap-Based Consumption) failed - incomplete mapping resolved: $mapping")
+                    }
+                } else {
+                    com.example.ebikemonitor.FileLogger.log("BleManager: Fallback Option 3 aborted - baseline rates not monotonically sorted: $baselineRates")
+                }
+            } else {
+                com.example.ebikemonitor.FileLogger.log("BleManager: Fallback Option 3 aborted - invalid or empty last baseline usage records: $lastRecords")
+            }
         }
         
         val mapping = result.mapping

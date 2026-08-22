@@ -1131,10 +1131,10 @@ class EBikeBackgroundService : Service() {
             }
         }
         
-        // Start 30-second safety timeout
+        // Start 10-second safety timeout
         syncTimeoutJob?.cancel()
         syncTimeoutJob = serviceScope.launch {
-            kotlinx.coroutines.delay(30000)
+            kotlinx.coroutines.delay(10000)
             val currentStatus = bleManager.bikeStatus.value
             val activeMac = settings.activeBikeMac.first() ?: settings.bleMacAddress.first()
             if (activeMac != null) {

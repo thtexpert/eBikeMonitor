@@ -473,6 +473,135 @@ class PrototypeStartupDecodingTest {
         assertEquals("HIGH_ERROR_REJECTED", result.status)
         org.junit.Assert.assertNull("Mapping should be null when candidate is rejected due to high error", result.mapping)
     }
+
+    @Test
+    fun testForcedFallbackDecodingWithGapBasedConsumptionMatching() {
+        // 1. Stored database baseline records (lastRecords)
+        val lastRecords = listOf(
+            UsageRecord(343684, 4),      // OFF
+            UsageRecord(1712411, 2840),   // ECO
+            UsageRecord(4800382, 20983),  // TOUR+
+            UsageRecord(5717091, 39796),  // SPORT
+            UsageRecord(4017762, 30014)   // TURBO
+        )
+
+        // 2. Unsorted incoming raw usage records (batch)
+        val newBatch = listOf(
+            UsageRecord(343750, 4),      // OFF
+            UsageRecord(4800691, 20984),  // TOUR+
+            UsageRecord(1712427, 2840),   // ECO
+            UsageRecord(4017799, 30015),  // TURBO
+            UsageRecord(5717095, 39796)   // SPORT
+        )
+
+        val mapping = findGapBasedConsumptionMapping(newBatch, lastRecords)
+        assertNotNull("Should successfully resolve mapping via gap-based consumption matching", mapping)
+        
+        // Assert correct bijective mappings
+        assertEquals(0, mapping!![0]) // OFF -> index 0 (343750m)
+        assertEquals(2, mapping[1])   // ECO -> index 2 (1712427m)
+        assertEquals(1, mapping[2])   // TOUR+ -> index 1 (4800691m)
+        assertEquals(4, mapping[3])   // SPORT -> index 4 (5717095m)
+        assertEquals(3, mapping[4])   // TURBO -> index 3 (4017799m)
+
+        // Validate estimated trip distances
+        val storedBaselines = listOf(343684 - 32, 1712411 - 7, 4800382 - 156, 5717091 - 0, 4017762 - 21)
+        val estimatedTripDists = List(5) { modeIdx ->
+            val recordIdx = mapping[modeIdx]!!
+            val record = newBatch[recordIdx]
+            val storedBaseline = storedBaselines[modeIdx]
+            maxOf(0, (record.distance - storedBaseline).toInt())
+        }
+        
+        // OFF: 343750 - (343684 - 32) = 98m
+        assertEquals(98, estimatedTripDists[0])
+        // ECO: 1712427 - (1712411 - 7) = 23m
+        assertEquals(23, estimatedTripDists[1])
+    }
+
+    @Test
+    fun testLateA252SelfHealingRetryLogic() {
+        // Simulate a status that is currently in fallback
+        var startupDecodingStatus = "CONSUMPTION_FALLBACK"
+        var initialTripDistPerMode: List<Int>? = listOf(32, 7, 156, 0, 21) // estimated fallback distances
+
+        val storedBaselines = listOf(343684 - 32, 1712411 - 7, 4800382 - 156, 5717091 - 0, 4017762 - 21)
+
+        // Real A252 arrives later
+        val realTripDists = listOf(98, 23, 465, 4, 58) // real high-precision trip distances
+        val liveBatch = listOf(
+            UsageRecord(343750, 4),      // OFF
+            UsageRecord(4800691, 20984),  // TOUR+
+            UsageRecord(1712427, 2840),   // ECO
+            UsageRecord(4017799, 30015),  // TURBO
+            UsageRecord(5717095, 39796)   // SPORT
+        )
+
+        // Needs decoding condition from BleManager.kt
+        val needsDecoding = initialTripDistPerMode == null || startupDecodingStatus.contains("FALLBACK")
+        org.junit.Assert.assertTrue("Self-healing should flag retry when status contains FALLBACK", needsDecoding)
+
+        if (needsDecoding) {
+            val result = BoschParser.findBestStartupMapping(liveBatch, realTripDists, storedBaselines)
+            assertEquals("SUCCESS", result.status)
+            assertNotNull(result.mapping)
+
+            // Overwrite fallback status/values
+            startupDecodingStatus = result.status
+            initialTripDistPerMode = realTripDists.toList()
+        }
+
+        assertEquals("SUCCESS", startupDecodingStatus)
+        assertEquals(realTripDists, initialTripDistPerMode)
+    }
+
+    private fun findGapBasedConsumptionMapping(
+        newBatch: List<UsageRecord>,
+        lastRecords: List<UsageRecord>
+    ): Map<Int, Int>? {
+        val expectedCount = lastRecords.size
+        if (newBatch.size != expectedCount) return null
+        
+        val baselineRates = lastRecords.map { it.energy.toDouble() / it.distance }
+        
+        var sorted = true
+        for (i in 0 until expectedCount - 1) {
+            if (baselineRates[i] >= baselineRates[i + 1]) {
+                sorted = false
+                break
+            }
+        }
+        if (!sorted) return null
+        
+        val mapping = mutableMapOf<Int, Int>()
+        val unmatchedRecordIndices = (0 until expectedCount).toMutableSet()
+        
+        for (modeIdx in 0 until expectedCount) {
+            val lastRate = baselineRates[modeIdx]
+            val gLow = if (modeIdx > 0) lastRate - baselineRates[modeIdx - 1] else 0.001
+            val gHigh = if (modeIdx < expectedCount - 1) baselineRates[modeIdx + 1] - lastRate else 0.01
+            
+            val lowerBound = maxOf(0.0, lastRate - 0.25 * gLow)
+            val upperBound = lastRate + 0.25 * gHigh
+            
+            val matchingIdx = unmatchedRecordIndices.find { recIdx ->
+                val record = newBatch[recIdx]
+                if (record.distance <= 0) return@find false
+                val currentRate = record.energy.toDouble() / record.distance
+                currentRate >= lowerBound && currentRate <= upperBound
+            }
+            
+            if (matchingIdx != null) {
+                mapping[modeIdx] = matchingIdx
+                unmatchedRecordIndices.remove(matchingIdx)
+            } else {
+                break
+            }
+        }
+        
+        return if (mapping.size == expectedCount) mapping else null
+    }
 }
+
 
 

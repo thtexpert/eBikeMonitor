@@ -14,6 +14,12 @@ Bosch eBikes transmit usage records in a dense burst (typically 5 records within
 - **Timeout Logic**: A **2.0s timeout** is implemented. If a record arrives after a >2s gap, any partial/stale data from a previous interrupted burst is discarded.
 - **Selective Updating**: The system status is only updated with a new `totalEnergyFromMotor` value once a **complete** batch (defined by the number of assist modes) is successfully collected.
 
+### Connection Safety Timeout
+To prevent telemetry synchronization from blocking indefinitely when characteristics do not broadcast (e.g. `0xA252` when the bike is stationary), a **10-second safety timeout** is implemented.
+- If all other checklist parameters are received but `0xA252` is missing, the timeout forces synchronization completion after 10 seconds.
+- The system then falls back to Strategy A (Gap-Based Consumption Matching) to map the modes and publish initial telemetry to MQTT.
+- If the bike starts moving later and broadcasts `0xA252` packets, the late self-healing retry logic automatically re-evaluates the baselines.
+
 ## 2. Batch Validation & Accuracy
 
 Before any data is used for telemetry or per-mode mapping, the entire burst must pass two rigorous validation checks:
@@ -31,10 +37,11 @@ The `totalEnergyFromMotor` sensor in Home Assistant is derived from the sum of e
 
 Since the `0x108C` message does not contain a mode index, eBikeMonitor employs two parallel strategies to map records to their respective modes (Eco, Tour, Turbo, etc.):
 
-### Strategy A: Consumption-Based (Fallback)
-Records are sorted by their **instantaneous consumption** ($\text{Wh} / \text{meter}$). 
-- **Assumption**: Higher assist modes (Turbo) always have higher Wh/km than lower modes (Eco).
-- **Usage**: Used as a fallback when high-precision trip data is unavailable.
+### Strategy A: Gap-Based Consumption Matching (Fallback)
+Incoming raw usage records are mapped directly to last known database baseline records by checking their lifetime average consumption rates ($R_i = \text{energy} / \text{distance}$) against stored baseline rates.
+- **Neighbor Gap Tolerance**: To mathematically prevent matching overlap (ambiguity) between adjacent assist modes, tolerance windows are calculated dynamically relative to neighboring modes' rates ($G_{low}$ and $G_{high}$):
+  $$\text{Tolerance}_i = [R_i - 0.25 \times (R_i - R_{i-1}),\text{ } R_i + 0.25 \times (R_{i+1} - R_i)]$$
+- **Usage**: Invoked during forced startup decoding if delta-based matching fails (e.g. bike ridden offline and connected while stationary, causing trip baseline errors to exceed the 100m cap).
 
 ### Strategy B: Delta-Based Discovery (High Precision)
 This strategy uses the Trip Distance per Mode (`0xA252`) as a reference.
@@ -74,5 +81,8 @@ However, to ensure baseline alignment and offline segment estimations are calcul
 During mid-ride BLE drops, per-mode sorted usage records (`sortedUsageRecordsB`) may experience transient mapping lag if `0xA252` updates are delayed. However, the total distance sum across raw usage records (`unsortedUsageRecords.sumOf { it.distance }`) is **100% mathematically invariant to mode sorting permutations**. 
 The end-of-session calibration protocol evaluates `rawUsageSum` alongside `sortedUsageRecordsB` delta sum to prevent false positive data mismatch notifications when raw telemetry is complete. Furthermore, error notifications are suppressed during active riding (`shouldMonitor` / `speed > 0.1`) and logged to `FileLogger`, allowing startup sync to auto-reconcile seamlessly upon BLE reconnection.
 
+### E. Gap-Based Fallback & Late Self-Healing Retry
+When a bike is ridden offline and then connects while stationary (missing `0xA252` packets), forced startup decoding activates Option 3 (Gap-Based Consumption Matching). This resolves the mode mapping and estimates starting trip distances using `distance - storedBaseline` to avoid `HIGH_ERROR_REJECTED` lockups. As soon as the bike begins moving and broadcasts real `0xA252` packets, the late self-healing retry logic re-evaluates the startup decoding to replace the estimated baselines with exact high-precision baseline values, ensuring perfect synchronization alignment.
+
 ---
-*Document Version: 1.3 - August 2026*
+*Document Version: 1.4 - August 2026*
