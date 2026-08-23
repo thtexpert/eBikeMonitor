@@ -40,7 +40,11 @@ Since the `0x108C` message does not contain a mode index, eBikeMonitor employs t
 ### Strategy A: Gap-Based Consumption Matching (Fallback)
 Incoming raw usage records are mapped directly to last known database baseline records by checking their lifetime average consumption rates ($R_i = \text{energy} / \text{distance}$) against stored baseline rates.
 - **Neighbor Gap Tolerance**: To mathematically prevent matching overlap (ambiguity) between adjacent assist modes, tolerance windows are calculated dynamically relative to neighboring modes' rates ($G_{low}$ and $G_{high}$):
-  $$\text{Tolerance}_i = [R_i - 0.25 \times (R_i - R_{i-1}),\text{ } R_i + 0.25 \times (R_{i+1} - R_i)]$$
+
+  $$
+  \text{Tolerance}_i = [R_i - 0.25 \times (R_i - R_{i-1}),\text{ } R_i + 0.25 \times (R_{i+1} - R_i)]
+  $$
+
 - **Usage**: Invoked during forced startup decoding if delta-based matching fails (e.g. bike ridden offline and connected while stationary, causing trip baseline errors to exceed the 100m cap).
 
 ### Strategy B: Delta-Based Discovery (High Precision)

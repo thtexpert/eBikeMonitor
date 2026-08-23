@@ -148,17 +148,17 @@ To convert in reverse (from mechanical Wh on pedals to calories burned):
 $$\text{Pedal Energy} (\text{kcal}) = E_{\text{rider, mech}} (\text{Wh}) \times 3.44 \quad \left(\text{since } \frac{1}{0.29075} \approx 3.44\right)$$
 
 ### 2. Motor Mechanical Work
-Motor mechanical work ($E_{\text{motor, mech}}$ in `Wh`) is reported directly by the Drive Unit via `0x108C` (Usage Records) and cumulative lifetime `0x809C`. It is related to the electrical energy throughput of the battery cells ($E_{\text{battery, elec\_throughput}}$ from `0x80B0` in Wh) using an average electromechanical drivetrain efficiency of **~78%**:
-$$E_{\text{motor, mech}} (\text{Wh}) = E_{\text{battery, elec\_throughput}} (\text{Wh}) \times 0.78$$
+Motor mechanical work ($E_{\text{motor, mech}}$ in `Wh`) is reported directly by the Drive Unit via `0x108C` (Usage Records) and cumulative lifetime `0x809C`. It is related to the electrical energy throughput of the battery cells ($E_{\text{battery, elec throughput}}$ from `0x80B0` in Wh) using an average electromechanical drivetrain efficiency of **~78%**:
+$$E_{\text{motor, mech}} (\text{Wh}) = E_{\text{battery, elec throughput}} (\text{Wh}) \times 0.78$$
 
 ### 3. Trip Total Energy (Mechanical Wh)
 Corresponds to BLE topic `0xA243`. It is the sum of mechanical work done by both the motor and the rider:
-$$E_{\text{trip\_total, mech}} (\text{Wh}) = E_{\text{motor, mech}} (\text{Wh}) + E_{\text{rider, mech}} (\text{Wh})$$
-$$E_{\text{trip\_total, mech}} (\text{Wh}) = E_{\text{motor, mech}} (\text{Wh}) + \left( E_{\text{rider, metabolic}} (\text{kcal}) \times 0.29075 \right)$$
+$$E_{\text{trip total, mech}} (\text{Wh}) = E_{\text{motor, mech}} (\text{Wh}) + E_{\text{rider, mech}} (\text{Wh})$$
+$$E_{\text{trip total, mech}} (\text{Wh}) = E_{\text{motor, mech}} (\text{Wh}) + \left( E_{\text{rider, metabolic}} (\text{kcal}) \times 0.29075 \right)$$
 
 ### 4. Trip Human Percentage (%)
 Corresponds to BLE topic `0xA254`. It represents the proportion of total mechanical energy contributed by the rider:
-$$\text{Trip Human Percentage} (\%) = \frac{E_{\text{rider, mech}} (\text{Wh})}{E_{\text{trip\_total, mech}} (\text{Wh})} \times 100$$
+$$\text{Trip Human Percentage} (\%) = \frac{E_{\text{rider, mech}} (\text{Wh})}{E_{\text{trip total, mech}} (\text{Wh})} \times 100$$
 
 
 
