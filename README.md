@@ -77,15 +77,15 @@ When the phone is connected, metabolic energy is accumulated directly from the b
 - **Startup Sync Catch-up**: To ensure no calories are lost during the 10–30s Bluetooth discovery handshake, any delta pedaled during connection setup is calculated and added to the baseline.
 
 ### 2. Offline Segment Estimation
-When the app reconnects and detects an odometer gap ($\Delta \text{Odo} > 0.20 \text{ km}$), it determines the offline distance ($d_{\text{offline}} = \Delta \text{Odo} - \Delta \text{TripDistSum}$). If the battery State of Charge or motor energy delta indicates active assist, the app estimates the offline calorie burn using:
+When the app reconnects and detects an odometer gap ($\Delta \text{Odo} > 0.20 \text{ km}$), it determines the offline distance ($d\_{\text{offline}} = \Delta \text{Odo} - \Delta \text{TripDistSum}$). If the battery State of Charge or motor energy delta indicates active assist, the app estimates the offline calorie burn using:
 
 *   **Path A: Assisted Riding (Motor ON)**:
-    $\text{AvgRate}_{\text{active}} \text{ (Wh/km)} = \frac{\sum_{i=1}^{M} \text{LearnedRate}_i}{M} \quad \text{(excluding OFF mode)}$
-    $E_{\text{est, Wh}} = d_{\text{offline}} \times \text{AvgRate}_{\text{active}}$
-    $E_{\text{est, kcal}} = \gamma \times E_{\text{est, Wh}}$
+    $\text{AvgRate}\_{\text{active}} \text{ (Wh/km)} = \frac{\sum\_{i=1}^{M} \text{LearnedRate}\_i}{M} \quad \text{(excluding OFF mode)}$
+    $E\_{\text{est, Wh}} = d\_{\text{offline}} \times \text{AvgRate}\_{\text{active}}$
+    $E\_{\text{est, kcal}} = \gamma \times E\_{\text{est, Wh}}$
     *Where $\gamma$ is the `learnedUserEffortCoefficient` (representing the user's metabolic contribution relative to motor electrical input).*
 *   **Path B: Unassisted Riding (Motor OFF)**:
-    $E_{\text{est, kcal}} = d_{\text{offline}} \times 22.0 \text{ kcal/km} \quad \text{(standard unassisted cycling rate)}$
+    $E\_{\text{est, kcal}} = d\_{\text{offline}} \times 22.0 \text{ kcal/km} \quad \text{(standard unassisted cycling rate)}$
 
 ---
 

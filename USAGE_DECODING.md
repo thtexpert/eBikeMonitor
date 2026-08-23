@@ -38,8 +38,8 @@ The `totalEnergyFromMotor` sensor in Home Assistant is derived from the sum of e
 Since the `0x108C` message does not contain a mode index, eBikeMonitor employs two parallel strategies to map records to their respective modes (Eco, Tour, Turbo, etc.):
 
 ### Strategy A: Gap-Based Consumption Matching (Fallback)
-Incoming raw usage records are mapped directly to last known database baseline records by checking their lifetime average consumption rates ($R_i = \text{energy} / \text{distance}$) against stored baseline rates.
-- **Neighbor Gap Tolerance**: To mathematically prevent matching overlap (ambiguity) between adjacent assist modes, tolerance windows are calculated dynamically relative to neighboring modes' rates ($G_{low}$ and $G_{high}$):
+Incoming raw usage records are mapped directly to last known database baseline records by checking their lifetime average consumption rates ($R\_i = \text{energy} / \text{distance}$) against stored baseline rates.
+- **Neighbor Gap Tolerance**: To mathematically prevent matching overlap (ambiguity) between adjacent assist modes, tolerance windows are calculated dynamically relative to neighboring modes' rates ($G\_{low}$ and $G\_{high}$):
 
   $$
   \text{Tolerance}_i = [R_i - 0.25 \times (R_i - R_{i-1}),\text{ } R_i + 0.25 \times (R_{i+1} - R_i)]
@@ -49,7 +49,7 @@ Incoming raw usage records are mapped directly to last known database baseline r
 
 ### Strategy B: Delta-Based Discovery (High Precision)
 This strategy uses the Trip Distance per Mode (`0xA252`) as a reference.
-- **Logic**: For each mode $i$, we know the Trip Distance $\Delta T_i$. We find the usage record $R_j$ whose distance delta relative to a stored baseline matches $\Delta T_i$ within a 30-meter tolerance.
+- **Logic**: For each mode $i$, we know the Trip Distance $\Delta T\_i$. We find the usage record $R\_j$ whose distance delta relative to a stored baseline matches $\Delta T\_i$ within a 30-meter tolerance.
 - **Benefit**: Immune to consumption fluctuations and allows for perfect mode identification even if consumption is similar across modes.
 - **Note on Discovery**: For a complete mapping, the bike must be ridden a short distance (approx. 50-100 meters) in **each assist mode**. Until a mode has moved, the system cannot mathematically "confirm" its identity through delta-matching.
 
@@ -59,8 +59,8 @@ When eBikeMonitor is installed for the first time, it undergoes a "Discovery Rit
 
 1.  **Initial Connection**: The app connects and waits for the first valid burst of 5 usage records and the `0x180C` (Mode Names) notification.
 2.  **Baseline Capture**:
-    *   The app captures the current usage records ($U_{initial}$) and the current trip distances from the Flow app ($T_{initial}$).
-    *   It calculates a **Persistent Baseline** for each mode: $B_i = U_{initial,i} - T_{initial,i}$.
+    *   The app captures the current usage records ($U\_{initial}$) and the current trip distances from the Flow app ($T\_{initial}$).
+    *   It calculates a **Persistent Baseline** for each mode: $B\_i = U\_{initial,i} - T\_{initial,i}$.
 3.  **Persistent Storage**: These baselines are saved in the app's encrypted internal storage.
 4.  **Session Recovery**: On all subsequent app restarts, the saved baselines are loaded. This allows the app to immediately identify modes and calculate "Current Ride" metrics even if the app was closed during the ride.
 
