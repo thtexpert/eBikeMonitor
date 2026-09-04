@@ -62,6 +62,8 @@ class EBikeBackgroundService : Service() {
     private var lastKnownChargingSoC: Int? = null
     private var usedPedalFallbackOnStartup = false
     private var usedTotalFallbackOnStartup = false
+    private var startupEstimatedKcalAdded = 0.0
+    private var startupEstimatedWhAdded = 0.0
 
     // Published values tracking for MQTT change detection
     private var lastPubMeasuredTotal: Double? = null
@@ -201,7 +203,22 @@ class EBikeBackgroundService : Service() {
                             }
                             
                             if (delta > 0 || currentTripPedal != lastTripPedal) {
+                                var newEstimatedBaseline = profile.totalPedalEnergyEstimatedBaseline
+                                var newPedalBaseline = profile.totalPedalEnergyBaseline
+                                var newRideBaseline = profile.totalRideEnergyBaseline
+                                if (usedPedalFallbackOnStartup && startupEstimatedKcalAdded > 0.0) {
+                                    newEstimatedBaseline = maxOf(0.0, newEstimatedBaseline - startupEstimatedKcalAdded)
+                                    newPedalBaseline = maxOf(0.0, newPedalBaseline - startupEstimatedKcalAdded)
+                                    newRideBaseline = maxOf(0.0, newRideBaseline - startupEstimatedWhAdded)
+                                    FileLogger.log("EBikeBackgroundService: Active riding replaced startup estimated calories (${"%.1f".format(startupEstimatedKcalAdded)} kcal) with live measured delta ($delta kcal)")
+                                    startupEstimatedKcalAdded = 0.0
+                                    startupEstimatedWhAdded = 0.0
+                                }
+                                usedPedalFallbackOnStartup = false
                                 val updatedProfile = profile.copy(
+                                    totalPedalEnergyBaseline = newPedalBaseline,
+                                    totalRideEnergyBaseline = newRideBaseline,
+                                    totalPedalEnergyEstimatedBaseline = newEstimatedBaseline,
                                     totalPedalEnergyMeasuredBaseline = profile.totalPedalEnergyMeasuredBaseline + delta,
                                     lastTripPedalEnergy = currentTripPedal
                                 )
@@ -327,13 +344,22 @@ class EBikeBackgroundService : Service() {
                                     val unaccumulatedDelta = (status.tripPedalEnergy ?: 0) - originalProfile.lastTripPedalEnergy
                                     pedalMeasuredBaseline += unaccumulatedDelta
                                     FileLogger.log("EBikeBackgroundService: Late sync accumulated un-synced startup pedal energy delta: $unaccumulatedDelta kcal (measured baseline: $pedalMeasuredBaseline kcal)")
+                                    
+                                    if (startupEstimatedKcalAdded > 0.0) {
+                                        pedalEstimatedBaseline = maxOf(0.0, pedalEstimatedBaseline - startupEstimatedKcalAdded)
+                                        pedalBaseline = maxOf(0.0, pedalBaseline - startupEstimatedKcalAdded)
+                                        rideBaseline = maxOf(0.0, rideBaseline - startupEstimatedWhAdded)
+                                        FileLogger.log("EBikeBackgroundService: Late sync replaced startup estimated calories (${"%.1f".format(startupEstimatedKcalAdded)} kcal) with live measured delta ($unaccumulatedDelta kcal)")
+                                        startupEstimatedKcalAdded = 0.0
+                                        startupEstimatedWhAdded = 0.0
+                                    }
                                 }
                                 
                                 if (odoDelta > 0.20) {
                                     val prevTripDistSum = if (tripResetDetected) 0.0 else originalProfile.lastTripDistPerMode.sum() / 1000.0
                                     val currentTripDistSum = (status.tripDistPerMode.sum()) / 1000.0
                                     val tripDelta = currentTripDistSum - prevTripDistSum
-                                    val offlineDist = odoDelta - tripDelta
+                                    val offlineDist = maxOf(0.0, odoDelta - tripDelta)
                                     
                                     val formattedLastOdo = "%.3f".format(originalProfile.lastOdometer)
                                     val formattedCurrentOdo = "%.3f".format(resolvedOdo)
@@ -1186,6 +1212,11 @@ class EBikeBackgroundService : Service() {
         lastObservedTripPedal = null
         lastObservedTripTotal = null
         
+        startupEstimatedKcalAdded = 0.0
+        startupEstimatedWhAdded = 0.0
+        usedPedalFallbackOnStartup = false
+        usedTotalFallbackOnStartup = false
+        
         // Clear telemetry cache AFTER calibration has completed
         val app = application as EBikeApplication
         app.bleManager.clearTelemetryCache()
@@ -1257,6 +1288,8 @@ class EBikeBackgroundService : Service() {
                 
                 usedPedalFallbackOnStartup = status.tripPedalEnergy == null
                 usedTotalFallbackOnStartup = status.tripTotalEnergy == null
+                startupEstimatedKcalAdded = 0.0
+                startupEstimatedWhAdded = 0.0
                 
                 // 1. Detect Trip Reset
                 val tripResetDetected = currentTripPedal < profile.lastTripPedalEnergy || 
@@ -1312,7 +1345,11 @@ class EBikeBackgroundService : Service() {
                     val currentTripDistSum = currentTripDists.sum() / 1000.0
                     val tripDelta = currentTripDistSum - prevTripDistSum
                     
-                    val offlineDist = odoDelta - tripDelta
+                    val offlineDist = if (usedPedalFallbackOnStartup) {
+                        odoDelta
+                    } else {
+                        maxOf(0.0, odoDelta - tripDelta)
+                    }
                     
                     val formattedLastOdo = "%.3f".format(profile.lastOdometer)
                     val formattedCurrentOdo = "%.3f".format(currentOdo)
@@ -1380,6 +1417,8 @@ class EBikeBackgroundService : Service() {
                         pedalBaseline += estimatedKcal
                         pedalEstimatedBaseline += estimatedKcal
                         rideBaseline += estimatedWh
+                        startupEstimatedKcalAdded = estimatedKcal
+                        startupEstimatedWhAdded = estimatedWh
                     }
                 }
                 

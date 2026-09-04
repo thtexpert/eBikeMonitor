@@ -77,6 +77,13 @@ class BoschHexAnalyser:
         0xA251: {"name": "TripPedalEnergy", "unit": "kcal", "scale": 1.0},
         0xA252: {"name": "TripDistPerMode", "unit": "m", "type": "varint_list"},
         0xA254: {"name": "TripHumanPercentage", "unit": "%", "scale": 1.0},
+        0x108B: {"name": "ModeMetadata", "type": "protobuf"},
+        0x1090: {"name": "ModeConfig", "type": "protobuf"},
+        0x1091: {"name": "ModeConfigAlt", "type": "protobuf"},
+        0x1092: {"name": "ModeSliderLimits", "type": "protobuf"},
+        0x0D27: {"name": "DisplayScreenConfig", "type": "protobuf"},
+        0x0D2C: {"name": "DisplayScreenTelemetry", "type": "protobuf"},
+        0x2106: {"name": "RemoteKeepAlive", "type": "protobuf"},
     }
 
     def __init__(self):
@@ -118,6 +125,52 @@ class BoschHexAnalyser:
             except:
                 return content.hex(), 2 + length
         return None, 0
+
+    def decode_protobuf(self, data):
+        """Decode a raw protobuf payload recursively into a dictionary of tags and values."""
+        fields = {}
+        idx = 0
+        while idx < len(data):
+            if idx >= len(data):
+                break
+            tag = data[idx]
+            idx += 1
+            wire_type = tag & 7
+            field_num = tag >> 3
+            if wire_type == 0: # Varint
+                val, consumed = self.decode_varint(data, idx)
+                fields[field_num] = val
+                idx += consumed
+            elif wire_type == 2: # Length-delimited
+                if idx >= len(data):
+                    break
+                length = data[idx]
+                idx += 1
+                sub_data = data[idx : idx + length]
+                try:
+                    # Attempt to recursively decode
+                    fields[field_num] = self.decode_protobuf(sub_data)
+                except:
+                    try:
+                        fields[field_num] = sub_data.decode('utf-8')
+                    except:
+                        fields[field_num] = sub_data.hex()
+                idx += length
+            elif wire_type == 1: # 64-bit
+                if idx + 8 <= len(data):
+                    fields[field_num] = data[idx : idx + 8].hex()
+                    idx += 8
+                else:
+                    break
+            elif wire_type == 5: # 32-bit
+                if idx + 4 <= len(data):
+                    fields[field_num] = data[idx : idx + 4].hex()
+                    idx += 4
+                else:
+                    break
+            else:
+                break
+        return fields
 
     def parse_hex_line(self, line):
         """Extract timestamp and hex from a line. Format can be 'ts, hex' or just 'hex'."""
@@ -205,6 +258,10 @@ class BoschHexAnalyser:
                             vals[tag] = val
                             sub_idx += consumed
                         decoded_val = vals # Dictionary of tags (0x08: dist, 0x10: energy)
+                elif topic_info.get("type") == "protobuf":
+                    p_idx = 7 if len(msg_bytes) > 7 and msg_bytes[4] == 0xC0 else 4
+                    proto_bytes = msg_bytes[p_idx:]
+                    decoded_val = self.decode_protobuf(proto_bytes)
                 elif topic_info.get("type") == "varint_list":
                     # A252 logic
                     if len(msg_bytes) > 5 and msg_bytes[4] == 0x0A:

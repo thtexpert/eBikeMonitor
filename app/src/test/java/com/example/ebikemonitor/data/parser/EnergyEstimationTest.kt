@@ -594,5 +594,137 @@ class EnergyEstimationTest {
         assertEquals(1158.0 + 189.0, pedalMeasuredBaseline, 0.0)
         assertEquals(189, lastTripPedalEnergy)
     }
+
+    @Test
+    fun testOfflineSegmentWithStartupPedalFallback() {
+        // Anton's scenario from TestRide_03092026_kcal_issues.txt:
+        // Anton rode 3.789 km offline. Connected while bike was stationary.
+        // Bosch did not transmit 0xA251 (tripPedalEnergy), so status.tripPedalEnergy was null.
+        val lastOdo = 16819.037
+        val currentOdo = 16822.826
+        val odoDelta = currentOdo - lastOdo // 3.789 km
+
+        // Option 3 reconstructed mode trip distances from 0x108C usage records:
+        val lastTripSum = 24.462
+        val currentTripSum = 28.256
+        val tripDelta = currentTripSum - lastTripSum // 3.794 km
+
+        val statusTripPedalEnergy: Int? = null
+        val usedPedalFallbackOnStartup = statusTripPedalEnergy == null
+        assertTrue(usedPedalFallbackOnStartup)
+
+        // Previous buggy calculation: offlineDist = odoDelta - tripDelta = -0.005 km -> SKIPPED
+        val offlineDistBuggy = odoDelta - tripDelta
+        assertEquals(-0.005, offlineDistBuggy, 0.001)
+
+        // Fixed calculation:
+        val offlineDistFixed = if (usedPedalFallbackOnStartup) {
+            odoDelta
+        } else {
+            maxOf(0.0, odoDelta - tripDelta)
+        }
+        assertEquals(3.789, offlineDistFixed, 0.001)
+
+        // Offline estimation calculations:
+        val rates = listOf(0.0f, 8.0f, 8.0f, 8.0f, 8.0f)
+        val activeRates = rates.filterIndexed { idx, _ -> idx >= 1 }
+        val avgRate = activeRates.average() // 8.0 Wh/km
+        val learnedCoeff = 1.7f
+
+        val estimatedWh = offlineDistFixed * avgRate // 3.789 * 8.0 = 30.312 Wh
+        val estimatedKcal = learnedCoeff * estimatedWh // 1.7 * 30.312 = 51.53 kcal
+
+        assertEquals(30.312, estimatedWh, 0.01)
+        assertEquals(51.53, estimatedKcal, 0.05)
+
+        var pedalBaseline = 381.0
+        var pedalEstimatedBaseline = 0.0
+        var rideBaseline = 0.0
+
+        if (offlineDistFixed > 0.20) {
+            pedalBaseline += estimatedKcal
+            pedalEstimatedBaseline += estimatedKcal
+            rideBaseline += estimatedWh
+        }
+
+        // Verify estimated calories (~51.5 kcal) are successfully credited
+        assertEquals(51.53, pedalEstimatedBaseline, 0.05)
+        assertEquals(432.53, pedalBaseline, 0.05)
+        assertEquals(30.312, rideBaseline, 0.01)
+    }
+
+    @Test
+    fun testLateSyncReplacesStartupEstimateWhenPedalEnergyArrives() {
+        // Startup sync estimated 51.5 kcal because tripPedalEnergy was null (stationary bike)
+        var pedalBaseline = 432.5
+        var rideBaseline = 30.3
+        var pedalMeasuredBaseline = 0.0
+        var pedalEstimatedBaseline = 51.5
+        var startupEstimatedKcalAdded = 51.5
+        var startupEstimatedWhAdded = 30.3
+
+        val originalProfileLastTripPedal = 381
+
+        // 15 seconds after connect, bike moves and Bosch sends 0xA251: tripPedalEnergy = 432
+        val currentTripPedal = 432
+        val unaccumulatedDelta = currentTripPedal - originalProfileLastTripPedal // 51 kcal
+        assertEquals(51, unaccumulatedDelta)
+
+        // Late Sync fallbackCorrection triggers:
+        pedalMeasuredBaseline += unaccumulatedDelta // Real measured delta added (+51)
+
+        if (startupEstimatedKcalAdded > 0.0) {
+            pedalEstimatedBaseline = maxOf(0.0, pedalEstimatedBaseline - startupEstimatedKcalAdded)
+            pedalBaseline = maxOf(0.0, pedalBaseline - startupEstimatedKcalAdded)
+            rideBaseline = maxOf(0.0, rideBaseline - startupEstimatedWhAdded)
+            startupEstimatedKcalAdded = 0.0
+            startupEstimatedWhAdded = 0.0
+        }
+
+        // Verify that estimated baseline is cleanly deducted back to 0
+        assertEquals(0.0, pedalEstimatedBaseline, 0.01)
+        assertEquals(51.0, pedalMeasuredBaseline, 0.01)
+        // Verify total pedal baseline is exactly measured (381 + 51 = 432 kcal), preventing double counting
+        assertEquals(381.0 + 51.0, pedalBaseline + pedalMeasuredBaseline, 0.01)
+        assertEquals(0.0, startupEstimatedKcalAdded, 0.0)
+    }
+
+    @Test
+    fun testActiveRidingReplacesStartupEstimateWhenPedalEnergyArrivesLate() {
+        var pedalBaseline = 432.5
+        var rideBaseline = 30.3
+        var pedalMeasuredBaseline = 0.0
+        var pedalEstimatedBaseline = 51.5
+        var startupEstimatedKcalAdded = 51.5
+        var startupEstimatedWhAdded = 30.3
+        var usedPedalFallbackOnStartup = true
+
+        val lastTripPedal = 381
+
+        // 45 seconds after connect (past Late Sync 30s window), rider begins moving:
+        val currentTripPedal = 432
+        val delta = currentTripPedal - lastTripPedal // 51 kcal
+
+        var newEstimatedBaseline = pedalEstimatedBaseline
+        var newPedalBaseline = pedalBaseline
+        var newRideBaseline = rideBaseline
+
+        if (usedPedalFallbackOnStartup && startupEstimatedKcalAdded > 0.0) {
+            newEstimatedBaseline = maxOf(0.0, newEstimatedBaseline - startupEstimatedKcalAdded)
+            newPedalBaseline = maxOf(0.0, newPedalBaseline - startupEstimatedKcalAdded)
+            newRideBaseline = maxOf(0.0, newRideBaseline - startupEstimatedWhAdded)
+            startupEstimatedKcalAdded = 0.0
+            startupEstimatedWhAdded = 0.0
+        }
+        usedPedalFallbackOnStartup = false
+        val newMeasuredBaseline = pedalMeasuredBaseline + delta
+
+        assertEquals(0.0, newEstimatedBaseline, 0.01)
+        assertEquals(51.0, newMeasuredBaseline, 0.01)
+        assertEquals(381.0, newPedalBaseline, 0.01)
+        assertEquals(0.0, startupEstimatedKcalAdded, 0.0)
+        assertFalse(usedPedalFallbackOnStartup)
+    }
 }
+
 
