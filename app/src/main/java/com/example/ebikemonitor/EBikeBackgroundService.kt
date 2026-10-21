@@ -820,23 +820,32 @@ class EBikeBackgroundService : Service() {
         val batterySerial = status.batterySerialNumber
         if (!batterySerial.isNullOrEmpty()) {
             val battTopic = "powertube/$batterySerial"
-            pubIfDiff("$battTopic/stateofcharge", status.batteryLevel, last?.batteryLevel, true)
-            pubIfDiff("$battTopic/totalbattery", status.totalBattery, last?.totalBattery, true)
-            pubIfDiff("$battTopic/totalelectricenergy", status.totalElectricEnergy, last?.totalElectricEnergy, true)
-            pubIfDiff("$battTopic/chargecycles", status.chargeCycles, last?.chargeCycles, true)
-            pubIfDiff("$battTopic/serial", batterySerial, last?.batterySerialNumber, true)
+            val isSameBatteryAsLast = last?.batterySerialNumber == batterySerial
+            val lastBattery = if (isSameBatteryAsLast) last else null
+
+            pubIfDiff("$battTopic/stateofcharge", status.batteryLevel, lastBattery?.batteryLevel, true)
+            pubIfDiff("$battTopic/totalbattery", status.totalBattery, lastBattery?.totalBattery, true)
+
+            // Gating: only publish electric energy and charge cycles if fresh BMS packets for current battery connection have arrived
+            if (app.bleManager.hasReceivedRealBatteryEnergy && status.totalElectricEnergy != null) {
+                pubIfDiff("$battTopic/totalelectricenergy", status.totalElectricEnergy, lastBattery?.totalElectricEnergy, true)
+            }
+            if (app.bleManager.hasReceivedRealChargeCycles && status.chargeCycles != null) {
+                pubIfDiff("$battTopic/chargecycles", status.chargeCycles, lastBattery?.chargeCycles, true)
+            }
+            pubIfDiff("$battTopic/serial", batterySerial, lastBattery?.batterySerialNumber, true)
 
             // New battery sensors
-            pubIfDiff("$battTopic/usable_energy_remaining", status.usableEnergyRemaining, last?.usableEnergyRemaining, true)
-            pubIfDiff("$battTopic/nominal_capacity", status.nominalCapacity, last?.nominalCapacity, true)
-            pubIfDiff("$battTopic/usable_capacity", status.usableCapacity, last?.usableCapacity, true)
-            pubIfDiff("$battTopic/temperature", status.batteryTemperature, last?.batteryTemperature)
-            pubIfDiff("$battTopic/softwareversion", status.batterySoftwareVersion, last?.batterySoftwareVersion, true)
+            pubIfDiff("$battTopic/usable_energy_remaining", status.usableEnergyRemaining, lastBattery?.usableEnergyRemaining, true)
+            pubIfDiff("$battTopic/nominal_capacity", status.nominalCapacity, lastBattery?.nominalCapacity, true)
+            pubIfDiff("$battTopic/usable_capacity", status.usableCapacity, lastBattery?.usableCapacity, true)
+            pubIfDiff("$battTopic/temperature", status.batteryTemperature, lastBattery?.batteryTemperature)
+            pubIfDiff("$battTopic/softwareversion", status.batterySoftwareVersion, lastBattery?.batterySoftwareVersion, true)
 
             // Charging State binary sensor
             val isChargingVal = if (status.isCharging) "ON" else "OFF"
-            val lastIsChargingVal = if (last != null) {
-                if (last.isCharging) "ON" else "OFF"
+            val lastIsChargingVal = if (lastBattery != null) {
+                if (lastBattery.isCharging) "ON" else "OFF"
             } else {
                 null
             }

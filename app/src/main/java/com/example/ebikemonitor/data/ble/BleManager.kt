@@ -41,8 +41,7 @@ class BleManager(private val context: Context) {
     private val _bikeStatus = MutableStateFlow(BikeStatus())
     val bikeStatus = _bikeStatus.asStateFlow()
 
-    private var rawTotalElectricEnergy: Double? = null
-    private var rawChargeCycles: Double? = null
+    private val batteryStateManager = BatteryStateManager()
     private var batteryProfilesList = emptyList<com.example.ebikemonitor.data.model.BatteryProfile>()
     
     // Real BLE update flags for startup sync checklist gating
@@ -52,12 +51,19 @@ class BleManager(private val context: Context) {
     var hasReceivedRealPedalEnergy = false
     var hasReceivedRealTripTotalEnergy = false
 
+    val hasReceivedRealBatteryEnergy: Boolean
+        get() = batteryStateManager.hasReceivedRealBatteryEnergy
+
+    val hasReceivedRealChargeCycles: Boolean
+        get() = batteryStateManager.hasReceivedRealChargeCycles
+
     fun resetRealFlags() {
         hasReceivedRealOdo = false
         hasReceivedRealUsageRecords = false
         hasReceivedRealA252 = false
         hasReceivedRealPedalEnergy = false
         hasReceivedRealTripTotalEnergy = false
+        batteryStateManager.resetFlags()
         Log.d("BleManager", "Resetting real BLE update flags on connection state change.")
     }
 
@@ -66,26 +72,9 @@ class BleManager(private val context: Context) {
         app.applicationScope.launch {
             app.settingsRepository.batteryProfiles.collect { profiles ->
                 batteryProfilesList = profiles
-                _bikeStatus.value = applyBatteryOffsets(_bikeStatus.value)
+                _bikeStatus.value = batteryStateManager.applyBatteryOffsets(_bikeStatus.value, profiles)
             }
         }
-    }
-
-    private fun applyBatteryOffsets(status: BikeStatus): BikeStatus {
-        val serial = status.batterySerialNumber ?: return status
-        val profile = batteryProfilesList.find { it.hardwareSerial == serial } ?: return status
-        
-        var updated = status.copy(
-            rawTotalElectricEnergy = rawTotalElectricEnergy,
-            rawChargeCycles = rawChargeCycles
-        )
-        if (rawTotalElectricEnergy != null) {
-            updated = updated.copy(totalElectricEnergy = rawTotalElectricEnergy!! + profile.totalElectricEnergyOffset)
-        }
-        if (rawChargeCycles != null) {
-            updated = updated.copy(chargeCycles = rawChargeCycles!! + profile.chargeCyclesOffset)
-        }
-        return updated
     }
 
     private val unsortedModeUsageList = mutableListOf<UsageRecord>()
@@ -124,6 +113,7 @@ class BleManager(private val context: Context) {
                 bluetoothGatt = null
                 lastLoggedDiagnosticValues.clear()
                 resetRealFlags()
+                _bikeStatus.value = batteryStateManager.resetOnDisconnect(_bikeStatus.value)
                 return
             }
 
@@ -138,6 +128,7 @@ class BleManager(private val context: Context) {
                 bluetoothGatt = null
                 lastLoggedDiagnosticValues.clear()
                 resetRealFlags()
+                _bikeStatus.value = batteryStateManager.resetOnDisconnect(_bikeStatus.value)
             }
         }
 
@@ -257,8 +248,8 @@ class BleManager(private val context: Context) {
                     Log.d("BleManager", "Raw Odometer received: ${"%.3f".format(odo)} km (raw: ${msg.value})")
                 }
                 0x8096 -> {
-                    rawChargeCycles = msg.value / 10.0
-                    currentStatus = applyBatteryOffsets(currentStatus)
+                    val rawCycles = msg.value / 10.0
+                    currentStatus = batteryStateManager.onChargeCyclesReceived(rawCycles, currentStatus, batteryProfilesList)
                 }
                 0x8091 -> {
                     val usableEnergy = msg.value / 10.0
@@ -307,8 +298,8 @@ class BleManager(private val context: Context) {
                 0x9819 -> currentStatus = currentStatus.copy(driveUnitHours = msg.value)
                 0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
                 0x80B0 -> {
-                    rawTotalElectricEnergy = msg.value * 0.1
-                    currentStatus = applyBatteryOffsets(currentStatus)
+                    val rawKWh = msg.value * 0.1
+                    currentStatus = batteryStateManager.onTotalElectricEnergyReceived(rawKWh, currentStatus, batteryProfilesList)
                 }
                 0x206B -> {
                     val rawVersion = msg.decodeStringField()
@@ -373,8 +364,15 @@ class BleManager(private val context: Context) {
                 0x0081 -> {
                     val batterySerial = msg.decodeStringField()
                     if (batterySerial != null) {
-                        currentStatus = currentStatus.copy(batterySerialNumber = batterySerial)
-                        currentStatus = applyBatteryOffsets(currentStatus)
+                        val (updatedStatus, serialChanged) = batteryStateManager.onBatterySerialDecoded(
+                            batterySerial,
+                            currentStatus,
+                            batteryProfilesList
+                        )
+                        currentStatus = updatedStatus
+                        if (serialChanged) {
+                            com.example.ebikemonitor.FileLogger.log("BleManager: Battery serial changed to $batterySerial. Invalidated previous battery telemetry.")
+                        }
                         Log.d("BleManager", "Battery Serial decoded: ${currentStatus.batterySerialNumber}")
                     }
                 }

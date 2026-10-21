@@ -2,6 +2,18 @@
 
 All notable changes to the **eBikeMonitor** project will be documented in this file.
 
+## [1.15.3] - 2026-10-21
+### Fixed
+- **Battery Swap Telemetry Glitch & Offset Isolation (Issue #30)**:
+  - Extracted battery telemetry lifecycle management into `BatteryStateManager`.
+  - Clears cached raw electric energy (`0x80B0`) and charge cycles (`0x8096`) upon BLE disconnection or whenever a new battery serial number is detected, preventing stale metric carry-over across battery swaps.
+  - Fixed an early-return bug in `applyBatteryOffsets` that froze telemetry for unregistered batteries, now defaulting missing profiles to a 0.0 offset so incoming BMS metrics update immediately.
+  - Gated MQTT publishing of `totalelectricenergy` and `chargecycles` in `EBikeBackgroundService` so stale values are never published before fresh BMS packets arrive for the active battery serial.
+  - Isolated previous battery status comparison during MQTT sync so that switching battery serials does not suppress publishing of fresh metrics.
+
+### Added
+- **Unit Tests for Battery Lifecycle**: Added `BatterySwapTest` covering unregistered battery swaps, multi-battery offset isolation, mid-connection serial changes, and disconnect telemetry clearing.
+
 ## [1.15.2] - 2026-08-22
 ### Added
 - **BLE Status Topic (`blestatus`)**: Published BLE connection status (`connected`/`disconnected`) to the `ebikemonitor/<device_id>/blestatus` topic in real-time.
