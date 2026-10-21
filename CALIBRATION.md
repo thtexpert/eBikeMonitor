@@ -23,6 +23,11 @@ Offsets are stored on a **per-battery** basis, identified by the battery's uniqu
 2.  They are applied before publishing metrics to Home Assistant via MQTT.
 3.  This keeps the dashboard and smart home integration physically consistent.
 
+### Battery Swapping & Multi-Device Setup
+*   **Automatic Profile Switching**: When swapping battery packs (e.g., between PowerTube Grey and PowerTube Red), the app detects the new serial number and immediately applies that battery pack's specific offsets without manual re-entry.
+*   **Multi-Phone Isolation**: Battery profiles are saved locally in each phone's secure app storage (`DataStore`). If a battery is shared across multiple family bikes and smartphones, configure the desired calibration offsets once on each device.
+*   **Unregistered Batteries**: If a newly inserted battery has no profile saved yet, eBikeMonitor defaults offsets to `0.0` and processes incoming BMS metrics immediately with complete data isolation, preventing stale metric carry-over from the previous battery.
+
 ## Using the Suggestion Engine
 
 To make calibration simple, the Calibration screen includes a suggestion engine:
