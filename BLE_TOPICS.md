@@ -16,7 +16,7 @@ To correctly interpret telemetry, it is vital to distinguish between two distinc
 1. **Electrical Energy (BMS-based)**
    - Tracks chemical/electrical capacity and energy stored inside or discharged directly from the battery cells.
    - **Key Topics**:
-     - `0x80B0` (Lifetime Total Energy Throughput): Cumulative electrical energy throughput (in 0.1 kWh / 100 Wh units).
+     - `0x80B0` (Lifetime Total Energy Throughput): Cumulative electrical energy throughput (in 0.1 kWh / 100 Wh units). Note: only increments during on-bike frame port charging (see [#31](https://github.com/thtexpert/eBikeMonitor/issues/31)).
      - `0x8092` / `0x80C5` / `0x8091` (Remaining Energy): Remaining electrical energy in the pack (in 0.1 Wh units).
      - `0x80E2` / `0x80B4` / `0x80D9` (SOH Capacities): Usable/nominal electrical energy capacity in Wh/Ah.
      - `0x8096` (Charge Cycles): Cumulative number of full charge cycles (increments only during charging, representing one complete charge of the battery pack's usable capacity).
@@ -53,13 +53,17 @@ The following tables group the BLE topics (Message IDs) by hardware unit and fun
 | `0x8096` | Charge Cycles | `Int` / 10.0 | Cumulative number of full charge cycles (increments only during charging). Broadcast periodically / low frequency; gated in app to prevent cross-battery stale leakage on battery swap. (from BMS) |
 | `0x8097` | BMS Chip Serial | Protobuf submessage | Diagnostic battery serial / hardware ID (nested structure `1a0a08...`). |
 | `0x809C` | Lifetime Total Mechanical Energy | `Int` (Wh) | Cumulative mechanical energy delivered by the motor over the battery pack's lifetime. Derived from cumulative electrical discharge energy scaled by the **79% Drive Unit efficiency**. |
-| `0x80B0` | Lifetime Total Electrical Charge Energy | `Int` / 10.0 (kWh) | Cumulative electrical energy charged into the battery over its lifetime (1 raw unit = 0.1 kWh). Corresponds to output mechanical work (`0x809C`) via the 79% Drive Unit efficiency. Broadcast periodically / low frequency; gated in app to prevent cross-battery stale leakage on battery swap. |
+| `0x80B0` | Lifetime Total Electrical Charge Energy | `Int` / 10.0 (kWh) | Cumulative electrical energy charged via the eBike frame socket (1 raw unit = 0.1 kWh). **Warning**: Does NOT increment during off-bike (external) desktop charging; see Caution note below (tracked in [#31](https://github.com/thtexpert/eBikeMonitor/issues/31)). Broadcast periodically / low frequency; gated in app to prevent cross-battery stale leakage on battery swap. |
 | `0x80B1` | SOH Parameter | Semi-static | BMS capacity calibration index (updates step-wise as SOH degrades). |
 | `0x80B4` | Actual Capacity (Wh) | `Int` / 10.0 (Wh) | Actual maximum healthy usable capacity of the battery cell pack in Wh (e.g. 743.0 Wh). Calculated internally by the BMS as Ah (0x80E2) * 36.0V nominal. |
 | `0x80C5` | Usable Motor Energy (BMS)| `Int` / 10.0 (Wh) | Alternate/redundant usable motor energy. (from BMS) |
 | `0x80CA` | BMS Battery Level | `Int` (%) | Raw Battery State of Charge (SOC) reported by the BMS. **(Not implemented in app)** |
 | `0x80D9` | Usable Motor Capacity | `Int` / 10.0 (Wh) | Maximum healthy capacity usable by the motor drive unit in Wh (e.g. 713.0 Wh). Exactly 30.0 Wh lower than Actual Capacity (0x80B4), representing the safety reserve for lights/system. |
 | `0x80E2` | Actual Usable Capacity (Ah) | `Int` / 100.0 (Ah) | Actual maximum healthy usable capacity of the battery cells in Ampere-hours (e.g. 20.60 Ah). |
+
+> [!CAUTION]
+> **External (Off-Bike) Charging Limitation on `0x80B0`**:
+> Empirical testing confirms that `0x80B0` only increments when charging occurs through the eBike's frame charging socket. When a battery is removed and charged externally on a desktop charger, `Charge Cycles` (`0x8096`) increments autonomously (+0.1 cycles per ~10% SOC), but `0x80B0` remains static. Battery packs frequently charged off the bike will report an artificially low value for `0x80B0`. Tracked in [#31](https://github.com/thtexpert/eBikeMonitor/issues/31).
 
 ### Drive Unit (DU) / Motor
 
@@ -154,7 +158,7 @@ $$
 $$
 
 ### 2. Motor Mechanical Work
-Motor mechanical work ($E_{\text{motor, mech}}$ in `Wh`) is reported directly by the Drive Unit via `0x108C` (Usage Records) and cumulative lifetime `0x809C`. It is related to the electrical energy throughput of the battery cells ($E_{\text{battery, elec throughput}}$ from `0x80B0` in Wh) using an average electromechanical drivetrain efficiency of **~78%**:
+Motor mechanical work ($E_{\text{motor, mech}}$ in `Wh`) is reported directly by the Drive Unit via `0x108C` (Usage Records) and cumulative lifetime `0x809C`. It is related to the electrical energy throughput of the battery cells ($E_{\text{battery, elec throughput}}$ from `0x80B0` in Wh) using an average electromechanical drivetrain efficiency of **~78%** *(Note: If a pack is charged externally off-bike, `0x80B0` does not track that charge; see [#31](https://github.com/thtexpert/eBikeMonitor/issues/31))*:
 
 $$
 E_{\text{motor, mech}} (\text{Wh}) = E_{\text{battery, elec throughput}} (\text{Wh}) \times 0.78

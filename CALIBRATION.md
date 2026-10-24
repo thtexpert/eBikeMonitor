@@ -10,9 +10,13 @@ The eBikeMonitor app allows you to configure per-battery offsets for **Total Ele
 
 ## The Paradox
 
-If an eBike battery was run on older BMS firmware for a long period, it may have failed to correctly record all charge cycles (`0x8096`) and electrical throughput (`0x80B0`). Over time, this leads to a physically impossible mismatch where the motor's native mechanical work counter (`0x809C`) exceeds the battery's reported electrical throughput:
+A physically impossible mismatch can occur where the motor's native mechanical work counter (`0x809C`) exceeds the battery's reported electrical throughput (`0x80B0`):
 *   Example: 46.50 kWh mechanical vs. 35.00 kWh electrical (apparent efficiency of >100%).
 *   Example: 6,000 km odometer vs. 40.2 charge cycles (an impossible ~150 km per cycle average in Sport/Turbo support).
+
+> [!NOTE]
+> **Impact of Off-Bike (External) Charging on `0x80B0`**:
+> Empirical testing shows that `0x80B0` only increments when charging via the eBike's frame charging socket. When a battery pack is removed from the bike and charged externally on a desktop charger, `0x8096` (charge cycles) increments normally, but `0x80B0` remains frozen (tracked in [#31](https://github.com/thtexpert/eBikeMonitor/issues/31)). Over time, regular off-bike charging causes `0x80B0` to severely fall behind true electrical throughput, which is a primary contributor to this paradox along with historical BMS tracking limitations on older firmware.
 
 ## How Calibration Offsets Work
 
@@ -24,7 +28,7 @@ Offsets are stored on a **per-battery** basis, identified by the battery's uniqu
 3.  This keeps the dashboard and smart home integration physically consistent.
 
 ### Battery Swapping & Multi-Device Setup
-*   **Automatic Profile Switching**: When swapping battery packs (e.g., between PowerTube Grey and PowerTube Red), the app detects the new serial number and immediately applies that battery pack's specific offsets without manual re-entry.
+*   **Automatic Profile Switching**: When swapping battery packs (e.g., between primary and secondary packs), the app detects the new serial number and immediately applies that battery pack's specific offsets without manual re-entry.
 *   **Multi-Phone Isolation**: Battery profiles are saved locally in each phone's secure app storage (`DataStore`). If a battery is shared across multiple family bikes and smartphones, configure the desired calibration offsets once on each device.
 *   **Unregistered Batteries**: If a newly inserted battery has no profile saved yet, eBikeMonitor defaults offsets to `0.0` and processes incoming BMS metrics immediately with complete data isolation, preventing stale metric carry-over from the previous battery.
 
