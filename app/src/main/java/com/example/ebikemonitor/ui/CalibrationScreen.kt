@@ -33,7 +33,6 @@ fun CalibrationScreen(
     val batteryProfiles by viewModel.batteryProfiles.collectAsState()
     val activeProfile = batteryProfiles.find { it.hardwareSerial == serial }
 
-    var energyOffsetStr by remember { mutableStateOf("") }
     var cyclesOffsetStr by remember { mutableStateOf("") }
 
     val activeBikeMac by viewModel.activeBikeMac.collectAsState()
@@ -57,21 +56,16 @@ fun CalibrationScreen(
     // Initialize text fields when profile loads
     LaunchedEffect(activeProfile) {
         if (activeProfile != null) {
-            energyOffsetStr = String.format(Locale.US, "%.2f", activeProfile.totalElectricEnergyOffset)
             cyclesOffsetStr = String.format(Locale.US, "%.1f", activeProfile.chargeCyclesOffset)
         }
     }
 
     // Common variables for suggestions
     val usableCapacity = status.usableCapacity ?: 739.0
-    val rawEnergy = status.rawTotalElectricEnergy ?: 0.0
     val rawCycles = status.rawChargeCycles ?: 0.0
     val mechEnergy = status.totalBattery ?: 0.0
 
-    val expectedElectricEnergy = if (mechEnergy > 0) mechEnergy / 0.78 else 0.0
-    val suggestedEnergyOffset = if (expectedElectricEnergy > 0) expectedElectricEnergy - rawEnergy else 0.0
-    
-    val expectedCycles = if (expectedElectricEnergy > 0 && usableCapacity > 0) expectedElectricEnergy / (usableCapacity / 1000.0) else 0.0
+    val expectedCycles = if (mechEnergy > 0 && usableCapacity > 0) (mechEnergy / 0.78) / (usableCapacity / 1000.0) else 0.0
     val suggestedCyclesOffset = if (expectedCycles > 0) expectedCycles - rawCycles else 0.0
 
     CompositionLocalProvider(
@@ -139,15 +133,6 @@ fun CalibrationScreen(
 
                             // Configuration fields
                             OutlinedTextField(
-                                value = energyOffsetStr,
-                                onValueChange = { energyOffsetStr = it },
-                                label = { Text("Total Electric Energy Offset (kWh)", style = MaterialTheme.typography.labelSmall) },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.fillMaxWidth().height(62.dp),
-                                textStyle = MaterialTheme.typography.bodyMedium
-                            )
-
-                            OutlinedTextField(
                                 value = cyclesOffsetStr,
                                 onValueChange = { cyclesOffsetStr = it },
                                 label = { Text("Charge Cycles Offset (cycles)", style = MaterialTheme.typography.labelSmall) },
@@ -163,13 +148,12 @@ fun CalibrationScreen(
                             ) {
                                 Button(
                                     onClick = {
-                                        val energyOffset = energyOffsetStr.toDoubleOrNull()
                                         val cyclesOffset = cyclesOffsetStr.toDoubleOrNull()
-                                        if (energyOffset != null && cyclesOffset != null) {
-                                            viewModel.updateBatteryOffsets(serial, energyOffset, cyclesOffset)
-                                            Toast.makeText(context, "Battery offsets saved!", Toast.LENGTH_SHORT).show()
+                                        if (cyclesOffset != null) {
+                                            viewModel.updateBatteryChargeCyclesOffset(serial, cyclesOffset)
+                                            Toast.makeText(context, "Battery charge cycles offset saved!", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            Toast.makeText(context, "Invalid numeric values!", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Invalid numeric value!", Toast.LENGTH_SHORT).show()
                                         }
                                     },
                                     modifier = Modifier.weight(1f).height(38.dp),
@@ -180,10 +164,9 @@ fun CalibrationScreen(
 
                                 OutlinedButton(
                                     onClick = {
-                                        energyOffsetStr = "0.0"
                                         cyclesOffsetStr = "0.0"
-                                        viewModel.updateBatteryOffsets(serial, 0.0, 0.0)
-                                        Toast.makeText(context, "Battery offsets cleared!", Toast.LENGTH_SHORT).show()
+                                        viewModel.updateBatteryChargeCyclesOffset(serial, 0.0)
+                                        Toast.makeText(context, "Battery charge cycles offset cleared!", Toast.LENGTH_SHORT).show()
                                     },
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                                     modifier = Modifier.weight(1f).height(38.dp),
@@ -209,34 +192,10 @@ fun CalibrationScreen(
                                     Text("Calibration Suggestion", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        "Based on 78% electromechanical efficiency, motor mechanical energy (${String.format(Locale.US, "%.2f", mechEnergy)} kWh) and raw battery stats:",
+                                        "Based on cumulative motor work (${String.format(Locale.US, "%.2f", mechEnergy)} kWh), 78% electromechanical efficiency, and usable capacity (${usableCapacity.toInt()} Wh):",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("Electric Energy Offset:", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                            Text(
-                                                "Suggested: +${String.format(Locale.US, "%.2f", suggestedEnergyOffset)} kWh\n(Expected: ${String.format(Locale.US, "%.2f", expectedElectricEnergy)} kWh)",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                                            )
-                                        }
-                                        Button(
-                                            onClick = { energyOffsetStr = String.format(Locale.US, "%.2f", suggestedEnergyOffset) },
-                                            enabled = suggestedEnergyOffset > 0,
-                                            modifier = Modifier.height(30.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                                        ) {
-                                            Text("Apply", style = MaterialTheme.typography.labelSmall)
-                                        }
-                                    }
-
                                     Spacer(modifier = Modifier.height(12.dp))
 
                                     Row(
@@ -315,34 +274,10 @@ fun CalibrationScreen(
                                     Text("Calibration Suggestion", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        "Based on 78% electromechanical efficiency, motor mechanical energy (${String.format(Locale.US, "%.2f", mechEnergy)} kWh) and raw battery stats:",
+                                        "Based on cumulative motor work (${String.format(Locale.US, "%.2f", mechEnergy)} kWh), 78% electromechanical efficiency, and usable capacity (${usableCapacity.toInt()} Wh):",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("Electric Energy Offset:", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                            Text(
-                                                "Suggested: +${String.format(Locale.US, "%.2f", suggestedEnergyOffset)} kWh (Expected: ${String.format(Locale.US, "%.2f", expectedElectricEnergy)} kWh)",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                                            )
-                                        }
-                                        Button(
-                                            onClick = { energyOffsetStr = String.format(Locale.US, "%.2f", suggestedEnergyOffset) },
-                                            enabled = suggestedEnergyOffset > 0,
-                                            modifier = Modifier.height(30.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                                        ) {
-                                            Text("Apply", style = MaterialTheme.typography.labelSmall)
-                                        }
-                                    }
-
                                     Spacer(modifier = Modifier.height(8.dp))
 
                                     Row(
@@ -374,15 +309,6 @@ fun CalibrationScreen(
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedTextField(
-                                    value = energyOffsetStr,
-                                    onValueChange = { energyOffsetStr = it },
-                                    label = { Text("Total Electric Energy Offset (kWh)", style = MaterialTheme.typography.labelSmall) },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.fillMaxWidth().height(62.dp),
-                                    textStyle = MaterialTheme.typography.bodyMedium
-                                )
-
-                                OutlinedTextField(
                                     value = cyclesOffsetStr,
                                     onValueChange = { cyclesOffsetStr = it },
                                     label = { Text("Charge Cycles Offset (cycles)", style = MaterialTheme.typography.labelSmall) },
@@ -401,13 +327,12 @@ fun CalibrationScreen(
                             ) {
                                 Button(
                                     onClick = {
-                                        val energyOffset = energyOffsetStr.toDoubleOrNull()
                                         val cyclesOffset = cyclesOffsetStr.toDoubleOrNull()
-                                        if (energyOffset != null && cyclesOffset != null) {
-                                            viewModel.updateBatteryOffsets(serial, energyOffset, cyclesOffset)
-                                            Toast.makeText(context, "Battery offsets saved!", Toast.LENGTH_SHORT).show()
+                                        if (cyclesOffset != null) {
+                                            viewModel.updateBatteryChargeCyclesOffset(serial, cyclesOffset)
+                                            Toast.makeText(context, "Battery charge cycles offset saved!", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            Toast.makeText(context, "Invalid numeric values!", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Invalid numeric value!", Toast.LENGTH_SHORT).show()
                                         }
                                     },
                                     modifier = Modifier.weight(1f).height(38.dp),
@@ -418,10 +343,9 @@ fun CalibrationScreen(
 
                                 OutlinedButton(
                                     onClick = {
-                                        energyOffsetStr = "0.0"
                                         cyclesOffsetStr = "0.0"
-                                        viewModel.updateBatteryOffsets(serial, 0.0, 0.0)
-                                        Toast.makeText(context, "Battery offsets cleared!", Toast.LENGTH_SHORT).show()
+                                        viewModel.updateBatteryChargeCyclesOffset(serial, 0.0)
+                                        Toast.makeText(context, "Battery charge cycles offset cleared!", Toast.LENGTH_SHORT).show()
                                     },
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                                     modifier = Modifier.weight(1f).height(38.dp),

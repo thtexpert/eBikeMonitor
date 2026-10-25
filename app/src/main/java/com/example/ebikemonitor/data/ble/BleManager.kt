@@ -51,9 +51,6 @@ class BleManager(private val context: Context) {
     var hasReceivedRealPedalEnergy = false
     var hasReceivedRealTripTotalEnergy = false
 
-    val hasReceivedRealBatteryEnergy: Boolean
-        get() = batteryStateManager.hasReceivedRealBatteryEnergy
-
     val hasReceivedRealChargeCycles: Boolean
         get() = batteryStateManager.hasReceivedRealChargeCycles
 
@@ -195,7 +192,7 @@ class BleManager(private val context: Context) {
                         0x8091 -> "Usable Motor Energy (0x8091)"
                         0x8092 -> "Total Battery Energy (0x8092)"
                         0x809C -> "Lifetime Discharged Energy (0x809C)"
-                        0x80B0 -> "Total Electric Energy (0x80B0)"
+                        0x80B0 -> "On-Bike Charge Cycles (0x80B0)"
                         else -> "Unknown"
                     }
                     Log.d("BleManager", "[DIAGNOSTIC] $desc = ${msg.value}")
@@ -298,8 +295,8 @@ class BleManager(private val context: Context) {
                 0x9819 -> currentStatus = currentStatus.copy(driveUnitHours = msg.value)
                 0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
                 0x80B0 -> {
-                    val rawKWh = msg.value * 0.1
-                    currentStatus = batteryStateManager.onTotalElectricEnergyReceived(rawKWh, currentStatus, batteryProfilesList)
+                    val onBikeCycles = msg.value * 0.1
+                    Log.d("BleManager", "On-Bike Charge Cycles (0x80B0) received: $onBikeCycles cycles")
                 }
                 0x206B -> {
                     val rawVersion = msg.decodeStringField()

@@ -6,17 +6,11 @@ import com.example.ebikemonitor.data.model.BatteryProfile
 /**
  * Manages the state, telemetry caching, and offset calculations for eBike batteries.
  * Encapsulates battery lifecycle transitions (connection, disconnect, battery swap)
- * to prevent stale telemetry leakage across different battery packs (Issue #30).
+ * to prevent stale telemetry leakage across different battery packs (Issue #30, Issue #31).
  */
 class BatteryStateManager {
 
-    var rawTotalElectricEnergy: Double? = null
-        private set
-
     var rawChargeCycles: Double? = null
-        private set
-
-    var hasReceivedRealBatteryEnergy: Boolean = false
         private set
 
     var hasReceivedRealChargeCycles: Boolean = false
@@ -26,7 +20,6 @@ class BatteryStateManager {
      * Resets transient BLE arrival flags on connection state change.
      */
     fun resetFlags() {
-        hasReceivedRealBatteryEnergy = false
         hasReceivedRealChargeCycles = false
     }
 
@@ -35,12 +28,9 @@ class BatteryStateManager {
      * to prevent leaking metrics to subsequent connections or different batteries.
      */
     fun resetOnDisconnect(status: BikeStatus): BikeStatus {
-        rawTotalElectricEnergy = null
         rawChargeCycles = null
         resetFlags()
         return status.copy(
-            rawTotalElectricEnergy = null,
-            totalElectricEnergy = null,
             rawChargeCycles = null,
             chargeCycles = null
         )
@@ -63,12 +53,9 @@ class BatteryStateManager {
 
         var status = currentStatus
         if (serialChanged) {
-            rawTotalElectricEnergy = null
             rawChargeCycles = null
             resetFlags()
             status = status.copy(
-                rawTotalElectricEnergy = null,
-                totalElectricEnergy = null,
                 rawChargeCycles = null,
                 chargeCycles = null
             )
@@ -77,19 +64,6 @@ class BatteryStateManager {
         status = status.copy(batterySerialNumber = serial)
         val updated = applyBatteryOffsets(status, batteryProfiles)
         return Pair(updated, serialChanged)
-    }
-
-    /**
-     * Handles incoming Total Electric Energy (BLE topic 0x80B0).
-     */
-    fun onTotalElectricEnergyReceived(
-        rawKWh: Double,
-        currentStatus: BikeStatus,
-        batteryProfiles: List<BatteryProfile>
-    ): BikeStatus {
-        rawTotalElectricEnergy = rawKWh
-        hasReceivedRealBatteryEnergy = true
-        return applyBatteryOffsets(currentStatus, batteryProfiles)
     }
 
     /**
@@ -116,17 +90,14 @@ class BatteryStateManager {
     ): BikeStatus {
         val serial = status.batterySerialNumber
         val profile = if (serial != null) batteryProfiles.find { it.hardwareSerial == serial } else null
-        val energyOffset = profile?.totalElectricEnergyOffset ?: 0.0
         val cyclesOffset = profile?.chargeCyclesOffset ?: 0.0
 
-        val computedEnergy = rawTotalElectricEnergy?.let { it + energyOffset }
         val computedCycles = rawChargeCycles?.let { it + cyclesOffset }
 
         return status.copy(
-            rawTotalElectricEnergy = rawTotalElectricEnergy,
-            totalElectricEnergy = computedEnergy,
             rawChargeCycles = rawChargeCycles,
             chargeCycles = computedCycles
         )
     }
 }
+

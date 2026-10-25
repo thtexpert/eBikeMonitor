@@ -826,10 +826,7 @@ class EBikeBackgroundService : Service() {
             pubIfDiff("$battTopic/stateofcharge", status.batteryLevel, lastBattery?.batteryLevel, true)
             pubIfDiff("$battTopic/totalbattery", status.totalBattery, lastBattery?.totalBattery, true)
 
-            // Gating: only publish electric energy and charge cycles if fresh BMS packets for current battery connection have arrived
-            if (app.bleManager.hasReceivedRealBatteryEnergy && status.totalElectricEnergy != null) {
-                pubIfDiff("$battTopic/totalelectricenergy", status.totalElectricEnergy, lastBattery?.totalElectricEnergy, true)
-            }
+            // Gating: only publish charge cycles if fresh BMS packets for current battery connection have arrived
             if (app.bleManager.hasReceivedRealChargeCycles && status.chargeCycles != null) {
                 pubIfDiff("$battTopic/chargecycles", status.chargeCycles, lastBattery?.chargeCycles, true)
             }

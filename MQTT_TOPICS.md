@@ -62,7 +62,6 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 |-------|-------------|-------------------------|------|-------------|
 | `stateofcharge` | Charge Level | `sensor.bosch_<model>_charge_level` | % | Current charge level of this pack. |
 | `totalbattery` | Total Mechanical Energy | `sensor.bosch_<model>_total_mechanical_energy` | kWh | Lifetime total mechanical energy delivered by the motor (`0x809C`). (**Retained**) |
-| `totalelectricenergy` | Total Electric Energy | `sensor.bosch_<model>_total_electric_energy` | kWh | Lifetime total electrical energy throughput of the cell pack (`0x80B0`). (**Retained**) |
 | `usable_energy_remaining` | Usable Energy Remaining | `sensor.bosch_<model>_usable_energy_remaining` | Wh | Remaining usable motor energy (`0x8091`). (**Retained**) |
 | `nominal_capacity` | Nominal Design Capacity | `sensor.bosch_<model>_nominal_design_capacity` | Wh | Nominal factory design capacity (`0x80B4`). (**Retained**) |
 | `usable_capacity` | Actual Usable Capacity | `sensor.bosch_<model>_actual_usable_capacity` | Wh | Actual maximum healthy usable capacity / SOH (`0x80D9`). (**Retained**) |
@@ -71,6 +70,10 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | `charging` | Charging State | `binary_sensor.bosch_<model>_charging` | - | Charging active binary state (state is `12` or charging active flag is `1`). |
 | `serial` | Hardware Serial | `sensor.bosch_<model>_hardware_serial` | - | The unique hardware serial identifier (`0x0081`). (**Retained**) |
 | `softwareversion` | Software Version | `sensor.bosch_<model>_software_version` | - | Firmware version of the battery BMS. (**Retained**) |
+
+> [!NOTE]
+> **Discontinued Sensor (`totalelectricenergy`)**:
+> `totalelectricenergy` (`sensor.bosch_<model>_total_electric_energy`) has been discontinued. BLE topic `0x80B0` was previously misinterpreted as electrical energy in kWh, but empirical testing confirmed it is actually On-Bike Charge Cycles (missing all off-bike charging; see [#31](https://github.com/thtexpert/eBikeMonitor/issues/31)). The app automatically publishes an empty discovery payload (`""`) to clear and delete the stale entity from Home Assistant. Lifetime energy is accurately reported by **Total Mechanical Energy** (`0x809C`).
 
 > [!NOTE]
 > `<model>` is the decoded battery model (e.g., `powertube_750`). Home Assistant uses the device name (e.g., `Bosch PowerTube 750`) to create these entity IDs.

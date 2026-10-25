@@ -328,7 +328,8 @@ class MqttManager(private val context: Context) {
 
         publishConfig("sensor", "Charge Level", "battery", "stateofcharge", "%", "battery")
         publishConfig("sensor", "Total Mechanical Energy", "total_energy", "totalbattery", "kWh", "energy", "total_increasing")
-        publishConfig("sensor", "Total Electric Energy", "total_electric_energy", "totalelectricenergy", "kWh", "energy", "total_increasing")
+        // Option A: Automatically purge legacy Total Electric Energy entity from Home Assistant
+        publish("$discoveryPrefix/sensor/powertube_${deviceId}_total_electric_energy/config", "", retained = true)
         publishConfig("sensor", "Usable Energy Remaining", "usable_energy_remaining", "usable_energy_remaining", "Wh", "energy")
         publishConfig("sensor", "Nominal Design Capacity", "nominal_capacity", "nominal_capacity", "Wh", "energy", stateClass = null)
         publishConfig("sensor", "Actual Usable Capacity", "usable_capacity", "usable_capacity", "Wh", "energy", stateClass = null)

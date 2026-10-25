@@ -338,6 +338,12 @@ class MainViewModel(
         }
     }
 
+    fun updateBatteryChargeCyclesOffset(serial: String, cyclesOffset: Double) {
+        viewModelScope.launch {
+            settingsRepository.updateBatteryChargeCyclesOffset(serial, cyclesOffset)
+        }
+    }
+
     fun updateBatteryOffsets(serial: String, energyOffset: Double, cyclesOffset: Double) {
         viewModelScope.launch {
             settingsRepository.updateBatteryOffsets(serial, energyOffset, cyclesOffset)

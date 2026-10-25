@@ -183,6 +183,22 @@ class SettingsRepository(private val context: Context) {
         saveBatteryProfiles(profiles)
     }
 
+    suspend fun updateBatteryChargeCyclesOffset(serial: String, cyclesOffset: Double) {
+        val profiles = batteryProfiles.first().toMutableList()
+        val index = profiles.indexOfFirst { it.hardwareSerial == serial }
+        if (index != -1) {
+            profiles[index] = profiles[index].copy(
+                chargeCyclesOffset = cyclesOffset
+            )
+        } else {
+            profiles.add(BatteryProfile(
+                hardwareSerial = serial,
+                chargeCyclesOffset = cyclesOffset
+            ))
+        }
+        saveBatteryProfiles(profiles)
+    }
+
     suspend fun updateBatteryOffsets(serial: String, energyOffset: Double, cyclesOffset: Double) {
         val profiles = batteryProfiles.first().toMutableList()
         val index = profiles.indexOfFirst { it.hardwareSerial == serial }

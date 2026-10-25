@@ -51,7 +51,7 @@ class BoschHexAnalyser:
         0x8092: {"name": "TotalBatteryEnergy", "unit": "Wh", "scale": 0.1},
         0x8096: {"name": "ChargeCycles", "unit": "cycles", "scale": 0.1},
         0x809C: {"name": "LifetimeTotalMechanicalEnergy", "unit": "Wh", "scale": 1.0},
-        0x80B0: {"name": "LifetimeTotalEnergyThroughput", "unit": "kWh", "scale": 0.1},
+        0x80B0: {"name": "OnBikeChargeCycles", "unit": "cycles", "scale": 0.1},
         0x80B4: {"name": "NominalFactoryCapacity", "unit": "Wh", "scale": 0.1},
         0x80BC: {"name": "BatteryLevel", "unit": "%", "scale": 1.0},
         0x80C4: {"name": "ChargerConnected", "unit": "Boolean", "scale": 1.0},
