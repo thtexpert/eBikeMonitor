@@ -85,4 +85,30 @@ The end-of-session calibration protocol evaluates `rawUsageSum` alongside `sorte
 When a bike is ridden offline and then connects while stationary (missing `0xA252` packets), forced startup decoding activates Option 3 (Gap-Based Consumption Matching). This resolves the mode mapping and estimates starting trip distances using `distance - storedBaseline` to avoid `HIGH_ERROR_REJECTED` lockups. As soon as the bike begins moving and broadcasts real `0xA252` packets, the late self-healing retry logic re-evaluates the startup decoding to replace the estimated baselines with exact high-precision baseline values, ensuring perfect synchronization alignment.
 
 ---
-*Document Version: 1.4 - August 2026*
+
+## 7. Assist Mode Swapping, Dynamic Catalog (0x108B) & Future Mode-Keyed Baselines
+
+> [!WARNING]
+> **Current Version Limitation**: The current version of eBikeMonitor does **not** support assist mode swapping performed via the Bosch Flow app. The active assist modes must remain unchanged on the bike during operation with the current app build.
+
+### A. Dynamic Assist Mode Catalog (0x108B)
+With Bosch firmware v21.x (October 2026 update), topic `0x108B` transmits both active and alternate available assist mode profiles stored in the Drive Unit's internal configuration:
+- **Active Handlebar Slots**: Mapped to active system indices `2..5` (e.g. `ECO` code `A100M00040`, `TOUR+` code `A100MAAAA0`, `SPORT` code `A100M00020`, `TURBO` code `A100M00010`).
+- **Available Alternate Profiles**: Transmitted without an active system index (e.g. **`ECO+`** code `A100ECOP37`, **`eMTB+`** code `A100MSPIC7`, `eMTB` code `A100EAAAB0`, `TOUR` code `A100M00030`, `AUTO` code `A100M0AUTO`).
+
+### B. Architectural Challenge of Mode Swapping
+Currently, `persistentBaselines` is stored in the local Room database profile as an anonymous positional list of integers (`List<Int>` of 5 elements) corresponding to fixed array indices `0..4`.
+If a rider swaps an assist mode in the Flow app (e.g. replacing `TOUR+` at slot 2 with `AUTO` or `ECO+`):
+1. The new mode in slot 2 arrives with its own independent lifetime odometer from `0x108C`.
+2. The stored baseline in `persistentBaselines[2]` still contains the historical baseline of the previous mode.
+3. Startup decoding (`findBestStartupMapping`) evaluates the candidate delta, detects an error of hundreds of kilometers, and fails with `HIGH_ERROR_REJECTED` (> 100m error cap).
+4. In Home Assistant, the MQTT entity names derive dynamically from `assistModeNames` (e.g. `sensor.ebike_auto_dist`), leaving the old entity orphaned without updates.
+
+### C. Future Architecture: Mode-Identity-Keyed Baselines
+To support mode swapping in future app releases, `persistentBaselines` must be refactored from positional array indices (`0..4`) into a map keyed by **Mode Name** or **Bosch Profile Hash** (e.g. `Map<String, Int>` or `Map<Long, Int>`):
+- When `0x180C` announces a swapped mode, the app will query stored baselines by mode identity rather than slot index.
+- If a mode is mounted for the first time, only that specific mode will undergo calibration, leaving the remaining 4 unchanged modes fully synchronized.
+
+---
+*Document Version: 1.5 - October 2026*
+
