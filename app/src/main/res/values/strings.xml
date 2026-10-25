@@ -77,6 +77,7 @@
     <string name="debug_sensor_human_calories">Trip Pedal Energy (kcal)</string>
     <string name="debug_sensor_cadence">Cadence</string>
     <string name="debug_sensor_charge_cycles">Charge Cycles</string>
+    <string name="debug_sensor_on_bike_charge_cycles">On-Bike Charge Cycles</string>
     <string name="debug_sensor_led_version">LED Remote Software Version</string>
     <string name="debug_sensor_battery_sw_version">Battery Software Version</string>
     <string name="debug_sensor_drive_unit_sw_version">Drive Unit Software Version</string>

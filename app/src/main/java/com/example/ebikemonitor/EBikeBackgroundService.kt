@@ -830,6 +830,9 @@ class EBikeBackgroundService : Service() {
             if (app.bleManager.hasReceivedRealChargeCycles && status.chargeCycles != null) {
                 pubIfDiff("$battTopic/chargecycles", status.chargeCycles, lastBattery?.chargeCycles, true)
             }
+            if (app.bleManager.hasReceivedRealOnBikeChargeCycles && status.onBikeChargeCycles != null) {
+                pubIfDiff("$battTopic/onbikechargecycles", status.onBikeChargeCycles, lastBattery?.onBikeChargeCycles, true)
+            }
             pubIfDiff("$battTopic/serial", batterySerial, lastBattery?.batterySerialNumber, true)
 
             // New battery sensors

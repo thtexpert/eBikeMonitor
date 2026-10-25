@@ -25,19 +25,25 @@ class BatterySwapTest {
         // 1. Connect Battery A and receive serial + telemetry
         val (status1, _) = batteryStateManager.onBatterySerialDecoded("BAT_A", initialStatus, profiles)
         val status2 = batteryStateManager.onChargeCyclesReceived(155.0, status1, profiles)
+        val status3 = batteryStateManager.onOnBikeChargeCyclesReceived(120.0, status2)
 
-        assertEquals("BAT_A", status2.batterySerialNumber)
-        assertEquals(155.0, status2.chargeCycles ?: 0.0, 0.001)
+        assertEquals("BAT_A", status3.batterySerialNumber)
+        assertEquals(155.0, status3.chargeCycles ?: 0.0, 0.001)
+        assertEquals(120.0, status3.onBikeChargeCycles ?: 0.0, 0.001)
         assertTrue(batteryStateManager.hasReceivedRealChargeCycles)
+        assertTrue(batteryStateManager.hasReceivedRealOnBikeChargeCycles)
 
         // 2. Disconnect BLE
-        val disconnectedStatus = batteryStateManager.resetOnDisconnect(status2)
+        val disconnectedStatus = batteryStateManager.resetOnDisconnect(status3)
 
         // 3. Verify telemetry is cleared and flags are reset
         assertNull(disconnectedStatus.rawChargeCycles)
         assertNull(disconnectedStatus.chargeCycles)
+        assertNull(disconnectedStatus.onBikeChargeCycles)
         assertNull(batteryStateManager.rawChargeCycles)
+        assertNull(batteryStateManager.rawOnBikeChargeCycles)
         assertFalse(batteryStateManager.hasReceivedRealChargeCycles)
+        assertFalse(batteryStateManager.hasReceivedRealOnBikeChargeCycles)
     }
 
     @Test
@@ -50,26 +56,33 @@ class BatterySwapTest {
         // 1. Ride with Battery Grey
         val (s1, _) = batteryStateManager.onBatterySerialDecoded("BAT_GREY", initialStatus, profiles)
         val s2 = batteryStateManager.onChargeCyclesReceived(155.0, s1, profiles)
-        assertEquals(155.0, s2.chargeCycles ?: 0.0, 0.001)
+        val s3 = batteryStateManager.onOnBikeChargeCyclesReceived(120.0, s2)
+        assertEquals(155.0, s3.chargeCycles ?: 0.0, 0.001)
+        assertEquals(120.0, s3.onBikeChargeCycles ?: 0.0, 0.001)
 
         // 2. Bike powers off
-        val disconnectedStatus = batteryStateManager.resetOnDisconnect(s2)
+        val disconnectedStatus = batteryStateManager.resetOnDisconnect(s3)
 
         // 3. Swap in Battery Red (not in profiles list)
         val (sRedInit, serialChanged) = batteryStateManager.onBatterySerialDecoded("BAT_RED", disconnectedStatus, profiles)
         assertTrue(serialChanged)
         assertEquals("BAT_RED", sRedInit.batterySerialNumber)
 
-        // Critical: Before new BMS packets arrive, cycles must be null (no leakage of 155.0!)
+        // Critical: Before new BMS packets arrive, cycles must be null (no leakage of 155.0 or 120.0!)
         assertNull("Stale charge cycles leaked to new battery!", sRedInit.chargeCycles)
+        assertNull("Stale on-bike charge cycles leaked to new battery!", sRedInit.onBikeChargeCycles)
         assertFalse(batteryStateManager.hasReceivedRealChargeCycles)
+        assertFalse(batteryStateManager.hasReceivedRealOnBikeChargeCycles)
 
         // 4. Low-frequency BMS packets for Red finally arrive
         val sRedComplete = batteryStateManager.onChargeCyclesReceived(40.9, sRedInit, profiles)
+        val sRedOnBike = batteryStateManager.onOnBikeChargeCyclesReceived(30.5, sRedComplete)
 
         // Verify unregistered battery immediately adopts raw values with 0.0 offset (not ignored or frozen)
-        assertEquals(40.9, sRedComplete.chargeCycles ?: 0.0, 0.001)
+        assertEquals(40.9, sRedOnBike.chargeCycles ?: 0.0, 0.001)
+        assertEquals(30.5, sRedOnBike.onBikeChargeCycles ?: 0.0, 0.001)
         assertTrue(batteryStateManager.hasReceivedRealChargeCycles)
+        assertTrue(batteryStateManager.hasReceivedRealOnBikeChargeCycles)
     }
 
     @Test
@@ -112,14 +125,18 @@ class BatterySwapTest {
         // Battery 1 has active telemetry
         val (s1, _) = batteryStateManager.onBatterySerialDecoded("BAT_1", initialStatus, profiles)
         val s2 = batteryStateManager.onChargeCyclesReceived(20.0, s1, profiles)
-        assertEquals(20.0, s2.chargeCycles ?: 0.0, 0.001)
+        val s3 = batteryStateManager.onOnBikeChargeCyclesReceived(15.0, s2)
+        assertEquals(20.0, s3.chargeCycles ?: 0.0, 0.001)
+        assertEquals(15.0, s3.onBikeChargeCycles ?: 0.0, 0.001)
 
         // Serial unexpectedly changes mid-connection to BAT_2 without disconnect
-        val (sChanged, changed) = batteryStateManager.onBatterySerialDecoded("BAT_2", s2, profiles)
+        val (sChanged, changed) = batteryStateManager.onBatterySerialDecoded("BAT_2", s3, profiles)
         assertTrue(changed)
         assertEquals("BAT_2", sChanged.batterySerialNumber)
         assertNull(sChanged.chargeCycles)
+        assertNull(sChanged.onBikeChargeCycles)
         assertFalse(batteryStateManager.hasReceivedRealChargeCycles)
+        assertFalse(batteryStateManager.hasReceivedRealOnBikeChargeCycles)
     }
 }
 

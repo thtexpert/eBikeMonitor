@@ -54,6 +54,9 @@ class BleManager(private val context: Context) {
     val hasReceivedRealChargeCycles: Boolean
         get() = batteryStateManager.hasReceivedRealChargeCycles
 
+    val hasReceivedRealOnBikeChargeCycles: Boolean
+        get() = batteryStateManager.hasReceivedRealOnBikeChargeCycles
+
     fun resetRealFlags() {
         hasReceivedRealOdo = false
         hasReceivedRealUsageRecords = false
@@ -295,7 +298,8 @@ class BleManager(private val context: Context) {
                 0x9819 -> currentStatus = currentStatus.copy(driveUnitHours = msg.value)
                 0x809C -> currentStatus = currentStatus.copy(totalBattery = msg.value / 1000.0)
                 0x80B0 -> {
-                    val onBikeCycles = msg.value * 0.1
+                    val onBikeCycles = msg.value / 10.0
+                    currentStatus = batteryStateManager.onOnBikeChargeCyclesReceived(onBikeCycles, currentStatus)
                     Log.d("BleManager", "On-Bike Charge Cycles (0x80B0) received: $onBikeCycles cycles")
                 }
                 0x206B -> {

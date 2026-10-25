@@ -117,6 +117,7 @@ class LogPlaybackTest {
             0x9819 -> current.copy(driveUnitHours = msg.value)
             0x809C -> current.copy(totalBattery = msg.value / 1000.0)
             0x8096 -> current.copy(chargeCycles = msg.value / 10.0)
+            0x80B0 -> current.copy(onBikeChargeCycles = msg.value / 10.0)
             0x80BC -> current.copy(batteryLevel = msg.value)
             0x9809 -> current.copy(assistMode = msg.value)
             0x206B -> msg.decodeStringField()?.let { BoschParser.formatSoftwareVersion(it) }?.let { current.copy(ledRemoteSoftwareVersion = it) } ?: current

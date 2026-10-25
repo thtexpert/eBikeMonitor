@@ -334,6 +334,7 @@ class MqttManager(private val context: Context) {
         publishConfig("sensor", "Nominal Design Capacity", "nominal_capacity", "nominal_capacity", "Wh", "energy", stateClass = null)
         publishConfig("sensor", "Actual Usable Capacity", "usable_capacity", "usable_capacity", "Wh", "energy", stateClass = null)
         publishConfig("sensor", "Charge Cycles", "charge_cycles", "chargecycles", "cycles", icon = "mdi:battery-sync", stateClass = "total_increasing")
+        publishConfig("sensor", "On-Bike Charge Cycles", "on_bike_charge_cycles", "onbikechargecycles", "cycles", icon = "mdi:battery-sync", stateClass = "total_increasing")
         publishConfig("sensor", "Battery Temperature", "temperature", "temperature", "°C", "temperature")
         publishConfig("binary_sensor", "Charging State", "charging", "charging", deviceClass = "battery_charging", stateClass = null)
         publishConfig("sensor", "Hardware Serial", "serial", "serial", icon = "mdi:barcode-scan", stateClass = null)

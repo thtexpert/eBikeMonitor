@@ -169,6 +169,7 @@ fun AllSensorsDebugCard(
             sensors.add(stringResource(R.string.debug_sensor_human_calories) to (bikeStatus.tripPedalEnergy?.let { "$it kcal" } ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_cadence) to (bikeStatus.cadence?.toString() ?: "--") + " rpm")
             sensors.add(stringResource(R.string.debug_sensor_charge_cycles) to (bikeStatus.chargeCycles?.toString() ?: "--"))
+            sensors.add(stringResource(R.string.debug_sensor_on_bike_charge_cycles) to (bikeStatus.onBikeChargeCycles?.toString() ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_led_version) to (bikeStatus.ledRemoteSoftwareVersion ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_battery_sw_version) to (bikeStatus.batterySoftwareVersion ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_drive_unit_sw_version) to (bikeStatus.driveUnitSoftwareVersion ?: "--"))

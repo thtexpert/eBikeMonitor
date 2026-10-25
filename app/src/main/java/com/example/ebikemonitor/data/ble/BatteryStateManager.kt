@@ -16,11 +16,18 @@ class BatteryStateManager {
     var hasReceivedRealChargeCycles: Boolean = false
         private set
 
+    var rawOnBikeChargeCycles: Double? = null
+        private set
+
+    var hasReceivedRealOnBikeChargeCycles: Boolean = false
+        private set
+
     /**
      * Resets transient BLE arrival flags on connection state change.
      */
     fun resetFlags() {
         hasReceivedRealChargeCycles = false
+        hasReceivedRealOnBikeChargeCycles = false
     }
 
     /**
@@ -29,10 +36,12 @@ class BatteryStateManager {
      */
     fun resetOnDisconnect(status: BikeStatus): BikeStatus {
         rawChargeCycles = null
+        rawOnBikeChargeCycles = null
         resetFlags()
         return status.copy(
             rawChargeCycles = null,
-            chargeCycles = null
+            chargeCycles = null,
+            onBikeChargeCycles = null
         )
     }
 
@@ -54,10 +63,12 @@ class BatteryStateManager {
         var status = currentStatus
         if (serialChanged) {
             rawChargeCycles = null
+            rawOnBikeChargeCycles = null
             resetFlags()
             status = status.copy(
                 rawChargeCycles = null,
-                chargeCycles = null
+                chargeCycles = null,
+                onBikeChargeCycles = null
             )
         }
 
@@ -80,6 +91,20 @@ class BatteryStateManager {
     }
 
     /**
+     * Handles incoming On-Bike Charge Cycles (BLE topic 0x80B0).
+     */
+    fun onOnBikeChargeCyclesReceived(
+        rawCycles: Double,
+        currentStatus: BikeStatus
+    ): BikeStatus {
+        rawOnBikeChargeCycles = rawCycles
+        hasReceivedRealOnBikeChargeCycles = true
+        return currentStatus.copy(
+            onBikeChargeCycles = rawCycles
+        )
+    }
+
+    /**
      * Applies configured offsets from the matching BatteryProfile to the raw BMS metrics.
      * If no profile is registered for the serial, defaults offsets to 0.0 so raw metrics
      * are immediately reflected in BikeStatus without locking or aborting.
@@ -96,7 +121,8 @@ class BatteryStateManager {
 
         return status.copy(
             rawChargeCycles = rawChargeCycles,
-            chargeCycles = computedCycles
+            chargeCycles = computedCycles,
+            onBikeChargeCycles = rawOnBikeChargeCycles
         )
     }
 }

@@ -66,14 +66,15 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | `nominal_capacity` | Nominal Design Capacity | `sensor.bosch_<model>_nominal_design_capacity` | Wh | Nominal factory design capacity (`0x80B4`). (**Retained**) |
 | `usable_capacity` | Actual Usable Capacity | `sensor.bosch_<model>_actual_usable_capacity` | Wh | Actual maximum healthy usable capacity / SOH (`0x80D9`). (**Retained**) |
 | `chargecycles` | Charge Cycles | `sensor.bosch_<model>_charge_cycles` | cycles | Cumulative full charge cycles (`0x8096`). (**Retained**) |
+| `onbikechargecycles` | On-Bike Charge Cycles | `sensor.bosch_<model>_on_bike_charge_cycles` | cycles | Cumulative full charge cycles conducted strictly via the eBike frame charging socket (`0x80B0`). (**Retained**) |
 | `temperature` | Battery Temperature | `sensor.bosch_<model>_battery_temperature` | °C | Current battery cell temperature (`0x808B`). |
 | `charging` | Charging State | `binary_sensor.bosch_<model>_charging` | - | Charging active binary state (state is `12` or charging active flag is `1`). |
 | `serial` | Hardware Serial | `sensor.bosch_<model>_hardware_serial` | - | The unique hardware serial identifier (`0x0081`). (**Retained**) |
 | `softwareversion` | Software Version | `sensor.bosch_<model>_software_version` | - | Firmware version of the battery BMS. (**Retained**) |
 
 > [!NOTE]
-> **Discontinued Sensor (`totalelectricenergy`)**:
-> `totalelectricenergy` (`sensor.bosch_<model>_total_electric_energy`) has been discontinued. BLE topic `0x80B0` was previously misinterpreted as electrical energy in kWh, but empirical testing confirmed it is actually On-Bike Charge Cycles (missing all off-bike charging; see [#31](https://github.com/thtexpert/eBikeMonitor/issues/31)). The app automatically publishes an empty discovery payload (`""`) to clear and delete the stale entity from Home Assistant. Lifetime energy is accurately reported by **Total Mechanical Energy** (`0x809C`).
+> **Reclassified Sensor (`0x80B0` -> `onbikechargecycles`)**:
+> Legacy sensor `totalelectricenergy` (`sensor.bosch_<model>_total_electric_energy`) has been discontinued. BLE topic `0x80B0` was previously misinterpreted as electrical energy in kWh, but empirical testing confirmed it is actually On-Bike Charge Cycles (missing all off-bike charging; see [#31](https://github.com/thtexpert/eBikeMonitor/issues/31)). It is now published under `onbikechargecycles` (`sensor.bosch_<model>_on_bike_charge_cycles`). The app automatically publishes an empty discovery payload (`""`) for the legacy `total_electric_energy` unique ID to clear and delete any stale entity from Home Assistant. Lifetime mechanical energy is accurately reported by **Total Mechanical Energy** (`0x809C`).
 
 > [!NOTE]
 > `<model>` is the decoded battery model (e.g., `powertube_750`). Home Assistant uses the device name (e.g., `Bosch PowerTube 750`) to create these entity IDs.
@@ -110,7 +111,7 @@ To ensure data integrity and avoid corrupting graphs or alerts in Home Assistant
 * **Persistent (Retained)**: Messages are flagged with `retain=true`. The MQTT broker stores the last published value permanently. When Home Assistant restarts or a new dashboard is loaded, it immediately retrieves these values without waiting for the eBike to wake up and transmit.
   * *Odometer & Lifetime Totals*: `totaldistance`, `totalhours`, `totalenergy`, `totalbattery`, `pedal_energy_measured`, `pedal_energy_estimated`, `pedal_energy_total`.
   * *Configuration & Metadata*: `serial`, `batteryserialnumber`, `ebikeledsoftwareversion`.
-  * *Degradation & Health Capacity*: `nominal_capacity`, `usable_capacity`, `chargecycles`, `usable_energy_remaining`.
+  * *Degradation & Health Capacity*: `nominal_capacity`, `usable_capacity`, `chargecycles`, `onbikechargecycles`, `usable_energy_remaining`.
   * *Per-Mode History*: `<mode>_distance`, `<mode>_energy`.
 * **Transient (Non-Retained)**: Messages are flagged with `retain=false` (default). Values are dynamic and real-time. When the bike turns off, stale values are not held on the broker.
   * *Live Riding Dynamics*: `speed`, `cadence`, `power`, `motorpower`, `assistmode`.

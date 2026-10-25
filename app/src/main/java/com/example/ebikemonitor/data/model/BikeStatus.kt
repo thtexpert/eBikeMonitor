@@ -37,6 +37,7 @@ data class BikeStatus(
     val batterySerialNumber: String? = null,
     val batteryModel: String? = null,
     val chargeCycles: Double? = null,
+    val onBikeChargeCycles: Double? = null,
     val driveUnitHours: Int? = null,
     val humanCalories: Double? = null,
     val tripSpeed: Double? = null,
