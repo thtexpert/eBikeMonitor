@@ -57,13 +57,13 @@ Emitted automatically whenever **any** key state changes. The fastest way to und
 Emitted every **60 seconds** while the service is alive. Includes memory usage and all states from `[STATUS]`.
 
 ```
-[HEARTBEAT] Mem:8MB/28MB | APP:Background | Flow:Present | BLE:Disconnected | MQTT:Connected | Monitor:ON
+[HEARTBEAT] Mem:8MB/28MB | APP:Background | Flow:Present | BLE:Connected(-68dBm) | MQTT:Connected | Monitor:ON
 ```
 
 | Field | Meaning |
 |---|---|
 | `Mem:X/Y MB` | Used / allocated JVM heap. Growing used value over time may indicate a memory leak. |
-| All other fields | Same definitions as `[STATUS]` above |
+| All other fields | Same definitions as `[STATUS]` above (`BLE:Connected(<X>dBm)` includes live BLE RSSI when available) |
 
 ---
 
@@ -100,7 +100,7 @@ Emitted by `MainActivity` on each Android lifecycle transition.
 | `19` | `GATT_CONN_TERMINATE_PEER_USER` | eBike closed the connection (normal power-off) |
 | `22` | `GATT_CONN_TERMINATE_LOCAL_HOST` | Android stack closed the connection locally |
 | `133` | `GATT_ERROR` | Generic Android BLE stack error, often a stale GATT handle — usually resolves on next retry |
-| `147` | `GATT_ERROR` | Too many concurrent BLE connections open, or Android internal BLE error |
+| `147` | `GATT_CONNECTION_TIMEOUT` | BLE link supervision timeout (`0x93`) caused by weak or lost RF signal |
 
 ---
 
@@ -203,7 +203,9 @@ Emitted by `MainActivity` on each Android lifecycle transition.
 | `Connected and listening...` | Notification listener bound and active |
 | `Disconnected.` | Listener unbound (usually temporary; Android rebinds automatically) |
 | `Bosch Pocket Mode detected!` | Trigger notification seen — initiates background service start |
-| `Hardware trigger enabled. Ignoring notification for startup.` | Hardware Bluetooth trigger has priority; ignoring the slower notification start |
+| `Hardware trigger enabled. Ignoring notification for startup.` | Hardware Bluetooth trigger has priority and bike is already marked present; ignoring the slower notification start |
+| `Hardware trigger missed connection — activating fallback via Flow notification.` | Hardware trigger is enabled, but `isBikePresent` was `false` (e.g., missed `ACTION_ACL_CONNECTED` during a weak-signal blip); Flow notification activates fallback startup |
+| `Active Bosch Pocket Mode notification found on listener connect. Restoring presence and starting service...` | App process started/restarted while Bosch Flow Pocket Mode notification was already active; restores presence and starts background service |
 | `Duplicate notification ignored (Flow already present).` | Flow app posted the same pocket-mode notification twice; safely suppressed |
 | `Bosch Pocket Mode notification removed.` | Trigger notification gone — presence set to false |
 | `Hardware trigger enabled. Ignoring notification removal.` | Hardware Bluetooth trigger handles disconnects; ignoring the notification clear |

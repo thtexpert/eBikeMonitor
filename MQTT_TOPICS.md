@@ -17,9 +17,10 @@ eBikeMonitor publishes data using the Home Assistant MQTT Discovery protocol. Th
 | `totalenergy` | Total Energy | `sensor.<name>_total_energy` | kWh | Cumulative motor energy usage. (**Retained**) |
 | `totalbattery` | Total Battery Mechanical Energy | `sensor.<name>_total_battery` | kWh | Cumulative battery mechanical energy throughput (matching `0x809C`). (**Retained**) |
 | `stateofcharge` | Battery Level | `sensor.<name>_battery_level` | % | Current UI battery percentage. |
-| `status` | App Status | `sensor.<name>_app_status` | - | LWT status (`online`/`offline`). |
-| `blestatus` | BLE Status | `sensor.<name>_ble_status` | - | BLE connection state (non-retained: publishes `"connected"` or `"disconnected"`). |
-| `mqttconnecttimestamp`| MQTT Connect Time | `sensor.<name>_last_mqtt_connect_time` | ISO8601 | Last MQTT connection timestamp. (**Retained**) |
+| `status` | App Status | `sensor.<name>_app_status` | - | LWT status (`online`/`offline`). *(HA Category: `diagnostic`)* |
+| `blestatus` | BLE Status | `sensor.<name>_ble_status` | - | BLE connection state (non-retained: publishes `"connected"` or `"disconnected"`). *(HA Category: `diagnostic`)* |
+| `blerssi` | BLE Signal Strength | `sensor.<name>_ble_signal_strength` | dBm | Live Bluetooth RSSI signal strength polled every 5s while connected. *(HA Category: `diagnostic`)* |
+| `mqttconnecttimestamp`| MQTT Connect Time | `sensor.<name>_last_mqtt_connect_time` | ISO8601 | Last MQTT connection timestamp. (**Retained**, *HA Category: `diagnostic`*) |
 | `ledremotesoftwareversion`| LED Remote Version | `sensor.<name>_led_remote_software_version` | - | Firmware version of the remote. (**Retained**) |
 | `driveunitsoftwareversion`| Drive Unit Version | `sensor.<name>_drive_unit_software_version` | - | Firmware version of the motor drive unit. (**Retained**) |
 | `displaysoftwareversion` | Display Version | `sensor.<name>_display_software_version` | - | Firmware version of the display. (**Retained**) |
@@ -114,7 +115,7 @@ To ensure data integrity and avoid corrupting graphs or alerts in Home Assistant
   * *Degradation & Health Capacity*: `nominal_capacity`, `usable_capacity`, `chargecycles`, `onbikechargecycles`, `usable_energy_remaining`.
   * *Per-Mode History*: `<mode>_distance`, `<mode>_energy`.
 * **Transient (Non-Retained)**: Messages are flagged with `retain=false` (default). Values are dynamic and real-time. When the bike turns off, stale values are not held on the broker.
-  * *Live Riding Dynamics*: `speed`, `cadence`, `power`, `motorpower`, `assistmode`.
+  * *Live Riding Dynamics*: `speed`, `cadence`, `power`, `motorpower`, `assistmode`, `blerssi`.
   * *Battery Dynamic Metrics*: `stateofcharge`, `charging`, `temperature`.
   * *Trip & Session Statistics*: `trip_pedal_energy`, `trip_total_energy`, `trip_human_percentage`, and trip average/maximum metrics.
   * *Dynamic Ranges*: `<mode>_range`.

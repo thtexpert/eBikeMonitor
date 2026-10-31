@@ -12,6 +12,10 @@ All notable changes to the **eBikeMonitor** project will be documented in this f
   - Isolated previous battery status comparison during MQTT sync so that switching battery serials does not suppress publishing of fresh metrics.
 
 ### Added
+- **BLE Signal Strength Monitoring (`blerssi`)**: Polls live Bluetooth RSSI (`dBm`) every 5 seconds while connected, displays it in the Dashboard UI (`All Sensors` card and bottom status bar), logs it in `[HEARTBEAT]` and `Live Status Check`, and publishes it to `ebikemonitor/<device_id>/blerssi`.
+- **Home Assistant Diagnostic Category**: Assigned `"entity_category": "diagnostic"` to `BLE Signal Strength`, `BLE Status`, `App Status`, and `last MQTT Connect Time` (`CURRENT_BIKE_DISCOVERY_VERSION = 7`) so they appear under the **Diagnostic** section on the Home Assistant device page without affecting historical statistics.
+- **Flow Notification Fallback Trigger**: When `Hardware Connection Trigger` is enabled, `EBikeNotificationListener` now acts as an automatic fallback if `BikePresenceManager.isBikePresent` is `false` (e.g. after a missed `ACTION_ACL_CONNECTED` event during a weak-signal timeout or after an OS process restart).
+- **GATT Error 147 Diagnostic Clarification**: Updated GATT status `147` (`0x93`) log description to `GATT_CONNECTION_TIMEOUT (147) — BLE link supervision timeout (weak/lost signal)`.
 - **Unit Tests for Battery Lifecycle**: Added `BatterySwapTest` covering unregistered battery swaps, multi-battery offset isolation, mid-connection serial changes, and disconnect telemetry clearing.
 
 ## [1.15.2] - 2026-08-22
