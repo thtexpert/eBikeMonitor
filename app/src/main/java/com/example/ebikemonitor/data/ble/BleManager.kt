@@ -70,6 +70,18 @@ class BleManager(private val context: Context) {
     init {
         val app = context.applicationContext as com.example.ebikemonitor.EBikeApplication
         app.applicationScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(5000)
+                if (_isConnected.value) {
+                    try {
+                        bluetoothGatt?.readRemoteRssi()
+                    } catch (e: Exception) {
+                        Log.w("BleManager", "Error reading remote RSSI: ${e.message}")
+                    }
+                }
+            }
+        }
+        app.applicationScope.launch {
             app.settingsRepository.batteryProfiles.collect { profiles ->
                 batteryProfilesList = profiles
                 _bikeStatus.value = batteryStateManager.applyBatteryOffsets(_bikeStatus.value, profiles)
@@ -102,7 +114,7 @@ class BleManager(private val context: Context) {
                     22  -> "GATT_CONN_TERMINATE_LOCAL_HOST — local stack closed connection"
                     8   -> "GATT_CONN_TIMEOUT — connection supervision timeout"
                     133 -> "GATT_ERROR (133) — generic Android BLE stack error, often a stale handle"
-                    147 -> "GATT_ERROR (147) — too many open BLE connections or Android internal error"
+                    147 -> "GATT_CONNECTION_TIMEOUT (147) — BLE link supervision timeout (weak/lost signal)"
                     else -> "GATT status $status"
                 }
                 val errorMsg = "BleManager: GATT Error: $status ($description)"
@@ -113,7 +125,7 @@ class BleManager(private val context: Context) {
                 bluetoothGatt = null
                 lastLoggedDiagnosticValues.clear()
                 resetRealFlags()
-                _bikeStatus.value = batteryStateManager.resetOnDisconnect(_bikeStatus.value)
+                _bikeStatus.value = batteryStateManager.resetOnDisconnect(_bikeStatus.value).copy(bleRssi = null)
                 return
             }
 
@@ -128,7 +140,7 @@ class BleManager(private val context: Context) {
                 bluetoothGatt = null
                 lastLoggedDiagnosticValues.clear()
                 resetRealFlags()
-                _bikeStatus.value = batteryStateManager.resetOnDisconnect(_bikeStatus.value)
+                _bikeStatus.value = batteryStateManager.resetOnDisconnect(_bikeStatus.value).copy(bleRssi = null)
             }
         }
 
@@ -148,6 +160,13 @@ class BleManager(private val context: Context) {
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS && descriptor.uuid == CLIENT_CHARACTERISTIC_CONFIG_UUID) {
                 Log.d("BleManager", "Notifications enabled. Ready for passive sync.")
+                gatt.readRemoteRssi()
+            }
+        }
+
+        override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                _bikeStatus.value = _bikeStatus.value.copy(bleRssi = rssi)
             }
         }
 
@@ -662,6 +681,7 @@ class BleManager(private val context: Context) {
 
     fun disconnect() {
         bluetoothGatt?.disconnect()
+        _bikeStatus.value = _bikeStatus.value.copy(bleRssi = null)
         bluetoothGatt?.close()
         bluetoothGatt = null
         _isConnected.value = false
@@ -682,6 +702,7 @@ class BleManager(private val context: Context) {
             prevTripDistPerMode = null,
             prevUnsortedUsageRecords = null,
             lastUpdateTimestamp = 0L,
+            bleRssi = null,
             // Clear telemetry cache to avoid corrupting next session startup decoding
             tripDistPerMode = emptyList(),
             sortedUsageRecordsB = emptyList(),

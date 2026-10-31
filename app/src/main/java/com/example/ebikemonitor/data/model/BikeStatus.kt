@@ -56,6 +56,7 @@ data class BikeStatus(
     val startupSecondaryError: Long? = null,
     val activeEstKcal: Double? = null,
     val activeEstError: Double? = null,
+    val bleRssi: Int? = null,
     val lastUpdateTimestamp: Long = 0L
 )
 

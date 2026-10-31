@@ -225,13 +225,14 @@ class MqttManager(private val context: Context) {
         val modelName = model ?: "Smart System eBike"
         val deviceJson = "{\"identifiers\":[\"ebikemonitor_$deviceId\"],\"name\":\"$deviceDisplayName\",\"manufacturer\":\"Bosch\",\"model\":\"$modelName\"$swPart$hwPart}"
 
-        fun publishConfig(component: String, name: String, sensorId: String, topicPath: String, unit: String? = null, deviceClass: String? = null, stateClass: String? = "measurement", icon: String? = null) {
+        fun publishConfig(component: String, name: String, sensorId: String, topicPath: String, unit: String? = null, deviceClass: String? = null, stateClass: String? = "measurement", icon: String? = null, entityCategory: String? = null) {
             val configTopic = "$discoveryPrefix/$component/ebikemonitor_${deviceId}_$sensorId/config"
             
             val fields = mutableListOf<String>()
             fields.add("\"name\":\"$name\"")
             fields.add("\"state_topic\":\"$stateTopic/$topicPath\"")
             fields.add("\"unique_id\":\"ebikemonitor_${deviceId}_$sensorId\"")
+            entityCategory?.let { fields.add("\"entity_category\":\"$it\"") }
             unit?.let { fields.add("\"unit_of_measurement\":\"$it\"") }
             deviceClass?.let { fields.add("\"device_class\":\"$it\"") }
             stateClass?.let { fields.add("\"state_class\":\"$it\"") }
@@ -292,9 +293,10 @@ class MqttManager(private val context: Context) {
         }
         
         // Connectivity/Status
-        publishConfig("sensor", "last MQTT Connect Time", "mqtt_connect", "mqttconnecttimestamp", deviceClass = "timestamp", stateClass = null)
-        publishConfig("sensor", "BLE Status", "ble_status", "blestatus", stateClass = null)
-        publishConfig("sensor", "App Status", "app_status", "status",  stateClass = null)
+        publishConfig("sensor", "last MQTT Connect Time", "mqtt_connect", "mqttconnecttimestamp", deviceClass = "timestamp", stateClass = null, entityCategory = "diagnostic")
+        publishConfig("sensor", "BLE Status", "ble_status", "blestatus", stateClass = null, entityCategory = "diagnostic")
+        publishConfig("sensor", "App Status", "app_status", "status", stateClass = null, entityCategory = "diagnostic")
+        publishConfig("sensor", "BLE Signal Strength", "ble_rssi", "blerssi", "dBm", "signal_strength", "measurement", "mdi:bluetooth", entityCategory = "diagnostic")
     }
 
     fun sendPowerTubeDiscovery(serial: String, modelName: String?, swVersion: String? = null, hwVersion: String? = null) {
@@ -307,13 +309,14 @@ class MqttManager(private val context: Context) {
         val hwPart = if (hwVersion != null) ",\"hw_version\":\"$hwVersion\"" else ""
         val deviceJson = "{\"identifiers\":[\"powertube_$deviceId\"],\"name\":\"Bosch $displayModel\",\"manufacturer\":\"Bosch\",\"model\":\"$displayModel\"$swPart$hwPart}"
 
-        fun publishConfig(component: String, name: String, sensorId: String, topicPath: String, unit: String? = null, deviceClass: String? = null, stateClass: String? = "measurement", icon: String? = null) {
+        fun publishConfig(component: String, name: String, sensorId: String, topicPath: String, unit: String? = null, deviceClass: String? = null, stateClass: String? = "measurement", icon: String? = null, entityCategory: String? = null) {
             val configTopic = "$discoveryPrefix/$component/powertube_${deviceId}_$sensorId/config"
             
             val fields = mutableListOf<String>()
             fields.add("\"name\":\"$name\"")
             fields.add("\"state_topic\":\"$stateTopic/$topicPath\"")
             fields.add("\"unique_id\":\"powertube_${deviceId}_$sensorId\"")
+            entityCategory?.let { fields.add("\"entity_category\":\"$it\"") }
             unit?.let { fields.add("\"unit_of_measurement\":\"$it\"") }
             deviceClass?.let { fields.add("\"device_class\":\"$it\"") }
             stateClass?.let { fields.add("\"state_class\":\"$it\"") }

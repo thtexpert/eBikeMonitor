@@ -121,6 +121,7 @@ fun DashboardScreen(
                 append(stringResource(R.string.text_version_format, com.example.ebikemonitor.BuildConfig.VERSION_NAME))
                 bikeStatus.driveUnitSoftwareVersion?.let { append(" | DU: $it") }
                 bikeStatus.batterySoftwareVersion?.let { append(" | Bat: $it") }
+                bikeStatus.bleRssi?.let { append(" | RSSI: ${it}dBm") }
             }
             Text(
                 text = versionText,
@@ -166,6 +167,7 @@ fun AllSensorsDebugCard(
             // Standard Included
             sensors.add(stringResource(R.string.debug_sensor_battery_serial) to (bikeStatus.batterySerialNumber ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_ble_status) to if (isBleConnected) "connected" else "disconnected")
+            sensors.add("BLE Signal (RSSI)" to (bikeStatus.bleRssi?.let { "$it dBm" } ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_human_calories) to (bikeStatus.tripPedalEnergy?.let { "$it kcal" } ?: "--"))
             sensors.add(stringResource(R.string.debug_sensor_cadence) to (bikeStatus.cadence?.toString() ?: "--") + " rpm")
             sensors.add(stringResource(R.string.debug_sensor_charge_cycles) to (bikeStatus.chargeCycles?.toString() ?: "--"))

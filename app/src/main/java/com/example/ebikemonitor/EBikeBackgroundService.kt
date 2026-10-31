@@ -246,7 +246,8 @@ class EBikeBackgroundService : Service() {
                     val nowVal = System.currentTimeMillis()
                     if (nowVal - lastTelemetryLogTime >= 30000) {
                         lastTelemetryLogTime = nowVal
-                        FileLogger.log("EBikeBackgroundService: Live Status Check: Odo: $odoVal km, UsageSum: ${"%.3f".format(usageSum)} km, RecordsCount: $usageCount, Speed: ${status.speed} m/s")
+                        val rssiStr = if (status.bleRssi != null) "${status.bleRssi} dBm" else "null"
+                        FileLogger.log("EBikeBackgroundService: Live Status Check: Odo: $odoVal km, UsageSum: ${"%.3f".format(usageSum)} km, RecordsCount: $usageCount, Speed: ${status.speed} m/s, RSSI: $rssiStr")
                         val profile = activeProfile
                         if (isSyncComplete && profile != null) {
                             val measuredTotal = profile.totalPedalEnergyMeasuredBaseline
@@ -683,7 +684,9 @@ class EBikeBackgroundService : Service() {
                 val flowStr = if (BikePresenceManager.isBikePresent.value) "Present" else "Absent"
                 val monStr  = if (reconnectionJob?.isActive == true) "ON" else "OFF"
 
-                FileLogger.log("[HEARTBEAT] Mem:${usedMem}MB/${totalMem}MB | APP:$appStr | Flow:$flowStr | BLE:$bleStr | MQTT:$mqttStr | Monitor:$monStr")
+                val rssiVal = app.bleManager.bikeStatus.value.bleRssi
+                val bleRssiTag = if (app.bleManager.isConnected.value && rssiVal != null) "(${rssiVal}dBm)" else ""
+                FileLogger.log("[HEARTBEAT] Mem:${usedMem}MB/${totalMem}MB | APP:$appStr | Flow:$flowStr | BLE:$bleStr$bleRssiTag | MQTT:$mqttStr | Monitor:$monStr")
                 kotlinx.coroutines.delay(60000) // 1 minute
             }
         }
@@ -734,6 +737,7 @@ class EBikeBackgroundService : Service() {
         pubIfDiff("$bikeTopic/cadence", status.cadence, last?.cadence)
         pubIfDiff("$bikeTopic/power", status.humanPower, last?.humanPower)
         pubIfDiff("$bikeTopic/motorpower", status.motorPower, last?.motorPower)
+        pubIfDiff("$bikeTopic/blerssi", status.bleRssi, last?.bleRssi)
         
         if (status.assistMode != last?.assistMode) {
              app.mqttManager.publish("$bikeTopic/assistmode", com.example.ebikemonitor.data.model.getAssistModeName(status.assistMode, status.assistModeNames))

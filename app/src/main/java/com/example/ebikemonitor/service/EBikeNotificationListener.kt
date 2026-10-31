@@ -44,7 +44,13 @@ class EBikeNotificationListener : NotificationListenerService() {
                     FileLogger.log("EBikeNotificationListener: Bosch Pocket Mode detected!$latencyText")
 
                     if (useHardwareTrigger) {
-                        FileLogger.log("EBikeNotificationListener: Hardware trigger enabled. Ignoring notification for startup.")
+                        if (!com.example.ebikemonitor.BikePresenceManager.isBikePresent.value) {
+                            FileLogger.log("EBikeNotificationListener: Hardware trigger missed connection — activating fallback via Flow notification.")
+                            updateFlowConnected(true)
+                            startMonitoringService()
+                        } else {
+                            FileLogger.log("EBikeNotificationListener: Hardware trigger enabled. Ignoring notification for startup.")
+                        }
                         return@launch
                     }
 
@@ -100,7 +106,22 @@ class EBikeNotificationListener : NotificationListenerService() {
             scope.launch {
                 val settings = (application as EBikeApplication).settingsRepository
                 val useHardwareTrigger = settings.useHardwareConnectionTrigger.first()
-                if (useHardwareTrigger) return@launch
+                val bgStartup = settings.backgroundStartup.first()
+                if (useHardwareTrigger && com.example.ebikemonitor.BikePresenceManager.isBikePresent.value) return@launch
+                if (useHardwareTrigger) {
+                    val active = activeNotifications
+                    val isPresent = active?.any { sbn ->
+                        sbn.packageName == "com.bosch.ebike.onebikeapp" &&
+                        sbn.notification.channelId == "com.bosch.ebike.flow.pocketmode.channel"
+                    } ?: false
+                    if (isPresent) {
+                        FileLogger.log("EBikeNotificationListener: Active Bosch Pocket Mode notification found on listener connect. Restoring presence and starting service...")
+                        updateFlowConnected(true)
+                        startMonitoringService()
+                    }
+                    return@launch
+                }
+                if (!bgStartup && useHardwareTrigger) return@launch
                 
                 val active = activeNotifications
                 val isPresent = active?.any { sbn ->
