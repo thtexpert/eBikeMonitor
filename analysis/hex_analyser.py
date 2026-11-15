@@ -45,7 +45,7 @@ class BoschHexAnalyser:
         0x206B: {"name": "LEDRemoteSoftwareVersion", "type": "string"},
         0x8088: {"name": "BMSBatteryLevel", "unit": "%", "scale": 1.0},
         0x808A: {"name": "ChargingActive", "unit": "Boolean", "scale": 1.0},
-        0x808B: {"name": "BatteryTemp", "unit": "°C", "scale": 0.05},
+        0x808B: {"name": "BatteryTemp", "unit": "°C", "type": "sint32", "scale": 0.1},
         0x808E: {"name": "BatteryState", "unit": "Enum", "scale": 1.0},
         0x8091: {"name": "UsableMotorEnergy", "unit": "Wh", "scale": 0.1},
         0x8092: {"name": "TotalBatteryEnergy", "unit": "Wh", "scale": 0.1},
@@ -155,7 +155,7 @@ class BoschHexAnalyser:
                         fields[field_num] = sub_data.decode('utf-8')
                     except:
                         fields[field_num] = sub_data.hex()
-                idx += length
+                    idx += length
             elif wire_type == 1: # 64-bit
                 if idx + 8 <= len(data):
                     fields[field_num] = data[idx : idx + 8].hex()
@@ -295,6 +295,8 @@ class BoschHexAnalyser:
                     decoded_val = s
                 elif data_type == 0x08: # Varint
                     decoded_val, _ = self.decode_varint(msg_bytes, 5)
+                    if topic_info.get("type") == "sint32":
+                        decoded_val = (decoded_val >> 1) ^ (-(decoded_val & 1))
                     if "scale" in topic_info:
                         decoded_val *= topic_info["scale"]
                 

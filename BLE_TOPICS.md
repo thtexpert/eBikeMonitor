@@ -47,7 +47,7 @@ The following tables group the BLE topics (Message IDs) by hardware unit and fun
 | `0x009B` | Battery Model | String (`decodeStringField`) | Decoded from UTF-8 bytes. |
 | `0x8088` | BMS Battery Level | `Int` (%) | Raw Battery State of Charge (SOC) reported directly by the BMS. Typically maintains a +1% to +2% offset above the UI Battery Level (0x80BC). (from BMS) |
 | `0x808A` | Charging Active | `Int` (Boolean) | 1 = Charging active/power drawing, 0/Absent = inactive. (from BMS) |
-| `0x808B` | Battery Temperature | `Int` / 20.0 (°C) | Current battery cell temperature. (from BMS) |
+| `0x808B` | Battery Temperature | `sint32` (ZigZag) / 10.0 (°C) | Current battery cell temperature. Encoded as Protobuf ZigZag `sint32` in 0.1°C units (`decodeZigZag32(raw) / 10.0`). (from BMS) |
 | `0x808E` | Battery State | `Int` (Enum) | Current battery operating mode. 2 = Discharging/Ride, 12 = Charging. (from BMS) |
 | `0x8092` | Total Battery Energy | `Int` / 10.0 (Wh) | Total remaining battery energy. Exactly 30.0 Wh higher than 0x8091 (reserved lights buffer). (from BMS) |
 | `0x8096` | Charge Cycles | `Int` / 10.0 | Cumulative number of full charge cycles (increments only during charging). Broadcast periodically / low frequency; gated in app to prevent cross-battery stale leakage on battery swap. (from BMS) |
@@ -196,6 +196,3 @@ Corresponds to BLE topic `0xA254`. It represents the proportion of total mechani
 $$
 \text{Trip Human Percentage} (\%) = \frac{E_{\text{rider, mech}} (\text{Wh})}{E_{\text{trip total, mech}} (\text{Wh})} \times 100
 $$
-
-
-

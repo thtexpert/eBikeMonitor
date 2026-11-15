@@ -2,8 +2,12 @@
 
 All notable changes to the **eBikeMonitor** project will be documented in this file.
 
-## [1.15.3] - 2026-10-21
+## [1.15.3] - 2026-11-15
 ### Fixed
+- **Negative Battery Temperature Decoding (Issue #32)**:
+  - Fixed battery temperature inversion and missing negative values by implementing Google Protocol Buffers ZigZag decoding (`decodeZigZag32`) for Topic `0x808B` (`sint32` in 0.1°C units).
+  - Resolved physical anomaly where charging at sub-zero temperatures erroneously displayed positive temperatures that decreased towards 0°C.
+  - Added unit test coverage for negative temperatures, zero-temperature frames, positive temperatures, and ZigZag mapping.
 - **Battery Swap Telemetry Glitch & Offset Isolation (Issue #30)**:
   - Extracted battery telemetry lifecycle management into `BatteryStateManager`.
   - Clears cached raw electric energy (`0x80B0`) and charge cycles (`0x8096`) upon BLE disconnection or whenever a new battery serial number is detected, preventing stale metric carry-over across battery swaps.

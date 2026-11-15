@@ -242,6 +242,21 @@ object BoschParser {
         return Pair(value, bytesConsumed)
     }
 
+    /**
+     * Decodes a 32-bit integer encoded with Google Protocol Buffers ZigZag encoding (sint32).
+     */
+    fun decodeZigZag32(n: Int): Int {
+        return (n ushr 1) xor -(n and 1)
+    }
+
+    /**
+     * Decodes battery temperature (0x808B) from its raw ZigZag varint representation.
+     * The BMS reports temperature in 0.1°C units as sint32.
+     */
+    fun decodeBatteryTemperature(rawVarint: Int): Double {
+        return decodeZigZag32(rawVarint) / 10.0
+    }
+
     fun processUsageRecords(records: List<UsageRecord>): List<UsageRecord>? {
         if (records.isEmpty()) return null
         

@@ -234,9 +234,9 @@ class BleManager(private val context: Context) {
                     }
                 }
                 0x808B -> {
-                    val rawTemp = msg.value
-                    val correctedTemp = if (rawTemp > 32767) (rawTemp - 65536) else rawTemp
-                    currentStatus = currentStatus.copy(batteryTemperature = correctedTemp / 20.0)
+                    val temp = com.example.ebikemonitor.data.parser.BoschParser.decodeBatteryTemperature(msg.value)
+                    // decoded via BoschParser.decodeBatteryTemperature
+                    currentStatus = currentStatus.copy(batteryTemperature = temp)
                 }
                 0x982D -> {
                     val speed = msg.value / 100.0

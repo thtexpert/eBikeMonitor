@@ -81,7 +81,7 @@ class BoschParserTest {
 
     @Test
     fun testParseBatteryTemperature() {
-        // Battery Temperature 0x808B, Value 458
+        // Battery Temperature 0x808B, Value 458 (22.9°C)
         // Type 0x08 (Varint)
         // 458 = 0xCA, 0x03
         val payload = byteArrayOf(
@@ -96,24 +96,44 @@ class BoschParserTest {
         assertEquals(1, messages.size)
         assertEquals(0x808B, messages[0].messageId)
         assertEquals(458, messages[0].value)
+        assertEquals(22.9, BoschParser.decodeBatteryTemperature(messages[0].value), 0.001)
     }
 
     @Test
     fun testParseNegativeBatteryTemperature() {
-        // Battery Temperature 0x808B, Value -100 (-5.0°C)
-        // -100 in 32-bit two's complement LEB128 is: 0x9C, 0xFF, 0xFF, 0xFF, 0x0F
+        // Battery Temperature 0x808B, Value -1.3°C
+        // In Protobuf ZigZag sint32: -13 is encoded as 2*13 - 1 = 25 (0x19)
+        // Packet: 30 04 80 8B 08 19
         val payload = byteArrayOf(
-            0x01,
-            0x08, // Length: ID(2) + Type(1) + Data(5) = 8
+            0x30.toByte(),
+            0x04.toByte(),
             0x80.toByte(), 0x8B.toByte(),
             0x08.toByte(),
-            0x9C.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x0F.toByte()
+            0x19.toByte()
         )
         
         val (messages, _) = BoschParser.parse(payload)
         assertEquals(1, messages.size)
         assertEquals(0x808B, messages[0].messageId)
-        assertEquals(-100, messages[0].value)
+        assertEquals(25, messages[0].value)
+        assertEquals(-1.3, BoschParser.decodeBatteryTemperature(messages[0].value), 0.001)
+    }
+
+    @Test
+    fun testParseZeroBatteryTemperature() {
+        // Battery Temperature 0x808B, Value 0.0°C (Length 2, empty payload)
+        // Packet: 30 02 80 8B
+        val payload = byteArrayOf(
+            0x30.toByte(),
+            0x02.toByte(),
+            0x80.toByte(), 0x8B.toByte()
+        )
+        
+        val (messages, _) = BoschParser.parse(payload)
+        assertEquals(1, messages.size)
+        assertEquals(0x808B, messages[0].messageId)
+        assertEquals(0, messages[0].value)
+        assertEquals(0.0, BoschParser.decodeBatteryTemperature(messages[0].value), 0.001)
     }
 
     @Test
@@ -131,6 +151,20 @@ class BoschParserTest {
         assertEquals(1, messages.size)
         assertEquals(0x808B, messages[0].messageId)
         assertEquals(332, messages[0].value)
+        assertEquals(16.6, BoschParser.decodeBatteryTemperature(messages[0].value), 0.001)
+    }
+
+    @Test
+    fun testDecodeZigZag32() {
+        assertEquals(0, BoschParser.decodeZigZag32(0))
+        assertEquals(-1, BoschParser.decodeZigZag32(1))
+        assertEquals(1, BoschParser.decodeZigZag32(2))
+        assertEquals(-2, BoschParser.decodeZigZag32(3))
+        assertEquals(2, BoschParser.decodeZigZag32(4))
+        assertEquals(-12, BoschParser.decodeZigZag32(23))
+        assertEquals(-13, BoschParser.decodeZigZag32(25))
+        assertEquals(166, BoschParser.decodeZigZag32(332))
+        assertEquals(229, BoschParser.decodeZigZag32(458))
     }
 
     @Test
